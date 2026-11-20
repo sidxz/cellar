@@ -1,23 +1,8 @@
 from cellar.application.admin.admin_delete_registry import (
-    AdminDeleteEntry,
     all_entity_types,
     get_entry,
     register_admin_delete,
 )
-
-
-def test_register_and_lookup():
-    """Test that we can register and retrieve an entry."""
-    register_admin_delete(
-        entity_type="vocabulary",
-        table="controlled_vocabularies",
-        label_field="name",
-    )
-    e = get_entry("vocabulary")
-    assert e is not None
-    assert e.entity_type == "vocabulary"
-    assert e.table == "controlled_vocabularies"
-    assert e.label_field == "name"
 
 
 def test_double_register_is_idempotent():

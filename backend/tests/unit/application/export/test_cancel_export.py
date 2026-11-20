@@ -10,6 +10,7 @@ from returns.result import Failure, Success
 from cellar.application.export.cancel_export import CancelExport, CancelExportCommand
 from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
 from cellar.domain.export.export_job import ExportJob
+from cellar.domain.shared.errors import NotFoundError
 
 
 @dataclass
@@ -70,6 +71,7 @@ async def test_cancel_returns_not_found_for_missing_job():
     workspace = uuid.uuid4()
     repo = MagicMock()
     repo.find_by_id_in_workspace = AsyncMock(return_value=None)
+    repo.save = AsyncMock()
     orch = MagicMock()
     orch.request_cancel = AsyncMock()
     auth = _Auth(workspace_id=workspace, user_id=uuid.uuid4())
@@ -81,8 +83,9 @@ async def test_cancel_returns_not_found_for_missing_job():
     )
 
     assert isinstance(result, Failure)
-    repo.save = AsyncMock()
+    assert isinstance(result.failure(), NotFoundError)
     repo.save.assert_not_awaited()
+    orch.request_cancel.assert_not_awaited()
 
 
 @pytest.mark.asyncio

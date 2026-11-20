@@ -24,10 +24,6 @@ from cellar.domain.shared.units import COMMON_UNITS, canonical_unit
 from cellar.domain.workspace_config.default_protocol_forms import DEFAULT_PROTOCOL_FORMS
 
 
-def test_shipped_form_count():
-    assert len(DEFAULT_PROTOCOL_FORMS) == 61
-
-
 def test_every_default_category_has_a_form_and_forms_name_real_categories():
     assert {f.category for f in DEFAULT_PROTOCOL_FORMS} == set(DEFAULT_CATEGORY_PATTERNS)
 

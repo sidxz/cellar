@@ -179,30 +179,32 @@ async def test_resume_is_refused_while_another_import_runs() -> None:
     result = await _use_case(_Repo(imp, running), orch)(_cmd(imp), auth=_auth())
 
     assert isinstance(result, Failure)
-    assert str(result.failure()) == "Another import is running; resume this one when it ends"
+    assert isinstance(result.failure(), ValidationError)
     assert orch.requests == []
 
 
 @pytest.mark.parametrize(("export_id", "settings"), [(None, SETTINGS), (82939461, None)])
 async def test_an_import_without_a_saved_export_is_refused(export_id, settings) -> None:
     imp = _import(export_id=export_id, settings=settings)
+    orch = _Orchestrator()
 
-    result = await _use_case(_Repo(imp), _Orchestrator())(_cmd(imp), auth=_auth())
+    result = await _use_case(_Repo(imp), orch)(_cmd(imp), auth=_auth())
 
     assert isinstance(result, Failure)
-    assert str(result.failure()) == (
-        "This import can't be resumed: it stopped before its export was saved. Start a new import."
-    )
+    assert isinstance(result.failure(), ValidationError)
+    assert (orch.requests, orch.terminated) == ([], [])
 
 
 async def test_only_a_failed_import_resumes() -> None:
     imp = _import()
     imp.resume("wf-x", resumed_by=RESUMER)  # running again
+    orch = _Orchestrator()
 
-    result = await _use_case(_Repo(imp), _Orchestrator())(_cmd(imp), auth=_auth())
+    result = await _use_case(_Repo(imp), orch)(_cmd(imp), auth=_auth())
 
     assert isinstance(result, Failure)
-    assert str(result.failure()) == "Only a failed import can be resumed"
+    assert isinstance(result.failure(), ValidationError)
+    assert (orch.requests, orch.terminated) == ([], [])
 
 
 async def test_viewer_may_not_resume() -> None:

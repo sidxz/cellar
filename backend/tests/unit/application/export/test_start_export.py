@@ -10,6 +10,7 @@ from returns.result import Failure, Success
 from cellar.application.export.start_export import StartExport, StartExportCommand
 from cellar.domain.export.enums import ExportFormat, ExportSource
 from cellar.domain.export.events import ExportRequested
+from cellar.domain.shared.errors import ValidationError
 
 
 @dataclass
@@ -153,9 +154,9 @@ async def test_start_keeps_who_asked_for_the_file():
 @pytest.mark.parametrize(
     ("fmt", "payload", "refused"),
     [
-        (ExportFormat.PDF, {"run_id": str(uuid.uuid4())}, None),
-        (ExportFormat.XLSX, {}, "needs the run's id"),
-        (ExportFormat.SDF, {"run_id": str(uuid.uuid4())}, "Excel, CSV or PDF"),
+        (ExportFormat.PDF, {"run_id": str(uuid.uuid4())}, False),
+        (ExportFormat.XLSX, {}, True),
+        (ExportFormat.SDF, {"run_id": str(uuid.uuid4())}, True),
     ],
 )
 async def test_a_run_export_names_its_run_and_skips_sdf(fmt, payload, refused):
@@ -174,7 +175,10 @@ async def test_a_run_export_names_its_run_and_skips_sdf(fmt, payload, refused):
         ),
         auth=_Auth(workspace_id=workspace, user_id=user),
     )
-    if refused is None:
+    if not refused:
         assert isinstance(result, Success)
     else:
-        assert isinstance(result, Failure) and refused in str(result.failure())
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        repo.save.assert_not_awaited()
+        orch.start.assert_not_awaited()

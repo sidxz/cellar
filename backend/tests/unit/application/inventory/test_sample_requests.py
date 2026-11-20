@@ -29,7 +29,7 @@ from cellar.application.inventory.sample_requests import (
 )
 from cellar.domain.inventory.enums import SampleRequestStatus
 from cellar.domain.inventory.sample_request import SampleRequest
-from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.domain.shared.value_objects import Amount
 from cellar.domain.shared.enums import AmountUnit
@@ -230,8 +230,9 @@ class TestCreateSampleRequest:
             amount_unit="mg",
             purpose="Should fail",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(AuthorizationError):
             await uc(cmd, auth)
+        assert repo._store == {}
 
 
 # ---------------------------------------------------------------------------
@@ -591,19 +592,3 @@ class TestStartPreparingSampleRequest:
 
         with pytest.raises(ValidationError):
             await uc(StartPreparingSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
-
-    @pytest.mark.asyncio
-    async def test_dispatcher_receives_events(self) -> None:
-        req = _make_request(status=SampleRequestStatus.SUBMITTED)
-        repo = FakeSampleRequestRepo([req])
-        dispatcher = FakeDispatcher()
-        approve_uc = ApproveSampleRequest(FakeUoW(), repo, dispatcher)
-        auth = _make_auth()
-
-        await approve_uc(ApproveSampleRequestCommand(workspace_id=WS_ID, request_id=req.id), auth)
-
-        # Dispatcher called with events (SampleRequestApproved event registered)
-        # Events list could be empty since FakeUoW.commit() returns [] but domain
-        # events were registered on the aggregate before save — this verifies
-        # the dispatcher integration path works without errors
-        assert isinstance(dispatcher.dispatched, list)

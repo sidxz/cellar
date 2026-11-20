@@ -387,12 +387,15 @@ class TestStartCddMoleculeImport:
         )
 
     @pytest.mark.asyncio
-    async def test_create_batch_on_duplicate_true_propagates_to_orchestrator(self):
+    @pytest.mark.parametrize("create_batch_on_duplicate", [True, False])
+    async def test_create_batch_on_duplicate_propagates_to_orchestrator(
+        self, create_batch_on_duplicate: bool
+    ):
         orchestrator = AsyncMock()
         orchestrator.start = AsyncMock(return_value="wf-123")
 
         uc = StartCddMoleculeImport(
-            get_data_source=FakeGetDataSource(create_batch_on_duplicate=True),
+            get_data_source=FakeGetDataSource(create_batch_on_duplicate=create_batch_on_duplicate),
             orchestrator=orchestrator,
         )
         result = await uc(self._make_command(), auth=_make_auth())
@@ -400,23 +403,7 @@ class TestStartCddMoleculeImport:
         assert isinstance(result, Success)
         orchestrator.start.assert_called_once()
         captured_request = orchestrator.start.call_args[0][0]
-        assert captured_request.create_batch_on_duplicate is True
-
-    @pytest.mark.asyncio
-    async def test_create_batch_on_duplicate_false_propagates_to_orchestrator(self):
-        orchestrator = AsyncMock()
-        orchestrator.start = AsyncMock(return_value="wf-456")
-
-        uc = StartCddMoleculeImport(
-            get_data_source=FakeGetDataSource(create_batch_on_duplicate=False),
-            orchestrator=orchestrator,
-        )
-        result = await uc(self._make_command(), auth=_make_auth())
-
-        assert isinstance(result, Success)
-        orchestrator.start.assert_called_once()
-        captured_request = orchestrator.start.call_args[0][0]
-        assert captured_request.create_batch_on_duplicate is False
+        assert captured_request.create_batch_on_duplicate is create_batch_on_duplicate
 
     @pytest.mark.asyncio
     async def test_no_vault_id_returns_failure(self):

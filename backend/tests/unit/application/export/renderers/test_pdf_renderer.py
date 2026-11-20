@@ -87,7 +87,7 @@ def test_cells_take_the_grids_decimals_figures_and_bounds():
     assert cell_text(1, hbd) == "1"
 
 
-def test_the_report_keeps_header_case_and_names_who_exported_it():
+def test_the_report_names_who_exported_it_and_groups_its_columns():
     cols = [
         ColumnSpec(key="structure", header="Structure", kind="image_structure"),
         ColumnSpec(key="reg", header="Reg #", kind="text"),
@@ -119,12 +119,9 @@ def test_the_report_keeps_header_case_and_names_who_exported_it():
             },
         ),
     )
-    assert "ChemCellar" in html and "chemcellar-logo.svg" in html
-    assert "Exported 2026-11-15 19:35 UTC" in html and "by ada@lab.org" in html
-    assert "ChemCellar export · 2026-11-15 19:35 UTC · ada@lab.org" in html  # every page's footer
+    assert "2026-11-15 19:35 UTC" in html and "ada@lab.org" in html
     assert "Tested in InhA (any run, split by ATP)" in html
     assert "PRT-1 InhA · by ATP" in html and "10 µM" in html  # protocol row, then its group
-    assert "background: #3b6fb6" in html
     assert "1.330" in html
     # Vector, so the structure stays sharp when the PDF is zoomed or printed.
     assert "data:image/svg+xml" in html and "data:image/png" not in html

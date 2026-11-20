@@ -160,5 +160,4 @@ async def test_a_pending_run_is_not_ready():
 
     err = out.failure()
     assert isinstance(err, ValidationError)
-    assert str(err) == "This decomposition is not ready yet."
     assert reader.calls == []

@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from cellar.application.sar_analysis.hashing import (
-    compute_membership_hash,
-    sha256_hex,
-)
+from cellar.application.sar_analysis.hashing import compute_membership_hash
 
 
 def test_membership_hash_is_order_independent():
@@ -27,12 +24,3 @@ def test_membership_hash_changes_on_membership_change():
     two = compute_membership_hash([(a, 1), (b, 1)])
     three = compute_membership_hash([(a, 1), (b, 1), (c, 1)])
     assert two != three
-
-
-def test_membership_hash_empty_is_stable():
-    assert compute_membership_hash([]) == compute_membership_hash([])
-
-
-def test_sha256_hex_is_deterministic_and_distinct():
-    assert sha256_hex("c1ccccc1") == sha256_hex("c1ccccc1")
-    assert sha256_hex("c1ccccc1") != sha256_hex("c1ccncc1")

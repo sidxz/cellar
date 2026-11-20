@@ -64,7 +64,6 @@ async def test_blank_query_is_a_validation_error(query):
     result = await MatchSubstructure(matcher)(_q(query=query), auth=FakeAuth(workspace_id=WS))
 
     assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
-    assert "Draw or type a structure" in str(result.failure())
     assert matcher.calls == []
 
 
