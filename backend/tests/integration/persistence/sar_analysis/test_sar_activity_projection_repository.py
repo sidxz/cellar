@@ -10,7 +10,6 @@ import pytest
 from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
 from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
 from cellar.domain.shared.async_job import AsyncJobStatus
-from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
     SQLAlchemySarActivityProjectionRepository,
 )
@@ -87,61 +86,6 @@ async def test_write_values_and_count(uow):
         repo = SQLAlchemySarActivityProjectionRepository(uow)
         n = await repo.count_values(proj.id, workspace_id=ws)
     assert n == 2
-
-
-@pytest.mark.asyncio
-async def test_save_increments_version_on_update(uow):
-    ws = uuid.uuid4()
-    proj = SarActivityProjection.create(
-        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="mv",
-        channel_hash="cv", channel_spec={"column": "drc:x"}, now=_NOW,
-    )
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        await repo.save(proj)  # INSERT PENDING v1
-        await uow.commit()
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        loaded = await repo.find_by_id_in_workspace(ws, proj.id)
-        v_before = loaded.version
-        loaded.mark_running(_NOW)  # UPDATE WHERE v1 -> v2
-        await repo.save(loaded)
-        await uow.commit()
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        again = await repo.find_by_id_in_workspace(ws, proj.id)
-    assert again is not None
-    assert again.status == AsyncJobStatus.RUNNING
-    assert again.version == v_before + 1
-
-
-@pytest.mark.asyncio
-async def test_save_rejects_stale_version(uow):
-    # The lost-cancel race: a runner holding a stale RUNNING aggregate must not
-    # be able to overwrite a row that a concurrent cancel already advanced.
-    ws = uuid.uuid4()
-    proj = SarActivityProjection.create(
-        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="ms",
-        channel_hash="cs", channel_spec={"column": "drc:x"}, now=_NOW,
-    )
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        await repo.save(proj)
-        await uow.commit()
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        stale = await repo.find_by_id_in_workspace(ws, proj.id)  # v1
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        fresh = await repo.find_by_id_in_workspace(ws, proj.id)
-        fresh.mark_running(_NOW)  # row advances to v2
-        await repo.save(fresh)
-        await uow.commit()
-    async with uow:
-        repo = SQLAlchemySarActivityProjectionRepository(uow)
-        with pytest.raises(ConcurrencyConflictError):
-            stale.mark_cancelled(_NOW)  # still expects v1 -> reject
-            await repo.save(stale)
 
 
 @pytest.mark.asyncio

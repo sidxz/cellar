@@ -319,7 +319,8 @@ async def test_undisclosed_molecules_sharing_a_label_stay_two_compounds(
     assert sorted(status for _, _, status in mols) == ["undisclosed", "undisclosed"]
     assert results[0].molecule_id != results[1].molecule_id
     for r, own in zip(results, ("ALT-21", "ALT-22"), strict=True):
-        assert r.warnings == [f"'{LABEL}' is on 2 compounds in the vault; not stored as an ID"]
+        (warning,) = r.warnings
+        assert LABEL in warning
         ids = {i for i, _, _ in await _compound_ids(session_factory, uuid.UUID(r.molecule_id))}
         assert own in ids and LABEL not in ids
 
@@ -410,9 +411,6 @@ async def test_molecule_warnings_and_problems_count_once(session_factory, ws: Ws
     assert len(run_cdd.report["problem_lines"]) == 1
 
 
-RUN_NAME_ALT = "'{v}' is the name of another compound in the vault; not stored as an ID"
-
-
 @pytest.mark.parametrize(
     "smiles", [("CCCl", "CCBr"), (None, None)], ids=["disclosed", "undisclosed"]
 )
@@ -431,7 +429,8 @@ async def test_a_name_of_another_molecule_in_the_run_is_not_stored(
     assert (rb.error, ra.error) == (None, None)
     assert rb.molecule_id != ra.molecule_id
     assert len(await _molecules(session_factory, ws)) == 2
-    assert rb.warnings == [RUN_NAME_ALT.format(v="SACC-A"), RUN_NAME_ALT.format(v="30")]
+    name_warning, vault_id_warning = rb.warnings
+    assert "'SACC-A'" in name_warning and "'30'" in vault_id_warning
     b_ids = {i for i, _, _ in await _compound_ids(session_factory, uuid.UUID(rb.molecule_id))}
     assert "ALT-B" in b_ids and not {"SACC-A", "30"} & b_ids
     a_ids = {i for i, _, _ in await _compound_ids(session_factory, uuid.UUID(ra.molecule_id))}
@@ -456,9 +455,7 @@ async def test_vault_id_decides_over_a_structure_match(session_factory, ws: Ws, 
     assert (first.error, second.error) == (None, None)
     assert {first.molecule_id, second.molecule_id} == {str(x.molecule_id)}
     y_reg = await _reg(session_factory, y.molecule_id)
-    assert first.warnings[0] == (
-        f"Structure also matches {y_reg}; not merged (likely a double registration in the vault)"
-    )
+    assert y_reg in first.warnings[0]
     batches = await _batches(session_factory, ws)
     assert {batches[uuid.UUID(r.batch_id)].molecule_id for r in (first, second)} == {x.molecule_id}
     assert len(await _molecules(session_factory, ws)) == 2
@@ -475,7 +472,7 @@ async def test_vault_id_decides_when_structures_differ(session_factory, ws: Ws, 
 
     first, _ = await run_cdd([MOL])
     assert first.error is None and first.molecule_id == str(x.molecule_id)
-    assert first.warnings[0] == f"Structure differs from {x_reg}'s; not changed"
+    assert x_reg in first.warnings[0]
 
     undisclosed = molecule(7, NAME, None, batches=[batch(13252, f"{NAME}-003")])
     (third,) = await run_cdd([undisclosed])

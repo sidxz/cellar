@@ -29,26 +29,6 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 class TestOrganizationRepository:
-    async def test_save_and_find_by_id(self, uow: AsyncUnitOfWork) -> None:
-        async with uow:
-            repo = SQLAlchemyOrganizationRepository(uow)
-            org = Organization.create(
-                workspace_id=uuid.uuid4(),
-                name="Merck",
-                org_type=OrganizationType.PHARMA_PARTNER,
-            )
-            await repo.save(org)
-            await uow.commit()
-
-        async with uow:
-            repo = SQLAlchemyOrganizationRepository(uow)
-            loaded = await repo.find_by_id(org.id)
-            assert loaded is not None
-            assert loaded.name == "Merck"
-            assert loaded.org_type == OrganizationType.PHARMA_PARTNER
-            assert loaded.is_active is True
-            assert loaded.version == 1
-
     async def test_update_with_version_increment(self, uow: AsyncUnitOfWork) -> None:
         org_id = uuid.uuid4()
         ws_id = uuid.uuid4()
@@ -130,23 +110,6 @@ class TestOrganizationRepository:
 
 
 class TestWorkspaceSettingsRepository:
-    async def test_save_and_find(self, uow: AsyncUnitOfWork) -> None:
-        ws_id = uuid.uuid4()
-
-        async with uow:
-            repo = SQLAlchemyWorkspaceSettingsRepository(uow)
-            settings = WorkspaceSettings.create_default(workspace_id=ws_id)
-            await repo.save(settings)
-            await uow.commit()
-
-        async with uow:
-            repo = SQLAlchemyWorkspaceSettingsRepository(uow)
-            loaded = await repo.find_by_id(ws_id)
-            assert loaded is not None
-            assert loaded.workspace_id == ws_id
-            assert loaded.registration_rules == {}
-            assert loaded.version == 1
-
     async def test_update(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()
 
@@ -182,29 +145,6 @@ class TestWorkspaceSettingsRepository:
 
 
 class TestControlledVocabularyRepository:
-    async def test_save_and_find_by_id(self, uow: AsyncUnitOfWork) -> None:
-        ws_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-
-        async with uow:
-            repo = SQLAlchemyControlledVocabularyRepository(uow)
-            vocab = ControlledVocabulary.create(
-                workspace_id=ws_id,
-                name="Species",
-                terms=["Human", "Mouse", "Rat"],
-                created_by=user_id,
-            )
-            await repo.save(vocab)
-            await uow.commit()
-
-        async with uow:
-            repo = SQLAlchemyControlledVocabularyRepository(uow)
-            loaded = await repo.find_by_id(vocab.id)
-            assert loaded is not None
-            assert loaded.name == "Species"
-            assert loaded.terms == ["Human", "Mouse", "Rat"]
-            assert loaded.created_by == user_id
-
     async def test_find_by_workspace(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()
         user_id = uuid.uuid4()

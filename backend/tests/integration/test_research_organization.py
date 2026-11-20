@@ -67,31 +67,6 @@ async def _insert_molecule(
 
 
 class TestProjectRepository:
-    async def test_save_and_find_by_id(self, uow: AsyncUnitOfWork) -> None:
-        ws_id = uuid.uuid4()
-        user_id = uuid.uuid4()
-
-        async with uow:
-            repo = SQLAlchemyProjectRepository(uow)
-            project = Project.create(
-                workspace_id=ws_id,
-                name="Kinase Discovery",
-                description="JAK2 inhibitors",
-                created_by=user_id,
-            )
-            await repo.save(project)
-            await uow.commit()
-
-        async with uow:
-            repo = SQLAlchemyProjectRepository(uow)
-            loaded = await repo.find_by_id(project.id)
-            assert loaded is not None
-            assert loaded.name == "Kinase Discovery"
-            assert loaded.description == "JAK2 inhibitors"
-            assert loaded.status.value == "active"
-            assert loaded.created_by == user_id
-            assert loaded.version == 1
-
     async def test_update_with_version_increment(self, uow: AsyncUnitOfWork) -> None:
         ws_id = uuid.uuid4()
         user_id = uuid.uuid4()

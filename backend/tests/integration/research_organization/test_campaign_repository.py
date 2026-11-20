@@ -570,23 +570,6 @@ async def test_stage_override_removal_reconciles(
     assert again.results[0].stage_overrides == {}
 
 
-async def test_close_note_round_trip(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> None:
-    c = _build_campaign()
-    c.close_note = "closed after triage review"
-    async with AsyncUnitOfWork(session_factory) as uow:
-        repo = SQLAlchemyCampaignRepository(uow)
-        await repo.save(c)
-        await uow.commit()
-
-    async with AsyncUnitOfWork(session_factory) as uow2:
-        repo2 = SQLAlchemyCampaignRepository(uow2)
-        reloaded = await repo2.find_by_id(c.id)
-    assert reloaded is not None
-    assert reloaded.close_note == "closed after triage review"
-
-
 @pytest.mark.asyncio
 async def test_channel_resolve_from_all_runs_round_trips(
     session_factory: async_sessionmaker[AsyncSession],

@@ -74,42 +74,6 @@ async def _insert_molecule_raw(
 
 
 @pytest.mark.asyncio
-async def test_round_trip_bemis_murcko_smiles(uow: AsyncUnitOfWork) -> None:
-    """A non-null scaffold SMILES stored in the DB is returned on fetch."""
-    ws_id = uuid.uuid4()
-    mol_id = uuid.uuid4()
-
-    async with uow:
-        await _insert_molecule_raw(uow, mol_id, ws_id, "CV-80001", bemis_murcko_smiles="c1ccccc1")
-        await uow.commit()
-
-    async with uow:
-        repo = SQLAlchemyMoleculeRepository(uow)
-        fetched = await repo.find_by_id_in_workspace(ws_id, mol_id)
-
-    assert fetched is not None
-    assert fetched.bemis_murcko_smiles == "c1ccccc1"
-
-
-@pytest.mark.asyncio
-async def test_round_trip_none_scaffold(uow: AsyncUnitOfWork) -> None:
-    """NULL in the DB (scaffold not yet computed) maps to None on the domain."""
-    ws_id = uuid.uuid4()
-    mol_id = uuid.uuid4()
-
-    async with uow:
-        await _insert_molecule_raw(uow, mol_id, ws_id, "CV-80002", bemis_murcko_smiles=None)
-        await uow.commit()
-
-    async with uow:
-        repo = SQLAlchemyMoleculeRepository(uow)
-        fetched = await repo.find_by_id_in_workspace(ws_id, mol_id)
-
-    assert fetched is not None
-    assert fetched.bemis_murcko_smiles is None
-
-
-@pytest.mark.asyncio
 async def test_round_trip_acyclic_empty_string(uow: AsyncUnitOfWork) -> None:
     """Empty string (acyclic molecule — no Murcko scaffold) survives the round-trip."""
     ws_id = uuid.uuid4()

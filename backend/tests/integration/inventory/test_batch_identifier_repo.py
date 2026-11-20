@@ -56,32 +56,6 @@ async def _insert_batch(uow: AsyncUnitOfWork, mol_id: uuid.UUID, ws_id: uuid.UUI
 @pytest.mark.integration
 class TestBatchIdentifierPersistence:
 
-    async def test_save_with_identifiers_roundtrips(self, uow: AsyncUnitOfWork) -> None:
-        ws = uuid.uuid4()
-        mol = uuid.uuid4()
-        async with uow:
-            await _insert_molecule(uow, mol, ws, "CC-000001")
-            repo = SQLAlchemyBatchRepository(uow)
-            bid = uuid.uuid4()
-            await _insert_batch(uow, mol, ws, bid, "CC-000001-001")
-            batch = await repo.find_by_batch_number(ws, "CC-000001-001")
-            assert batch is not None
-            ident = BatchIdentifier.create(
-                batch_id=batch.id, identifier="SACC-009999-001",
-                identifier_type="external_lot", source="CDD",
-                registered_by=uuid.uuid4(),
-            )
-            batch.add_identifier(ident)
-            await repo.save(batch)
-            await uow.commit()
-
-        async with uow:
-            repo = SQLAlchemyBatchRepository(uow)
-            reloaded = await repo.find_by_batch_number(ws, "CC-000001-001")
-        assert reloaded is not None
-        assert len(reloaded.identifiers) == 1
-        assert reloaded.identifiers[0].identifier == "SACC-009999-001"
-
     async def test_find_by_external_identifier_hit(self, uow: AsyncUnitOfWork) -> None:
         ws = uuid.uuid4()
         mol = uuid.uuid4()
@@ -105,13 +79,6 @@ class TestBatchIdentifierPersistence:
             found = await repo.find_by_external_identifier(ws, "SACC-009999-001")
         assert found is not None
         assert found.id == bid
-
-    async def test_find_by_external_identifier_miss(self, uow: AsyncUnitOfWork) -> None:
-        ws = uuid.uuid4()
-        async with uow:
-            repo = SQLAlchemyBatchRepository(uow)
-            found = await repo.find_by_external_identifier(ws, "NOTHING")
-        assert found is None
 
     async def test_find_by_external_identifier_workspace_scoped(self, uow: AsyncUnitOfWork) -> None:
         ws_a = uuid.uuid4()

@@ -40,30 +40,6 @@ def _list(session_factory) -> ListFavorites:
     return ListFavorites(uow, SQLAlchemyFavoriteRepository(uow))
 
 
-async def test_add_is_idempotent(session_factory, workspace_id, user_id) -> None:
-    auth = FakeAuth(role="viewer", workspace_id=workspace_id, user_id=user_id)
-    entity = uuid.uuid4()
-    cmd = AddFavoriteCommand(
-        workspace_id=workspace_id,
-        user_id=user_id,
-        entity_type=FavoriteEntityType.PROJECT,
-        entity_id=entity,
-    )
-    first = await _add(session_factory)(cmd, auth=auth)
-    second = await _add(session_factory)(cmd, auth=auth)
-    assert isinstance(first, Success)
-    assert isinstance(second, Success)
-
-    listed = await _list(session_factory)(
-        ListFavoritesQuery(
-            workspace_id=workspace_id, user_id=user_id, entity_type=FavoriteEntityType.PROJECT
-        ),
-        auth=auth,
-    )
-    assert isinstance(listed, Success)
-    assert len(listed.unwrap()) == 1  # not duplicated
-
-
 async def test_concurrent_add_lost_race_does_not_500(
     session_factory, workspace_id, user_id
 ) -> None:

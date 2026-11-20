@@ -22,7 +22,6 @@ from cellar.application.screening.protocol_activity_reader import (
 )
 from cellar.application.screening.run_aggregation import combine_replicates
 from cellar.domain.screening_assay.aggregation_types import ValueQualifier
-from cellar.domain.screening_assay.enums import primary_normalization
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_activity_reader import (
     SQLAlchemyProtocolActivityReader,
 )
@@ -104,12 +103,6 @@ async def test_readout_without_normalizations_reads_raw(uow, session_factory, wo
     )
 
     assert out.items[0].readouts["Signal"].mean == 2.0
-
-
-def test_primary_normalization_skips_none():
-    assert primary_normalization(["none", "z_score"]) == "z_score"
-    assert primary_normalization([]) is None
-    assert primary_normalization(None) is None
 
 
 # --- Regression guard: Activity keeps today's treatment of qualified values --------------

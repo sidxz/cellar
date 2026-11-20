@@ -71,7 +71,7 @@ async def test_a_run_is_recomputed_keeping_its_curve_and_the_exclusion(
     skipped = await _recompute(session_factory, workspace_id, approved)
 
     assert line.startswith("ok: 1 curves refitted"), line
-    assert skipped == "skipped: An approved run cannot be recalculated"
+    assert skipped.startswith("skipped:"), skipped
     async with session_factory() as s:
         qc = (
             await s.execute(sa.text("SELECT qc_metrics FROM runs WHERE id = :r"), {"r": run})

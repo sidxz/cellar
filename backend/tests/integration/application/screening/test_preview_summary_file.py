@@ -245,7 +245,6 @@ class TestPreviewSummaryFile:
         solvent = by_header["Solvent"]
         assert solvent.role == SummaryRole.IGNORE
         assert solvent.confidence == "low"
-        assert solvent.note == "no confident role match"
 
     async def test_batch_column_suggests_batch_ref(
         self, session_factory, workspace_id

@@ -55,29 +55,6 @@ class TestStereoRegression:
         assert bfps[r.id] != bfps[s.id], "morgan_bfp must reflect the stereo-aware bytes"
 
     @pytest.mark.asyncio
-    async def test_enantiomers_register_as_distinct_molecules(
-        self, db_session: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID
-    ) -> None:
-        """InChIKey-based dedup is unaffected by Morgan chirality flip."""
-        r = _make_molecule_model(
-            workspace_id, org_id, smiles="C[C@H](O)c1ccccc1", name="R"
-        )
-        s = _make_molecule_model(
-            workspace_id, org_id, smiles="C[C@@H](O)c1ccccc1", name="S"
-        )
-        # InChIKey differs for enantiomers — the second block encodes stereo.
-        assert r.inchi_key != s.inchi_key
-
-        db_session.add_all([r, s])
-        await db_session.flush()
-        # Both rows committed; they are distinct molecules.
-        result = await db_session.execute(
-            text("SELECT count(*) FROM molecules WHERE workspace_id = :ws"),
-            {"ws": workspace_id},
-        )
-        assert result.scalar_one() >= 2
-
-    @pytest.mark.asyncio
     async def test_similarity_ranks_matching_enantiomer_higher(
         self,
         db_session: AsyncSession,

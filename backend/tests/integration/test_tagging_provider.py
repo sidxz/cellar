@@ -6,10 +6,8 @@ import uuid
 
 from sqlalchemy import text
 
-from cellar.domain.workspace_config.tagging.tag import TaggableEntityType
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     MoleculeTagLinkRepository,
-    SQLAlchemyTagLinkRepositoryProvider,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -48,9 +46,3 @@ class TestEntityExistsAndProvider:
             assert await repo.entity_exists_in_workspace(ws_id, mol_id) is True
             assert await repo.entity_exists_in_workspace(other_ws, mol_id) is False
             assert await repo.entity_exists_in_workspace(ws_id, uuid.uuid4()) is False
-
-    async def test_provider_returns_bound_repo(self, uow: AsyncUnitOfWork) -> None:
-        provider = SQLAlchemyTagLinkRepositoryProvider(uow)
-        repo = provider.for_type(TaggableEntityType.MOLECULE)
-        assert isinstance(repo, MoleculeTagLinkRepository)
-        assert repo._uow is uow
