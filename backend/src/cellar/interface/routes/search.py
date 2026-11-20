@@ -147,6 +147,9 @@ class ExecuteSearchBody(BaseModel):
     # Default is ``LATEST_RUN`` — matches the campaign default and
     # the chemist mental model of "what would I see right now".
     aggregation: SelectionRule = SelectionRule.LATEST_RUN
+    # "List all runs": every cell also lists each run's value and curve (newest
+    # first, up to 50). The headline and sorting still follow ``aggregation``.
+    list_runs: bool = False
 
     @model_validator(mode="after")
     def _validate_structure_clauses(self) -> ExecuteSearchBody:
@@ -244,6 +247,7 @@ async def execute_search(
         query=body.query,
         protocol_columns=body.protocol_columns,
         aggregation=body.aggregation,
+        list_runs=body.list_runs,
         cursor=cursor,
         limit=clamp_limit(limit, max_size=cap),
         sort_by=sort_by,

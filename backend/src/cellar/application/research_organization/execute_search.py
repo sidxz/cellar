@@ -50,6 +50,8 @@ class ExecuteSearchQuery(Query):
     query: dict[str, Any] | None = None
     protocol_columns: list[str] | None = None
     aggregation: SelectionRule = SelectionRule.LATEST_RUN
+    # "List all runs": each cell carries every run's value and curve (up to 50).
+    list_runs: bool = False
     # Opaque: a molecule id for id-ordered pages, "r1:<index>:<id>" for ranked ones.
     cursor: str | None = None
     limit: int = 50
@@ -220,6 +222,7 @@ class ExecuteSearch:
                 selection_rule=input.aggregation,
                 qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
                 any_readout_groups=any_groups,
+                list_runs=input.list_runs,
             )
             activity_data = {
                 str(k): {ck: asdict(v) for ck, v in cv.items()} for k, cv in raw.items()
