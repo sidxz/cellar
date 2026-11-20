@@ -13,7 +13,7 @@ describe("ReturnToBar", () => {
   it("offers the way back without a protocol", () => {
     render(<ReturnToBar target={target} />);
     expect(screen.getByText("Opened from Daikon")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to Daikon" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Continue in Daikon" })).toHaveAttribute(
       "href",
       target.url,
     );
@@ -21,13 +21,15 @@ describe("ReturnToBar", () => {
 
   it("names the protocol it goes back with", () => {
     render(<ReturnToBar target={target} protocolId="p1" protocolCode="PRT-00123" />);
-    const link = screen.getByRole("link", { name: "Back to Daikon with PRT-00123" });
+    const link = screen.getByRole("link", { name: "Continue in Daikon with PRT-00123" });
     expect(link.getAttribute("href")).toContain("protocol_id=p1");
   });
 
   it("says 'this protocol' when the protocol has no code", () => {
     render(<ReturnToBar target={target} protocolId="p1" protocolCode={null} />);
-    expect(screen.getByRole("link", { name: "Back to Daikon with this protocol" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Continue in Daikon with this protocol" }),
+    ).toBeVisible();
   });
 });
 
@@ -49,7 +51,7 @@ describe("ReturnToBarFromUrl", () => {
   it("shows the way back for a trusted return address", async () => {
     renderFromUrl(target.url);
     expect(
-      await screen.findByRole("link", { name: "Back to Daikon with PRT-00123" }),
+      await screen.findByRole("link", { name: "Continue in Daikon with PRT-00123" }),
     ).toBeVisible();
   });
 

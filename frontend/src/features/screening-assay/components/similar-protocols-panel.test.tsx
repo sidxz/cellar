@@ -39,10 +39,9 @@ describe("SimilarProtocolsPanel", () => {
         backTo={{ label: "Daikon", url: "https://d.org/s" }}
       />,
     );
-    expect(screen.getByRole("link", { name: "Back to Daikon with this protocol" })).toHaveAttribute(
-      "href",
-      "https://d.org/s?protocol_id=p1",
-    );
+    expect(
+      screen.getByRole("link", { name: "Continue in Daikon with this protocol" }),
+    ).toHaveAttribute("href", "https://d.org/s?protocol_id=p1");
     expect(screen.queryByText("Log a run of this")).not.toBeInTheDocument();
   });
 

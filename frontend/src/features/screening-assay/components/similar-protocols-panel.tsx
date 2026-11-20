@@ -3,7 +3,7 @@
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { type ReturnTarget, returnHref } from "@/shared/lib/return-to";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useState } from "react";
 import {
   type SimilarProtocol,
@@ -91,7 +91,7 @@ export function SimilarProtocolsPanel({ draft, onLogRun, backTo }: Props) {
         {backTo ? (
           <Button asChild size="sm" className="mt-2">
             <a href={returnHref(backTo, runCandidate.id)}>
-              Back to {backTo.label} with this protocol
+              Continue in {backTo.label} with this protocol <ArrowRight className="size-4" />
             </a>
           </Button>
         ) : (

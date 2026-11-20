@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Link2 } from "lucide-react";
+import { ArrowRight, Link2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -24,8 +24,8 @@ interface ReturnToBarProps {
 
 export function ReturnToBar({ target, protocolId, protocolCode }: ReturnToBarProps) {
   const label = protocolId
-    ? `Back to ${target.label} with ${protocolCode || "this protocol"}`
-    : `Back to ${target.label}`;
+    ? `Continue in ${target.label} with ${protocolCode || "this protocol"}`
+    : `Continue in ${target.label}`;
   return (
     // Hard to miss on purpose: the way back is the reason the scientist came here.
     // Message left, action right, like any app banner; wraps under the message when narrow.
@@ -40,7 +40,7 @@ export function ReturnToBar({ target, protocolId, protocolCode }: ReturnToBarPro
         className="shrink-0 bg-lime-400 font-semibold text-black shadow-[0_0_12px_rgba(163,230,53,0.6)] hover:bg-lime-300"
       >
         <a href={returnHref(target, protocolId)}>
-          <ArrowLeft className="size-4" /> {label}
+          {label} <ArrowRight className="size-4" />
         </a>
       </Button>
     </div>
