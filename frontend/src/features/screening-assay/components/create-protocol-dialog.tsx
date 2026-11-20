@@ -576,6 +576,7 @@ export function CreateProtocolDialog({
 
           {/* Before any more effort: maybe this is a run of an existing protocol. */}
           <SimilarProtocolsPanel
+            backTo={returnTarget}
             draft={{
               name: preview.data?.name ?? "",
               protocol_type: form.watch("protocol_type") || null,

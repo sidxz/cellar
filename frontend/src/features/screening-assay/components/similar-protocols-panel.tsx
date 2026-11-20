@@ -2,6 +2,7 @@
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { type ReturnTarget, returnHref } from "@/shared/lib/return-to";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useState } from "react";
 import {
@@ -16,9 +17,11 @@ const typeLabel = (t: string) => PROTOCOL_TYPE_LABELS[t as ProtocolType] ?? t;
 interface Props {
   draft: SimilarProtocolDraft;
   onLogRun: (protocolId: string) => void;
+  /** Opened from another app: the existing protocol goes back there instead of taking a run. */
+  backTo?: ReturnTarget | null;
 }
 
-export function SimilarProtocolsPanel({ draft, onLogRun }: Props) {
+export function SimilarProtocolsPanel({ draft, onLogRun, backTo }: Props) {
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const { data } = useSimilarProtocols(draft);
@@ -85,9 +88,22 @@ export function SimilarProtocolsPanel({ draft, onLogRun }: Props) {
             </Badge>
           ))}
         </div>
-        <Button type="button" size="sm" className="mt-2" onClick={() => onLogRun(runCandidate.id)}>
-          Log a run of this
-        </Button>
+        {backTo ? (
+          <Button asChild size="sm" className="mt-2">
+            <a href={returnHref(backTo, runCandidate.id)}>
+              Back to {backTo.label} with this protocol
+            </a>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2"
+            onClick={() => onLogRun(runCandidate.id)}
+          >
+            Log a run of this
+          </Button>
+        )}
       </div>
 
       {others.length > 0 && othersList}
