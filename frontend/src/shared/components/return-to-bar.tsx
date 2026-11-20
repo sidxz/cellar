@@ -27,9 +27,14 @@ export function ReturnToBar({ target, protocolId, protocolCode }: ReturnToBarPro
     ? `Back to ${target.label} with ${protocolCode || "this protocol"}`
     : `Back to ${target.label}`;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-      <span className="text-muted-foreground">Opened from {target.label}</span>
-      <Button asChild variant="outline" size="sm">
+    // Hard to miss on purpose: the way back is the reason the scientist came here.
+    <div className="flex flex-wrap items-center gap-3 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-sm">
+      <span className="font-medium">Opened from {target.label}</span>
+      <Button
+        asChild
+        size="sm"
+        className="bg-lime-400 font-semibold text-black shadow-[0_0_12px_rgba(163,230,53,0.6)] hover:bg-lime-300"
+      >
         <a href={returnHref(target, protocolId)}>
           <ArrowLeft className="size-4" /> {label}
         </a>
