@@ -126,6 +126,69 @@ function setup(
   return navigate;
 }
 
+describe("compound drawer under List all runs", () => {
+  beforeEach(() => {
+    figureProps.length = 0;
+  });
+
+  function renderListed(runCurves: Array<number | null>) {
+    const runs = runCurves.map((fitted_value, i) => ({
+      run_id: `run-${i}`,
+      run_date: `2026-0${6 - i}-05`,
+      curve_id: fitted_value === null ? null : `fit-${i}`,
+      curve_class: "full",
+      r_squared: 0.98,
+      intercept_values: [],
+      curve_snapshot:
+        fitted_value === null
+          ? null
+          : { fitted_value, top: 100, bottom: 0, hill_slope: 1, raw_data: [] },
+    }));
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [{ protocol_id: "proto", protocol_name: "Target assay", curves: [curve] }],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{ ...molecule, activity: { "drc:rd": { ...av, run_count: runs.length, runs } } }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="all"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+  }
+
+  it("draws every listed run's curve in the large plot, labelled by run date", () => {
+    renderListed([1.3, null, 9.1]);
+    const props = figureProps.find((p) => p.size === "full");
+    expect(props).toBeTruthy();
+    const curves = props?.curves as { label: string; curve: { fitted_value: number } | null }[];
+    expect(curves.map((c) => [c.label, c.curve?.fitted_value ?? null])).toEqual([
+      ["2026-06-05", 1.3],
+      ["2026-05-05", null],
+      ["2026-04-05", 9.1],
+    ]);
+    expect(screen.queryByTestId("visible-curve")).toBeNull();
+    // Each fit stays inspectable through the source picker.
+    expect(screen.getByLabelText("Source curve · Potency")).toBeInTheDocument();
+  });
+
+  it("keeps the one source curve when no listed run carries a curve", () => {
+    renderListed([null, null]);
+    expect(figureProps.find((p) => p.size === "full")).toBeUndefined();
+    expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
+  });
+});
+
 describe("compound drawer curve frame", () => {
   it("keeps the curve's fitted layer and draws a % curve on the 0–100 % frame", () => {
     plotArgs.length = 0;

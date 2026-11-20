@@ -48,6 +48,15 @@ export function useCurveFramesFor(
   }, [rows]);
 }
 
+/** "List all runs": each listed run's curve, labelled by its date. Entry i takes
+ *  `overlayColor(i)`, the colour of the i-th dot in the value list (a run without
+ *  a fit keeps its slot). Null when no run carries a curve. */
+export function runOverlayCurves(value: ActivityValue | undefined) {
+  const runs = value?.runs ?? [];
+  if (!runs.some((r) => r.curve_snapshot)) return null;
+  return runs.map((r) => ({ curve: r.curve_snapshot, label: r.run_date }));
+}
+
 interface DoseResponseCellProps {
   value?: ActivityValue;
   /** The cell's activity key, so it shares its column's frame. */
@@ -75,12 +84,11 @@ function DoseResponseCellInner({
   const isPercent =
     value?.fitted_layer === undefined ? percent : isPercentNormalization(value.fitted_layer);
   const frame = frameKey && frameFor ? frameFor(frameKey, isPercent) : undefined;
-  const runs = value?.runs ?? [];
-  if (listRuns && runs.some((r) => r.curve_snapshot)) {
-    // Entry i takes overlayColor(i), the colour of the i-th dot in the value list.
+  const runCurves = listRuns ? runOverlayCurves(value) : null;
+  if (runCurves) {
     return (
       <DoseResponseFigure
-        curves={runs.map((r) => ({ curve: r.curve_snapshot, label: r.run_date }))}
+        curves={runCurves}
         size="cell"
         unit={value?.unit ?? null}
         xRange={frame?.xRange}

@@ -3,6 +3,7 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
+import { DoseResponseFigure } from "@/features/screening-assay/components/dose-response-figure";
 import { percentYRange } from "@/features/screening-assay/lib/curve-frame";
 import { fitNoteLabel } from "@/features/screening-assay/lib/dose-response-display";
 import type {
@@ -32,7 +33,11 @@ import { type ProtocolRunSet, focusedGroupKey, protocolRunSets } from "../../lib
 import { type ComparisonChannel, comparisonChannels } from "../../lib/comparison-channels";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import { canOverlaySplit, drcColId } from "../../lib/protocol-column-id";
-import { AGGREGATION_LABELS, type AggregationMode } from "../../lib/use-aggregation-mode";
+import {
+  AGGREGATION_LABELS,
+  type AggregationMode,
+  listsRuns,
+} from "../../lib/use-aggregation-mode";
 import { anyProtocolActivity } from "../../types";
 import type {
   ActivityValue,
@@ -43,7 +48,7 @@ import type {
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayResult } from "./assay-result";
-import { DoseResponseOverlay } from "./dose-response-cell";
+import { DoseResponseOverlay, runOverlayCurves } from "./dose-response-cell";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
@@ -231,6 +236,9 @@ function SourceCurveCard({
   );
   if (!curve || !adapted || !figure) return null;
   const aggregate = mode === "gmean" || mode === "mean";
+  // List all runs: the large plot draws every listed run's curve, as the grid
+  // cell does (a split protocol's group overlay wins, as in the grid).
+  const runCurves = !overlay && listsRuns(mode) ? runOverlayCurves(av) : null;
   const capturedTotal = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
   const excludedCount = curve.excluded_points?.length ?? 0;
   return (
@@ -282,6 +290,12 @@ function SourceCurveCard({
           fit’s details.
         </p>
       )}
+      {runCurves && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Every listed run’s curve, coloured like its value. The source curve above opens one fit’s
+          details.
+        </p>
+      )}
       {curve.fit_quality_warnings && curve.fit_quality_warnings.length > 0 && (
         <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
           Fit quality:{" "}
@@ -304,12 +318,16 @@ function SourceCurveCard({
           aria-label={
             overlay
               ? `Dose–response curves for ${readoutName}, every group overlaid`
-              : `Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`
+              : runCurves
+                ? `Dose–response curves for ${readoutName}, every listed run overlaid`
+                : `Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`
           }
           className="min-w-0 overflow-hidden rounded-lg border bg-background"
         >
           {overlay ? (
             <DoseResponseOverlay entries={overlay} size="full" />
+          ) : runCurves ? (
+            <DoseResponseFigure curves={runCurves} size="full" unit={av?.unit ?? null} />
           ) : (
             <Plot
               data={figure.traces}
