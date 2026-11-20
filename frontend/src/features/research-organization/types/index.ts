@@ -1,6 +1,7 @@
 import type {
   AdditionalCurve,
   AggregateMarker,
+  CurveSnapshot,
 } from "@/features/screening-assay/components/dose-response-figure";
 import type { CurveClass, TargetRef } from "@/features/screening-assay/types";
 import type {
@@ -480,6 +481,9 @@ export interface RunSummary {
     /** Single-point runs: "=" | "<" | ">" | "nd". */
     qualifier?: string;
   }>;
+  /** The run's curve, sent only for "List all runs" (`list_runs`); null for a
+   *  run without a fit. */
+  curve_snapshot?: CurveSnapshot | null;
 }
 
 export interface InterceptAggregate {

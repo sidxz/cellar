@@ -10,11 +10,12 @@ import { Badge } from "@/shared/components/ui/badge";
 
 import { cn } from "@/shared/lib/utils";
 
-import type { AggregationMode } from "../../lib/use-aggregation-mode";
+import { type AggregationMode, listsRuns } from "../../lib/use-aggregation-mode";
 import type { ActivityValue, InterceptKey } from "../../types";
 
 import { activityEndpoint, molarFactor, sameUnit } from "../../lib/assay-evidence";
 import { AssayEvidence } from "./assay-evidence";
+import { RunValueList } from "./run-value-list";
 
 export interface InterceptCellProps {
   av: ActivityValue | undefined;
@@ -193,6 +194,21 @@ export function InterceptCell({
         {(-Math.log10(factor) - stats.log_value_mean).toFixed(2)} ± {stats.log_value_sd.toFixed(2)}
       </div>
     ) : null;
+
+  // "List all runs": every run's value instead of the headline; the spread
+  // line stays under the list.
+  if (listsRuns(mode) && av.runs?.length) {
+    return (
+      <RunValueList
+        av={av}
+        interceptKey={ik}
+        headerUnit={headerUnit}
+        mode={mode}
+        curves={curves}
+        summary={gmeanLine}
+      />
+    );
+  }
 
   // Stack the headline + muted lines vertically only when there's something
   // to stack — single-run / non-scalar cells keep their original one-line

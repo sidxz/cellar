@@ -163,6 +163,42 @@ describe("<InterceptCell />", () => {
     expect(screen.queryByText(/pIC|pEC|pX/)).toBeNull();
   });
 
+  it("List all runs lists each run's value with the gmean line under it, no headline", () => {
+    const runs = [0.12, 0.3].map((value, i) => ({
+      run_id: `run-${i}`,
+      run_date: `2026-0${3 - i}-01`,
+      curve_id: `curve-${i}`,
+      curve_class: "full",
+      r_squared: 0.98,
+      intercept_values: [{ spec: { kind: "ic", level: 50 }, value, qualifier: "=" }],
+    }));
+    const listed: ActivityValue = {
+      ...baseAv,
+      run_count: 2,
+      runs,
+      intercept_aggregates: [
+        {
+          spec: { kind: "primary" },
+          selected_value: 0.12,
+          selected_qualifier: "=",
+          aggregate_stats: {
+            geometric_mean: 0.19,
+            fold_range: 2.5,
+            log_value_mean: -0.72,
+            log_value_sd: 0.28,
+          },
+          disagreement_flag: false,
+        },
+      ],
+    };
+    render(<InterceptCell av={listed} spec={null} isPrimary={true} mode="all" />);
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items).toEqual(["0.1200 uM2026-03-01", "0.3000 uM2026-02-01"]);
+    expect(screen.getByText(/gmean 0\.190 uM/)).toBeInTheDocument();
+    expect(screen.queryByText(/₂/)).toBeNull();
+    expect(screen.getByText("2 runs")).toBeInTheDocument();
+  });
+
   it("single-run cell shows no aggregate summary lines", () => {
     // run_count=1 default; nothing to aggregate, no muted lines
     render(<InterceptCell av={baseAv} spec={null} isPrimary={true} mode="latest" />);

@@ -36,7 +36,7 @@ import {
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
 import { serverSortToken } from "../../lib/search-sort";
-import type { AggregationMode } from "../../lib/use-aggregation-mode";
+import { type AggregationMode, listsRuns } from "../../lib/use-aggregation-mode";
 import {
   type ActivityValue,
   type ColumnGroup,
@@ -56,6 +56,7 @@ import {
   useCurveFramesFor,
 } from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
+import { RunValueList } from "./run-value-list";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -312,6 +313,17 @@ function buildReadoutColumn(
     valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
+      if (av?.runs?.length && listsRuns(mode)) {
+        return (
+          <RunValueList
+            av={av}
+            interceptKey={null}
+            headerUnit={headerUnit}
+            mode={mode}
+            curves={rowCurves(proto, params.data)}
+          />
+        );
+      }
       if (av?.qualifier === "nd") {
         // Runs exist but none gave a reportable value — not "no data".
         return <span className="font-mono text-xs text-muted-foreground">ND</span>;
@@ -430,7 +442,14 @@ export function buildDrcColumns(
     filter: false,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
-      return <DoseResponseCell value={av} frameKey={colId} percent={percent} />;
+      return (
+        <DoseResponseCell
+          value={av}
+          frameKey={colId}
+          percent={percent}
+          listRuns={listsRuns(aggregationMode)}
+        />
+      );
     },
   });
 

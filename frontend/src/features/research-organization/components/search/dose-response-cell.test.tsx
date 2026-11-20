@@ -241,3 +241,67 @@ describe("search curve cell frame", () => {
     expect(figureCalls[0].yRange).toBeUndefined();
   });
 });
+
+describe("<DoseResponseCell listRuns /> — List all runs", () => {
+  const snap = (fitted_value: number, x: number) => ({
+    fitted_value,
+    top: 100,
+    bottom: 0,
+    hill_slope: 1,
+    raw_data: [
+      { x, y: 10 },
+      { x: x * 100, y: 90 },
+    ],
+  });
+  const runs = (curves: Array<ReturnType<typeof snap> | null>) =>
+    curves.map((curve_snapshot, i) => ({
+      run_id: `run-${i}`,
+      run_date: `2026-0${9 - i}-01`,
+      curve_id: curve_snapshot ? `curve-${i}` : null,
+      curve_class: "full",
+      r_squared: 0.98,
+      intercept_values: [],
+      curve_snapshot,
+    }));
+
+  it("overlays one curve per run, in list order, labelled by run date", () => {
+    reset();
+    const av: ActivityValue = { ...BASE_AV, runs: runs([snap(0.2, 0.01), null, snap(0.4, 0.1)]) };
+    render(<DoseResponseCell value={av} listRuns />);
+    const overlay = figureCalls[0].curves as Array<{
+      curve: { fitted_value: number } | null;
+      label: string;
+    }>;
+    expect(overlay.map((c) => c.curve?.fitted_value ?? null)).toEqual([0.2, null, 0.4]);
+    expect(overlay.map((c) => c.label)).toEqual(["2026-09-01", "2026-08-01", "2026-07-01"]);
+  });
+
+  it("draws the cell's own curve when no run carries one", () => {
+    reset();
+    const av: ActivityValue = { ...BASE_AV, runs: runs([null, null]) };
+    render(<DoseResponseCell value={av} listRuns />);
+    expect(figureCalls[0].curves).toBeUndefined();
+    expect(figureCalls[0].curve).toBeTruthy();
+  });
+
+  it("frames the column over every listed run's points", () => {
+    reset();
+    const av: ActivityValue = { ...BASE_AV, runs: runs([snap(0.2, 0.0001), snap(0.4, 10)]) };
+    const rows = [{ id: "a", activity: { "drc:ic50": av } }];
+    function Frames({ children }: { children: ReactNode }) {
+      return (
+        <CurveFramesContext.Provider value={useCurveFramesFor(rows)}>
+          {children}
+        </CurveFramesContext.Provider>
+      );
+    }
+    render(
+      <Frames>
+        <DoseResponseCell value={av} frameKey="drc:ic50" percent listRuns />
+      </Frames>,
+    );
+    const [x0, x1] = figureCalls[0].xRange as [number, number];
+    expect(x0).toBeCloseTo(0.0001 / Math.sqrt(10), 12);
+    expect(x1).toBeCloseTo(1000 * Math.sqrt(10), 6);
+  });
+});

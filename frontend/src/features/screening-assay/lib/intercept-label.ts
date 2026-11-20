@@ -414,7 +414,7 @@ function positive(v: number | null | undefined): number | null {
 }
 
 /** A tested dose as a bound reads: 4 significant digits, no trailing zeros ("> 500"). */
-function boundText(dose: number): string {
+export function boundText(dose: number): string {
   return String(Number(dose.toPrecision(4)));
 }
 
