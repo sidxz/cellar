@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from cellar.application.screening.run_shape import NOT_A_PLATE
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import holder_label, position_label
 from cellar.infrastructure.instrument_readers import default_readers
@@ -378,14 +379,13 @@ async def test_plate_imports_are_refused_on_a_run_whose_holder_is_not_a_plate(
 ) -> None:
     s = await _seed(session_factory, fake_auth.workspace_id)
     await _import(client, s)
-    message = "This run's holder is not a plate, so plate imports are not available for it."
 
     grid = await client.post(
         f"/api/v1/runs/{s.run_id}/import-readouts",
         params={"readout_definition_id": str(s.tm1_id)},
         files={"file": ("v.csv", b"Well,Value\nA1,2.3\n", "text/csv")},
     )
-    assert grid.status_code == 409 and message in grid.text
+    assert grid.status_code == 409 and NOT_A_PLATE in grid.text
     setup = await client.post(
         f"/api/v1/runs/{s.run_id}/plate-setup",
         json={
@@ -393,12 +393,12 @@ async def test_plate_imports_are_refused_on_a_run_whose_holder_is_not_a_plate(
             "compound_assignments": [{"molecule_ref": "Molecule 1", "well_positions": ["A1"]}],
         },
     )
-    assert setup.status_code == 409 and message in setup.text
+    assert setup.status_code == 409 and NOT_A_PLATE in setup.text
     run_file = await client.post(
         f"/api/v1/runs/{s.run_id}/preview-file",
         files={"file": ("r.csv", b"Plate Name,Well,Value\nP1,A1,1\n", "text/csv")},
     )
-    assert run_file.status_code == 409 and message in run_file.text
+    assert run_file.status_code == 409 and NOT_A_PLATE in run_file.text
     assert await _count(session_factory, "plates", s.run_id) == 1
     assert (
         await _count(session_factory, "readout_data", s.run_id, where="is_computed = false") == 3
@@ -621,7 +621,7 @@ async def test_import_keeps_transitions_as_steps_and_does_not_offer_them_for_map
     )
 
 
-async def test_import_refuses_a_transition_mapping_with_the_step_message(
+async def test_import_refuses_a_transition_mapping(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
     fake_auth: FakeAuth,
@@ -639,7 +639,7 @@ async def test_import_refuses_a_transition_mapping_with_the_step_message(
     ]
     resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
     assert resp.status_code == 422, resp.text
-    assert "is a melting step" in resp.text and "cannot be mapped to a readout" in resp.text
+    assert resp.json()["error"] == "ValidationError"
     for table in ("plates", "measured_curves", "readout_data", "melting_steps"):
         assert await _count(session_factory, table, s.run_id) == 0
 

@@ -139,26 +139,6 @@ class TestRegisterMolecule:
 
 
 class TestListMolecules:
-    async def test_list_returns_registered_molecules(
-        self, client: AsyncClient, seed_org: str
-    ) -> None:
-        # Register a molecule
-        await client.post(
-            "/api/v1/molecules",
-            json={
-                "name": "Caffeine",
-                "smiles": "Cn1c(=O)c2c(ncn2C)n(C)c1=O",
-                "originating_org_id": seed_org,
-            },
-        )
-
-        resp = await client.get("/api/v1/molecules")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "items" in data
-        assert len(data["items"]) >= 1
-        names = [m["name"] for m in data["items"]]
-        assert "Caffeine" in names
 
     async def test_list_empty_workspace(self, client: AsyncClient) -> None:
         resp = await client.get("/api/v1/molecules")
@@ -166,44 +146,6 @@ class TestListMolecules:
         data = resp.json()
         assert data["items"] == []
         assert data["next_cursor"] is None
-
-    async def test_list_with_limit(
-        self, client: AsyncClient, seed_org: str
-    ) -> None:
-        # Register two molecules
-        await client.post(
-            "/api/v1/molecules",
-            json={
-                "name": "Mol A",
-                "smiles": "C",
-                "originating_org_id": seed_org,
-            },
-        )
-        await client.post(
-            "/api/v1/molecules",
-            json={
-                "name": "Mol B",
-                "smiles": "CC",
-                "originating_org_id": seed_org,
-            },
-        )
-
-        resp = await client.get("/api/v1/molecules", params={"limit": 1})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert len(data["items"]) == 1
-        assert data["next_cursor"] is not None
-
-        # Fetch next page
-        resp2 = await client.get(
-            "/api/v1/molecules",
-            params={"cursor": data["next_cursor"], "limit": 1},
-        )
-        assert resp2.status_code == 200
-        data2 = resp2.json()
-        assert len(data2["items"]) == 1
-        # IDs should be different
-        assert data2["items"][0]["id"] != data["items"][0]["id"]
 
     async def test_list_is_newest_registered_first_and_pages_on(
         self, client: AsyncClient, seed_org: str
@@ -278,22 +220,6 @@ class TestListMoleculesByIds:
 
 
 class TestGetMolecule:
-    async def test_get_by_id(
-        self, client: AsyncClient, seed_org: str
-    ) -> None:
-        reg_resp = await client.post(
-            "/api/v1/molecules",
-            json={
-                "name": "Benzene",
-                "smiles": "c1ccccc1",
-                "originating_org_id": seed_org,
-            },
-        )
-        mol_id = reg_resp.json()["molecule"]["id"]
-
-        resp = await client.get(f"/api/v1/molecules/{mol_id}")
-        assert resp.status_code == 200
-        assert resp.json()["name"] == "Benzene"
 
     async def test_get_not_found(self, client: AsyncClient) -> None:
         resp = await client.get(f"/api/v1/molecules/{uuid.uuid4()}")

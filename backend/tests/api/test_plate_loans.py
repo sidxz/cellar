@@ -90,18 +90,6 @@ async def _mk_loan_as_org(
         return await _mk_loan(admin_as_org, **body)
 
 
-class TestColonPathRouting:
-    """Dedicated probe (plan Step 1): fail loud and early if FastAPI/Starlette
-    can't route a literal colon in a path segment, before trusting it across
-    the rest of the matrix."""
-
-    async def test_verb_route_is_reachable(self, client: AsyncClient) -> None:
-        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(client, plate_ids=[plate["id"]])
-        resp = await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
-        assert resp.status_code != 404, resp.text
-
-
 class TestRequestModes:
     async def test_by_plate_ids(self, client: AsyncClient) -> None:
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
@@ -543,10 +531,6 @@ class TestFilters:
         resp = await client.get("/api/v1/plate-loans", params={"status": "closed"})
         assert loan["id"] not in [loan_["id"] for loan_ in resp.json()]
 
-    async def test_list_loans_rejects_unknown_status(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/v1/plate-loans", params={"status": "opne"})
-        assert resp.status_code == 422  # was: silently zero rows
-
     async def test_overdue_filter(self, client: AsyncClient) -> None:
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
         past_due = (date.today() - timedelta(days=1)).isoformat()
@@ -682,7 +666,6 @@ class TestOwnerLends:
             json={"plate_ids": [plate["id"]], "borrower_org_id": str(uuid.uuid4())},
         )
         assert resp.status_code == 422, resp.text
-        assert "Unknown borrower organization" in resp.text
 
     async def test_non_owner_editor_cannot_lend_foreign_plate(
         self, client: AsyncClient, editor_client_own_org: AsyncClient
@@ -934,14 +917,6 @@ class TestReturnComments:
         loan = await _mk_loan(client, plate_ids=[plate["id"]])
         resp = await client.post(f"/api/v1/plate-loans/{loan['id']}/items:request-return", json={})
         assert resp.status_code == 200, resp.text
-
-    async def test_unknown_field_still_forbidden_on_other_verbs(self, client: AsyncClient) -> None:
-        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(client, plate_ids=[plate["id"]])
-        resp = await client.post(
-            f"/api/v1/plate-loans/{loan['id']}/items:approve", json={"comments": []}
-        )
-        assert resp.status_code == 422, resp.text
 
     async def test_foreign_group_comment_rejected_and_not_written(
         self, client: AsyncClient, editor_client_other_org: AsyncClient

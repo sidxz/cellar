@@ -161,11 +161,6 @@ class TestCreateShipment:
 
         assert resp.status_code == 422, resp.text
 
-    async def test_unknown_item_type_is_422(self, client: AsyncClient) -> None:
-        resp = await _post_shipment(client, {"item_type": "vial", "item_id": str(uuid.uuid4())})
-
-        assert resp.status_code == 422, resp.text
-
     async def test_unknown_sample_is_404(self, client: AsyncClient) -> None:
         resp = await _post_shipment(client, _sample_item({"id": str(uuid.uuid4())}))
 

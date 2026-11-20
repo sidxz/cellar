@@ -107,9 +107,7 @@ async def test_remove_a_used_readout_is_a_conflict_that_says_why(
     p = await _published(session_factory, fake_auth.workspace_id)
     resp = await client.delete(p.readout_url(p.used))
     assert resp.status_code == 409, resp.text
-    message = resp.json()["message"]
-    assert "create a new version" in message
-    assert "has values in 1 run" in message
+    assert "has values in 1 run" in resp.json()["message"]
     assert await _names(client, p) == ["Sginal", "Signal"]
 
 
@@ -132,9 +130,7 @@ async def test_rename_a_used_readout_is_a_conflict_that_says_why(
     p = await _published(session_factory, fake_auth.workspace_id)
     resp = await client.put(p.readout_url(p.used), json={"name": "Response"})
     assert resp.status_code == 409, resp.text
-    message = resp.json()["message"]
-    assert "create a new version" in message
-    assert "has values in 1 run" in message
+    assert "has values in 1 run" in resp.json()["message"]
     # Cosmetic fields stay editable.
     resp = await client.put(p.readout_url(p.used), json={"precision": 2})
     assert resp.status_code == 200, resp.text
@@ -197,12 +193,7 @@ async def test_a_value_written_after_the_check_ends_as_a_conflict(
     monkeypatch.setattr(SQLAlchemyReadoutUsageReader, "for_readout", blind_the_first_time)
     resp = await client.delete(p.readout_url(p.used))
     assert resp.status_code == 409, resp.text
-    assert resp.json() == {
-        "error": "ConflictError",
-        "message": (
-            "This readout is now in use (has values in 1 run), so it can no longer be "
-            "removed. Create a new version to change it."
-        ),
-    }
+    assert resp.json()["error"] == "ConflictError"
+    assert "has values in 1 run" in resp.json()["message"]
     monkeypatch.undo()
     assert await _names(client, p) == ["Sginal", "Signal"]

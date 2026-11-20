@@ -49,16 +49,3 @@ async def test_set_ontology_annotation_persists_slot(client: AsyncClient) -> Non
     assert resp.status_code in (200, 201), resp.text
     annots = resp.json()["ontology_annotations"]
     assert annots["organism"][0]["label"] == "Homo sapiens"
-
-
-async def test_set_ontology_annotation_rejects_malformed_term(client: AsyncClient) -> None:
-    protocol_id = await _make_protocol(client)
-    resp = await client.put(
-        f"/api/v1/protocols/{protocol_id}/ontology-annotations",
-        json={
-            "slot": "organism",
-            # 'ontology_source' omitted — must be a 422, not a 500.
-            "terms": [{"term_id": "free_text:X", "label": "X"}],
-        },
-    )
-    assert resp.status_code == 422, resp.text

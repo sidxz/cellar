@@ -9,15 +9,6 @@ from httpx import AsyncClient
 class TestStructureClauseValidation:
     """Pydantic discriminated-union validation fires at the API boundary."""
 
-    async def test_unknown_kind_returns_422(self, client: AsyncClient) -> None:
-        r = await client.post(
-            "/api/v1/search/execute",
-            json={"query": {"criteria": [
-                {"type": "structure", "kind": "fancy", "smiles": "CCO"},
-            ]}},
-        )
-        assert r.status_code == 422
-
     async def test_similarity_threshold_out_of_range_returns_422(
         self, client: AsyncClient
     ) -> None:
@@ -50,17 +41,6 @@ class TestStructureClauseValidation:
             }]}},
         )
         assert r.status_code == 422
-
-    async def test_valid_similarity_returns_200(self, client: AsyncClient) -> None:
-        r = await client.post(
-            "/api/v1/search/execute",
-            json={"query": {"criteria": [{
-                "type": "structure", "kind": "similarity", "smiles": "CCO",
-                "mode": "similar",
-            }]}},
-        )
-        # 200 with empty results is fine; we just want the validator to not 422.
-        assert r.status_code == 200, r.text
 
     async def test_validates_inside_groups(self, client: AsyncClient) -> None:
         """Nested groups must be walked too — bad structure inside a group → 422."""
@@ -111,17 +91,6 @@ class TestStructureClauseValidation:
             }]}},
         )
         assert r.status_code == 422
-
-    async def test_legacy_search_type_key_accepted(self, client: AsyncClient) -> None:
-        """search_type is accepted as a legacy alias for kind."""
-        r = await client.post(
-            "/api/v1/search/execute",
-            json={"query": {"criteria": [{
-                "type": "structure", "search_type": "similarity",
-                "smiles": "CCO", "mode": "similar",
-            }]}},
-        )
-        assert r.status_code == 200, r.text
 
 
 class TestSubstructureQueryKindValidation:

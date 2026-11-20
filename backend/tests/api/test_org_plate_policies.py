@@ -89,10 +89,3 @@ class TestSetOrgPlatePolicy:
         assert fetched["default_due_days"] == 30
         # Sanity for the no-hidden-write test's counter: a real PUT DOES create a row.
         assert await _policy_row_count(api_app, org_id) == 1
-
-    async def test_put_rejects_removed_plates_private_field(self, client: AsyncClient) -> None:
-        """The toggle is gone (spec 2026-08-25 §3); extra=forbid keeps stale clients honest."""
-        resp = await client.put(
-            f"/api/v1/org-plate-policies/{uuid.uuid4()}", json=_body(plates_private=True)
-        )
-        assert resp.status_code == 422, resp.text

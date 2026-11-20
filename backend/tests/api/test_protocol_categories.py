@@ -7,11 +7,11 @@ from cellar.domain.workspace_config.default_protocol_forms import DEFAULT_PROTOC
 async def test_seed_defaults_is_idempotent(client):
     r = await client.post("/api/v1/protocol-categories/defaults")
     assert r.status_code == 200, r.text
-    assert len(r.json()) == 47
+    assert len(r.json()) == len(DEFAULT_CATEGORY_PATTERNS)
     forms = (await client.get("/api/v1/protocol-forms")).json()
     assert len(forms) == len(DEFAULT_PROTOCOL_FORMS)
     again = await client.post("/api/v1/protocol-categories/defaults")
-    assert len(again.json()) == 47
+    assert again.json() == r.json()
     assert len((await client.get("/api/v1/protocol-forms")).json()) == len(forms)
 
 

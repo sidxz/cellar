@@ -7,6 +7,9 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from tests.api.test_melting_steps_routes import _client_as
+from tests.fakes.fake_auth import FakeAuth
+
 
 class TestCreateSavedSearch:
     async def test_create_success(self, client: AsyncClient) -> None:
@@ -76,7 +79,17 @@ class TestListSavedSearches:
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
-    async def test_filter_by_mine(self, client: AsyncClient) -> None:
+    async def test_filter_by_mine(
+        self, client: AsyncClient, database_url: str, fake_auth: FakeAuth
+    ) -> None:
+        colleague = FakeAuth(
+            role="admin", workspace_id=fake_auth.workspace_id, user_id=uuid.uuid4()
+        )
+        async with _client_as(database_url, colleague) as other:
+            theirs = await other.post(
+                "/api/v1/saved-searches", json={"name": "Their Search", "query": {"y": 2}}
+            )
+            assert theirs.status_code == 201, theirs.text
         await client.post(
             "/api/v1/saved-searches",
             json={"name": "My Search", "query": {"x": 1}},
@@ -85,9 +98,7 @@ class TestListSavedSearches:
             "/api/v1/saved-searches", params={"mine": "true"}
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert len(data) >= 1
-        assert data[0]["name"] == "My Search"
+        assert [s["name"] for s in resp.json()] == ["My Search"]
 
 
 class TestGetSavedSearch:

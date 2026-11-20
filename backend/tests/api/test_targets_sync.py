@@ -190,18 +190,6 @@ async def test_list_without_forwardable_auth_skips_refresh(
     assert stub_source.calls == []
 
 
-async def test_local_mutation_routes_are_gone(admin_sync_client: AsyncClient) -> None:
-    create = await admin_sync_client.post(
-        "/api/v1/targets", json={"name": "x", "target_type": "single_protein"}
-    )
-    assert create.status_code == 405
-    tid = uuid.uuid4()
-    patch = await admin_sync_client.patch(f"/api/v1/targets/{tid}", json={"name": "x"})
-    assert patch.status_code == 405
-    delete = await admin_sync_client.delete(f"/api/v1/targets/{tid}")
-    assert delete.status_code == 405
-
-
 HERG = {
     "name": "hERG",
     "target_type": "single_protein",

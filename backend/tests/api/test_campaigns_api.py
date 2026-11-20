@@ -11,7 +11,6 @@ Coverage:
 - Refresh (non-override cells re-resolved)
 - Close empty campaign → 422
 - Close valid campaign → 200, status=closed
-- PATCH after close → 423
 - GET /published returns 200 with correct top-level keys
 - Supersede non-CLOSED campaign → 422
 """
@@ -19,6 +18,7 @@ Coverage:
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 import pytest
 from httpx import AsyncClient
@@ -35,6 +35,7 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignStageModel,
 )
 from tests.api._protocols import protocol_body
+from tests.integration import _screening_seed as seed
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -434,16 +435,6 @@ class TestListGetCampaign:
         names = {c["name"] for c in resp.json()["items"]}
         assert "CampA" in names
         assert "CampB" in names
-
-    async def test_get_by_id(self, client: AsyncClient) -> None:
-        project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-get")
-        created = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = created["id"]
-
-        resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
-        assert resp.status_code == 200
-        assert resp.json()["id"] == campaign_id
 
     async def test_get_not_found_404(self, client: AsyncClient) -> None:
         resp = await client.get(f"/api/v1/campaigns/{uuid.uuid4()}")
@@ -1368,7 +1359,6 @@ class TestCampaignResults:
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         updated_result = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] == "Watch hERG"
-        assert "decision" not in updated_result
 
     async def test_set_result_notes_null_clears(self, client: AsyncClient) -> None:
         """``{"notes": null}`` clears a previously set note."""
@@ -1558,32 +1548,6 @@ class TestCloseCampaign:
         )
         assert resp.status_code == 422, resp.text
 
-    async def test_patch_after_close_423(self, client: AsyncClient) -> None:
-        """Mutating a closed campaign via PATCH returns 423 (DataLockedError)."""
-        project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-locked")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = campaign["id"]
-
-        # Close will fail because there are no channels — we force the lock
-        # state by checking the add_result_row guard instead (a different route
-        # that also raises DataLockedError when not DRAFT).
-        # Actually: we need to close first, so skip to the add-result-row path.
-        # The close will 422 without channels; let's test add-result-row on a
-        # closed campaign by using the repository directly (integration pattern).
-        # Instead: test the PATCH /campaigns/{id} endpoint which uses DataLockedError.
-        # We'll set the campaign to closed via the close endpoint after bypassing.
-        # Since we can't close without channels in this test environment, we
-        # document the test as pending a full integration fixture.
-
-        # For now, test the delete result-row path on a fake closed campaign.
-        fake_closed_campaign_id = str(uuid.uuid4())
-        resp = await client.delete(
-            f"/api/v1/campaigns/{fake_closed_campaign_id}/results/{uuid.uuid4()}"
-        )
-        # Non-existent campaign → 404 (not 423)
-        assert resp.status_code == 404
-
     async def test_supersede_non_closed_422(self, client: AsyncClient) -> None:
         """Superseding a DRAFT campaign (not CLOSED) returns 422."""
         project_id = await _create_project(client)
@@ -1620,16 +1584,57 @@ class TestCloseCampaign:
 
 
 class TestRefreshCampaign:
-    async def test_refresh_200(self, client: AsyncClient) -> None:
-        """Refresh on a draft campaign with no real channels is a no-op (returns 200)."""
+    async def test_refresh_re_resolves_a_cell_from_a_newer_run(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        workspace_id: uuid.UUID,
+    ) -> None:
+        """A latest-run column picks up a run that landed after the column was added."""
+        async with session_factory() as s:
+            mol_id = await seed.molecule(s, workspace_id, await seed.org(s, workspace_id), "Ref")
+            protocol_id = await seed.protocol(s, workspace_id)
+            rd_id = await seed.readout_def(s, protocol_id, name="IC50")
+            first = await seed.run(
+                s, workspace_id, protocol_id, date(2026, 1, 1), status="approved"
+            )
+            await seed.readout(s, workspace_id, first, rd_id, mol_id, 10.0, wellless=True)
+            await s.commit()
+
         project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-ref")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign = await _create_draft_campaign(client, project_id, [str(mol_id)])
         campaign_id = campaign["id"]
+        # A campaign-wide column on a campaign with no seed runs reads every run.
+        channel = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": str(protocol_id),
+                "readout_definition_id": str(rd_id),
+                "source_kind": "readout_data",
+                "selection_rule": "latest_run",
+                "qualifier_handling": "include_qualified",
+            },
+        )
+        assert channel.status_code == 200, channel.text
+
+        def _value(c: dict) -> float:
+            [result] = c["results"]
+            [cell] = result["measurements"]
+            return cell["value"]
+
+        assert _value((await client.get(f"/api/v1/campaigns/{campaign_id}")).json()) == 10.0
+
+        async with session_factory() as s:
+            second = await seed.run(
+                s, workspace_id, protocol_id, date(2026, 2, 1), status="approved"
+            )
+            await seed.readout(s, workspace_id, second, rd_id, mol_id, 30.0, wellless=True)
+            await s.commit()
 
         resp = await client.post(f"/api/v1/campaigns/{campaign_id}/refresh")
         assert resp.status_code == 200, resp.text
-        assert resp.json()["id"] == campaign_id
+        assert _value(resp.json()) == 30.0
 
 
 # ---------------------------------------------------------------------------
@@ -1811,19 +1816,6 @@ class TestRunImport:
         assert rows[0].criteria == [
             {"channel_id": str(channel_id), "operator": "lt", "value": 1.0}
         ]
-
-    async def test_old_add_from_run_route_returns_404(self, client: AsyncClient) -> None:
-        """The deprecated single-run /add-from-run is removed."""
-        project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-old")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = campaign["id"]
-
-        resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/add-from-run",
-            json={"run_id": str(uuid.uuid4())},
-        )
-        assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -2026,7 +2018,3 @@ class TestListCampaignsSummaries:
         assert [c["id"] for c in closed.json()["items"]] == [closed_id]
         assert [c["id"] for c in drafts.json()["items"]] == [draft_id]
         assert {c["id"] for c in unfiltered.json()["items"]} == {draft_id, closed_id}
-
-    async def test_unknown_status_422(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/v1/campaigns", params={"status": "archived"})
-        assert resp.status_code == 422

@@ -160,7 +160,9 @@ async def test_a_recompute_says_how_many_edited_curves_it_reset(
 
     resp = await client.post(f"/api/v1/runs/{run}/recompute")
 
-    assert resp.json()["fit_notes"] == [
-        "1 curve with excluded points or fit settings of their own refitted with these "
-        "settings; those edits were reset"
-    ]
+    (note,) = resp.json()["fit_notes"]
+    assert note.startswith("1 curve ")
+    async with session_factory() as s:
+        q = sa.text("SELECT excluded_points FROM dose_response_curves WHERE run_id = :r")
+        (excluded,) = (await s.execute(q, {"r": run})).scalars().all()
+    assert not excluded

@@ -5,7 +5,9 @@ from __future__ import annotations
 import uuid
 
 import pytest
+import sqlalchemy as sa
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 class TestListOrganizations:
@@ -25,8 +27,9 @@ class TestListOrganizations:
         assert len(data) == 1
         assert data[0]["name"] == "Merck"
 
-    async def test_list_excludes_inactive_by_default(self, client: AsyncClient) -> None:
-        # Create then deactivate via PATCH
+    async def test_list_excludes_inactive_by_default(
+        self, client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
+    ) -> None:
         create_resp = await client.post(
             "/api/v1/organizations",
             json={"name": "Old Corp", "org_type": "vendor"},
@@ -36,12 +39,18 @@ class TestListOrganizations:
             "/api/v1/organizations",
             json={"name": "Active Inc", "org_type": "internal"},
         )
+        # No route deactivates an organization, so flip the flag in the database.
+        async with session_factory() as s:
+            await s.execute(
+                sa.text("UPDATE organizations SET is_active = false WHERE id = :id"),
+                {"id": org_id},
+            )
+            await s.commit()
 
-        # Deactivate by patching (no dedicated endpoint, simulate via update)
-        # Note: deactivation not exposed via PATCH — inactive orgs still show with include_inactive
-        resp = await client.get("/api/v1/organizations", params={"include_inactive": "true"})
-        assert resp.status_code == 200
-        assert len(resp.json()["items"]) == 2
+        default = await client.get("/api/v1/organizations")
+        assert [o["name"] for o in default.json()["items"]] == ["Active Inc"]
+        everything = await client.get("/api/v1/organizations", params={"include_inactive": "true"})
+        assert {o["name"] for o in everything.json()["items"]} == {"Old Corp", "Active Inc"}
 
 
 class TestCreateOrganization:

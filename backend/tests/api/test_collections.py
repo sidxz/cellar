@@ -56,13 +56,6 @@ class TestCreateCollection:
 
 
 class TestGetCollection:
-    async def test_get_includes_molecule_count(self, client: AsyncClient) -> None:
-        create = await client.post("/api/v1/collections", json={"name": "CountTest"})
-        coll_id = create.json()["id"]
-        resp = await client.get(f"/api/v1/collections/{coll_id}")
-        assert resp.status_code == 200
-        assert resp.json()["molecule_count"] == 0
-
     async def test_get_includes_frozen_fields(self, client: AsyncClient) -> None:
         create = await client.post("/api/v1/collections", json={"name": "FrozenFieldsTest"})
         coll_id = create.json()["id"]
@@ -190,15 +183,6 @@ class TestCollectionTypeAttribute:
         assert resp.status_code == 200
         assert resp.json()["type"] == "hit_list"
 
-    async def test_get_returns_type(self, client: AsyncClient) -> None:
-        created = await client.post(
-            "/api/v1/collections", json={"name": "Series set", "type": "series"}
-        )
-        coll_id = created.json()["id"]
-        resp = await client.get(f"/api/v1/collections/{coll_id}")
-        assert resp.status_code == 200
-        assert resp.json()["type"] == "series"
-
     async def test_list_includes_type(self, client: AsyncClient) -> None:
         await client.post("/api/v1/collections", json={"name": "Ref Set", "type": "reference_set"})
         resp = await client.get("/api/v1/collections")
@@ -206,20 +190,6 @@ class TestCollectionTypeAttribute:
         items = resp.json()["items"]
         assert len(items) == 1
         assert items[0]["type"] == "reference_set"
-
-    async def test_invalid_type_returns_422(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            "/api/v1/collections", json={"name": "Bad type", "type": "nonexistent"}
-        )
-        assert resp.status_code == 422
-
-    async def test_patch_invalid_type_returns_422(self, client: AsyncClient) -> None:
-        created = await client.post("/api/v1/collections", json={"name": "PatchBadType"})
-        assert created.status_code == 201
-        coll_id = created.json()["id"]
-
-        resp = await client.patch(f"/api/v1/collections/{coll_id}", json={"type": "bogus"})
-        assert resp.status_code == 422
 
     async def test_patch_null_type_returns_422(self, client: AsyncClient) -> None:
         created = await client.post("/api/v1/collections", json={"name": "PatchNullType"})

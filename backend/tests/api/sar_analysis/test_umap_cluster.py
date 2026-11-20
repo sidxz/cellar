@@ -47,9 +47,13 @@ _FAKE_RESULT = UmapResult(
 
 
 class _StubStartUmapClusterJob:
-    """Stub that always returns an inline result without touching the DB."""
+    """Stub that records its input and returns an inline result without touching the DB."""
+
+    def __init__(self) -> None:
+        self.received: list[Any] = []
 
     async def execute(self, payload: Any) -> StartUmapClusterJobOutput:
+        self.received.append(payload)
         return StartUmapClusterJobOutput(result=_FAKE_RESULT, job=None)
 
 
@@ -59,19 +63,22 @@ class _StubStartUmapClusterJob:
 
 
 @pytest.fixture
-async def umap_client(api_app: Any) -> AsyncIterator[AsyncClient]:
+async def umap_client(
+    api_app: Any,
+) -> AsyncIterator[tuple[AsyncClient, _StubStartUmapClusterJob]]:
     """Client with the StartUmapClusterJob use case stubbed out.
 
     This avoids the need for seeded molecules with real Morgan fingerprints.
     The stub returns a canned UmapResult with 20 points + 5 representatives.
     """
+    stub = _StubStartUmapClusterJob()
     # Override via dependency_overrides — same mechanism used elsewhere in
     # the test suite (e.g. get_auth override in conftest.py).
-    api_app.dependency_overrides[_get_start_umap_cluster_job] = lambda: _StubStartUmapClusterJob()
+    api_app.dependency_overrides[_get_start_umap_cluster_job] = lambda: stub
 
     transport = ASGITransport(app=api_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+        yield ac, stub
 
     # Clean up override
     api_app.dependency_overrides.pop(_get_start_umap_cluster_job, None)
@@ -83,22 +90,31 @@ async def umap_client(api_app: Any) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.mark.asyncio
-async def test_returns_inline_result_for_small_set(umap_client: AsyncClient) -> None:
-    """Inline result (200) is returned for a small mol set (stub bypasses compute)."""
-    resp = await umap_client.post(
+async def test_returns_inline_result_for_small_set(
+    umap_client: tuple[AsyncClient, _StubStartUmapClusterJob],
+) -> None:
+    """The route dedupes ids, fills the default cluster threshold, and
+    serializes an inline result as 200 with job=null."""
+    client, stub = umap_client
+    ids = [str(m) for m in _FAKE_MOL_IDS]
+    resp = await client.post(
         "/api/v1/sar/umap-cluster",
-        json={
-            "molecule_ids": [str(m) for m in _FAKE_MOL_IDS],
-            "picker": "maxmin",
-            "n": 5,
-        },
+        json={"molecule_ids": ids + ids[:3], "picker": "maxmin", "n": 5},
     )
     assert resp.status_code == 200, resp.text
+
+    (sent,) = stub.received
+    assert sent.molecule_ids == _FAKE_MOL_IDS
+    assert sent.picker_params == {"n": 5, "threshold": 0.4}
+
     body = resp.json()
     assert body["job"] is None
-    assert body["result"] is not None
-    assert len(body["result"]["points"]) == 20
-    assert len(body["result"]["representatives"]) == 5
+    result = body["result"]
+    assert result["points"][3] == {"molecule_id": ids[3], "x": 3.0, "y": -3.0}
+    assert result["clusters"][7] == {"molecule_id": ids[7], "cluster_id": 2}
+    assert result["representatives"][1] == {"molecule_id": ids[4], "cluster_id": 1}
+    assert result["cluster_count"] == 5
+    assert result["picker"] == "maxmin"
 
 
 @pytest.mark.asyncio
