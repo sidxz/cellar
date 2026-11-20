@@ -1,6 +1,7 @@
 import { WELL_TYPE_COLORS, wellTypeColors } from "@/shared/lib/chart-colors";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { PlateMapEditor } from "./plate-map-editor";
 import { PlateMapView } from "./plate-map-view";
 
 const MAP = { A1: "positive_control", A2: "negative_control" } as const;
@@ -22,5 +23,11 @@ describe("control layouts", () => {
     render(<PlateMapView format="96" templateMap={MAP} colors={colors} />);
     expect(bg("A1: Positive Control")).toBe(css(expected.positive_control));
     expect(bg("A2: Negative Control")).toBe(css(expected.negative_control));
+  });
+
+  it("the layout editor draws controls in the default convention's colours", () => {
+    render(<PlateMapEditor format="96" value={MAP} onChange={() => {}} />);
+    expect(bg("A1: Positive Control")).toBe(css(WELL_TYPE_COLORS.positive_control));
+    expect(bg("A2: Negative Control")).toBe(css(WELL_TYPE_COLORS.negative_control));
   });
 });

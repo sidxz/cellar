@@ -11,6 +11,7 @@ from cellar.domain.chemical_registration.enums import (
     LifecycleStage,
     MoleculeType,
     RegistrationStatus,
+    Stereochemistry,
     StructureStatus,
     SynthesisStatus,
 )
@@ -548,6 +549,24 @@ class TestDisclose:
                 descriptors=aspirin_descriptors,
                 disclosed_by=user_id,
             )
+
+    def test_disclose_records_stereochemistry(
+        self,
+        ws_id: uuid.UUID,
+        org_id: uuid.UUID,
+        user_id: uuid.UUID,
+        aspirin_structure: ChemicalStructure,
+        aspirin_descriptors: ComputedDescriptors,
+    ) -> None:
+        mol = _make_undisclosed(ws_id, org_id)
+        mol.clear_events()
+        mol.disclose(
+            structure=aspirin_structure,
+            descriptors=aspirin_descriptors,
+            disclosed_by=user_id,
+            stereochemistry=Stereochemistry.ACHIRAL,
+        )
+        assert mol.stereochemistry == Stereochemistry.ACHIRAL
 
 
 # ---------------------------------------------------------------------------

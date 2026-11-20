@@ -46,7 +46,7 @@ describe("ActiveInCell", () => {
     expect(screen.getByText("+2 more")).toBeInTheDocument();
   });
 
-  it("prefixes qualifiers and shows a single target", () => {
+  it("greys inactive curves, prefixes qualifiers and shows a single target", () => {
     const value: AnyProtocolActivity = {
       entries: [
         entry({
@@ -61,5 +61,6 @@ describe("ActiveInCell", () => {
     render(<ActiveInCell value={value} />);
     expect(screen.getByText(">100 uM")).toBeInTheDocument();
     expect(screen.getByText("Mtb")).toBeInTheDocument();
+    expect(screen.getByTestId("active-in-row")).toHaveAttribute("data-state", "inactive");
   });
 });
