@@ -38,6 +38,7 @@ function renderPage() {
     uiGitSha: "84e7848",
     uiBuildDate: "2026-06-17",
     environment: "production",
+    returnOrigins: [],
   };
   return render(
     <QueryClientProvider client={new QueryClient()}>

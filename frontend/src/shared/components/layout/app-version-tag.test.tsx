@@ -18,6 +18,7 @@ function renderWithConfig(uiVersion: string) {
     uiGitSha: "unknown",
     uiBuildDate: "unknown",
     environment: "development",
+    returnOrigins: [],
   };
   return render(
     <AppConfigProvider config={config}>
