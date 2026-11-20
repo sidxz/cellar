@@ -2,7 +2,7 @@
 
 import { SetupChecklist } from "@/features/workspace-config/components/setup-checklist";
 import { PageHeader } from "@/shared/components/page-header";
-import { ReturnToBarFromUrl } from "@/shared/components/return-to-bar";
+import { ReturnToBarFromUrl, useReturnTarget } from "@/shared/components/return-to-bar";
 import { Button } from "@/shared/components/ui/button";
 import {
   DropdownMenu,
@@ -12,15 +12,38 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { ChevronDown, Download, FileSpreadsheet, Plus, Upload } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
+import { readProtocolLink, withoutProtocolLink } from "../lib/protocol-link";
 import type { Protocol } from "../types";
 import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ProtocolBrowser } from "./protocol-browser";
 import { ProtocolCsvImportDialog } from "./protocol-csv-import/protocol-csv-import-dialog";
+
+/** A link to /assays?new_protocol=1&… opens New protocol pre-filled. Its own Suspense island:
+ *  reading the URL there keeps the rest of the page prerendered. */
+function ProtocolLinkDialog({ onLogRun }: { onLogRun: (protocolId: string) => void }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTarget = useReturnTarget();
+  const start = useMemo(() => readProtocolLink(searchParams), [searchParams]);
+  if (!start) return null;
+  return (
+    <CreateProtocolDialog
+      open
+      start={start}
+      returnTarget={returnTarget}
+      onOpenChange={(open) => {
+        // The link's values leave the address; the way back stays.
+        if (!open) router.replace(`/assays${withoutProtocolLink(searchParams)}`);
+      }}
+      onLogRun={onLogRun}
+    />
+  );
+}
 
 export function ScreeningDashboard() {
   const router = useRouter();
@@ -82,6 +105,9 @@ export function ScreeningDashboard() {
           onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)}
         />
       )}
+      <Suspense fallback={null}>
+        <ProtocolLinkDialog onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)} />
+      </Suspense>
       {createRunForProtocol && (
         <CreateRunDialog
           protocolId={createRunForProtocol}

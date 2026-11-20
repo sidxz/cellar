@@ -44,6 +44,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { UnitPicker } from "@/shared/components/unit-picker";
+import type { ReturnTarget } from "@/shared/lib/return-to";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,7 @@ import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
+import { useTargets } from "../hooks/use-targets";
 import { isFixedValueValid } from "../lib/conditions";
 import { curveProblem } from "../lib/dose-response-curve-check";
 import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
@@ -72,6 +74,7 @@ import {
   pickFormForCategory,
   readoutsFromForm,
 } from "../lib/protocol-form-apply";
+import { type ProtocolLinkStart, resolveProtocolLink } from "../lib/protocol-link";
 import { METHOD_PLACEHOLDER } from "../lib/protocol-method";
 import { prefillFromProtocol } from "../lib/protocol-prefill";
 import { isReservedReadoutName } from "../lib/readout-constants";
@@ -128,6 +131,11 @@ interface CreateProtocolDialogProps {
   /** Start from an existing protocol (a new assay): copies its facts, not its
    *  discriminator, code or name. */
   prefill?: Protocol;
+  /** Opened from a link: what to start with, applied once the data to check it against has
+   *  loaded. Values ChemCellar does not know are dropped. */
+  start?: ProtocolLinkStart;
+  /** The trusted app the link came from; the draft page keeps the way back to it. */
+  returnTarget?: ReturnTarget | null;
 }
 
 const DEFAULT_READOUTS_JSON = JSON.stringify(DEFAULT_VALUES.readouts);
@@ -139,6 +147,8 @@ export function CreateProtocolDialog({
   defaultProjectId,
   onLogRun,
   prefill,
+  start,
+  returnTarget,
 }: CreateProtocolDialogProps) {
   const router = useRouter();
   const createMutation = useCreateProtocol();
@@ -146,6 +156,7 @@ export function CreateProtocolDialog({
   const { data: projects } = useProjects();
   const { data: protocolForms } = useProtocolForms();
   const { data: categories } = useProtocolCategories();
+  const { data: targets } = useTargets();
   const facetSlots = useProtocolFacetSlots();
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
@@ -283,6 +294,27 @@ export function CreateProtocolDialog({
     const id = categories?.find((c) => c.label === label)?.id;
     applyPickedForm(id ? pickFormForCategory(protocolForms ?? [], id) : null);
   };
+  // Opened from a link: the category applies its form as if picked, then the link's type wins
+  // over the form's, then targets and project. Once per opening, after the data has loaded.
+  const startApplied = useRef(false);
+  useEffect(() => {
+    if (!open || !start || startApplied.current) return;
+    if (!categories || !protocolForms || !targets || !projects) return;
+    startApplied.current = true;
+    const s = resolveProtocolLink(start, {
+      categoryLabels: categories.map((c) => c.label),
+      targetIds: targets.map((t) => t.id),
+      projectIds: projects.map((p) => p.id),
+    });
+    if (s.category) {
+      form.setValue("category", s.category);
+      onCategoryPicked(s.category);
+    }
+    if (s.protocolType) form.setValue("protocol_type", s.protocolType);
+    if (s.targetIds.length > 0) form.setValue("target_ids", s.targetIds);
+    if (s.projectId) setProjectId(s.projectId);
+  });
+
   const { own: ownForms, generic: genericForms } = formsForCategory(
     protocolForms ?? [],
     categoryId,
@@ -438,7 +470,10 @@ export function CreateProtocolDialog({
           onOpenChange(false);
           resetForm();
           // Straight on to the draft: its remaining setup and Publish live there.
-          if (protocol?.id) router.push(`/assays/protocols/${protocol.id}`);
+          if (protocol?.id) {
+            const back = returnTarget ? `?return_to=${encodeURIComponent(returnTarget.url)}` : "";
+            router.push(`/assays/protocols/${protocol.id}${back}`);
+          }
         },
       },
     );

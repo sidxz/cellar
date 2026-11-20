@@ -44,6 +44,10 @@ const state = vi.hoisted(() => ({
   push: vi.fn(),
   suggestionsOn: false,
   suggest: vi.fn(),
+  targets: [] as { id: string }[],
+  projects: [] as { id: string; name: string }[],
+  categoriesLoaded: true,
+  assign: vi.fn(),
 }));
 state.preview = incomplete;
 afterEach(() => {
@@ -54,6 +58,10 @@ afterEach(() => {
   state.push.mockReset();
   state.suggestionsOn = false;
   state.suggest.mockReset();
+  state.targets = [];
+  state.projects = [];
+  state.categoriesLoaded = true;
+  state.assign.mockReset();
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }));
 
@@ -82,9 +90,9 @@ vi.mock("../hooks/use-method-suggestions", () => ({
   useMethodSuggestionsEnabled: () => state.suggestionsOn,
   useSuggestFromMethod: () => ({ mutate: state.suggest, isPending: false }),
 }));
-vi.mock("../hooks/use-targets", () => ({ useTargets: () => ({ data: [] }) }));
+vi.mock("../hooks/use-targets", () => ({ useTargets: () => ({ data: state.targets }) }));
 vi.mock("../hooks/use-protocol-projects", () => ({
-  useAssignProtocolToProject: () => ({ mutateAsync: vi.fn() }),
+  useAssignProtocolToProject: () => ({ mutateAsync: state.assign }),
 }));
 vi.mock("../hooks/use-protocol-facet-slots", () => ({
   useProtocolFacetSlots: () =>
@@ -127,7 +135,7 @@ vi.mock("@/shared/components/ontology-search-input", () => ({
 }));
 vi.mock("@/shared/hooks/use-units", () => ({ useUnits: () => ({ data: [] }) }));
 vi.mock("@/features/research-organization/hooks/use-projects", () => ({
-  useProjects: () => ({ data: [] }),
+  useProjects: () => ({ data: state.projects }),
 }));
 vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
   useProtocolForms: () => ({
@@ -203,23 +211,25 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
 }));
 vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
   useProtocolCategories: () => ({
-    data: [
-      { id: "c-gi", label: "Growth inhibition", name_pattern: "{organism} growth inhibition" },
-      { id: "c-ei", label: "Enzyme inhibition", name_pattern: "{target} inhibition" },
-      {
-        id: "c-di",
-        label: "Detection interference",
-        name_pattern: "{discriminator} interference",
-      },
-      { id: "c-sol", label: "Solubility", name_pattern: "{discriminator?} solubility" },
-      { id: "c-cy", label: "Cytotoxicity", name_pattern: "{cell_line} cytotoxicity" },
-      { id: "c-pk", label: "Pharmacokinetics", name_pattern: "{organism?} pharmacokinetics" },
-      {
-        id: "c-pf",
-        label: "Parasite growth inhibition",
-        name_pattern: "{organism} {strain?} growth inhibition",
-      },
-    ],
+    data: !state.categoriesLoaded
+      ? undefined
+      : [
+          { id: "c-gi", label: "Growth inhibition", name_pattern: "{organism} growth inhibition" },
+          { id: "c-ei", label: "Enzyme inhibition", name_pattern: "{target} inhibition" },
+          {
+            id: "c-di",
+            label: "Detection interference",
+            name_pattern: "{discriminator} interference",
+          },
+          { id: "c-sol", label: "Solubility", name_pattern: "{discriminator?} solubility" },
+          { id: "c-cy", label: "Cytotoxicity", name_pattern: "{cell_line} cytotoxicity" },
+          { id: "c-pk", label: "Pharmacokinetics", name_pattern: "{organism?} pharmacokinetics" },
+          {
+            id: "c-pf",
+            label: "Parasite growth inhibition",
+            name_pattern: "{organism} {strain?} growth inhibition",
+          },
+        ],
   }),
 }));
 vi.mock("./protocol-category-input", () => ({
@@ -1058,5 +1068,72 @@ describe("CreateProtocolDialog", () => {
       writeAndAsk();
       expect(screen.getByText("Nothing to suggest from this method.")).toBeInTheDocument();
     });
+  });
+});
+
+describe("CreateProtocolDialog opened from a link", () => {
+  const start = {
+    category: "Cytotoxicity",
+    // The Cytotoxicity form says cell_based; the link's type wins.
+    protocolType: "whole_cell",
+    targetIds: ["t1", "unknown"],
+    projectId: "pr1",
+  };
+  const known = () => {
+    state.preview = complete;
+    state.targets = [{ id: "t1" }];
+    state.projects = [{ id: "pr1", name: "TB" }];
+  };
+
+  it("prefills category, form readouts, type, targets and project from a link", async () => {
+    known();
+    render(<CreateProtocolDialog open onOpenChange={() => {}} start={start} />);
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("Cytotoxicity");
+    expect(screen.getByDisplayValue("CC50")).toBeInTheDocument();
+    const payload = await submit();
+    expect(payload.form_id).toBe("f3");
+    expect(payload.protocol_type).toBe("whole_cell");
+    expect(payload.target_ids).toEqual(["t1"]);
+  });
+
+  it("applies the link once categories and forms arrive", () => {
+    known();
+    state.categoriesLoaded = false;
+    const { rerender } = render(
+      <CreateProtocolDialog open onOpenChange={() => {}} start={start} />,
+    );
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("");
+
+    state.categoriesLoaded = true;
+    rerender(<CreateProtocolDialog open onOpenChange={() => {}} start={start} />);
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("Cytotoxicity");
+    expect(screen.getByDisplayValue("CC50")).toBeInTheDocument();
+
+    // Applied once: the scientist's own pick is not overwritten by a later render.
+    pickCategory("Growth inhibition");
+    rerender(<CreateProtocolDialog open onOpenChange={() => {}} start={start} />);
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("Growth inhibition");
+  });
+
+  it("goes to the draft with return_to", async () => {
+    known();
+    state.mutate.mockImplementation((_body, opts: { onSuccess: (p: unknown) => Promise<void> }) =>
+      opts.onSuccess({ id: "p-new" }),
+    );
+    render(
+      <CreateProtocolDialog
+        open
+        onOpenChange={() => {}}
+        start={start}
+        returnTarget={{ label: "Daikon", url: "https://d.org/s?r=1" }}
+      />,
+    );
+    await submit();
+    await waitFor(() =>
+      expect(state.push).toHaveBeenCalledWith(
+        "/assays/protocols/p-new?return_to=https%3A%2F%2Fd.org%2Fs%3Fr%3D1",
+      ),
+    );
+    expect(state.assign).toHaveBeenCalledWith({ protocolId: "p-new", projectId: "pr1" });
   });
 });
