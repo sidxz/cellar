@@ -111,7 +111,7 @@ export function ProjectListPage() {
       <div>
         {header}
         <ErrorState
-          message="Failed to load projects. Is the backend running?"
+          message="Couldn’t load projects. Refresh the page to try again."
           details={error.message}
         />
       </div>

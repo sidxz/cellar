@@ -133,10 +133,10 @@ describe("buildDrcColumns", () => {
       data_type: "dose_response",
       dose_response_config: drConfig([spec({ level: 50 }), spec({ level: 90, label: "EC90" })]),
     });
-    const cols = buildDrcColumns(`drc:${RD_DR_ID}`, proto([dr]), RD_DR_ID);
+    const cols = buildDrcColumns(`drc:${RD_DR_ID}`, { ...proto([dr]), dose_unit: "uM" }, RD_DR_ID);
     expect(cols).toHaveLength(3);
-    expect(cols[0].headerName).toBe("EC50");
-    expect(cols[1].headerName).toBe("EC90");
+    expect(cols[0].headerName).toBe("EC₅₀ (µM)");
+    expect(cols[1].headerName).toBe("EC₉₀ (µM)");
     expect(cols[2].headerName).toBe("Plot");
     expect(cols[0].colId).toBe(`drc:${RD_DR_ID}:ec:50`);
     expect(cols[1].colId).toBe(`drc:${RD_DR_ID}:ec:90`);

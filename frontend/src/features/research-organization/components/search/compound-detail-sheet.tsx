@@ -234,7 +234,7 @@ function SourceCurveCard({
         : null,
     [adapted],
   );
-  // List all runs: the large plot draws every listed run's curve, as the grid
+  // Show all runs: the large plot draws every listed run's curve, as the grid
   // cell does (a split protocol's group overlay wins, as in the grid). Curve i
   // takes overlayColor(i), the i-th dot in the value list: every fitted run
   // carries a snapshot, so none drops out and shifts the colours. No intercept

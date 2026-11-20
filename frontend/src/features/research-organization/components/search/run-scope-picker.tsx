@@ -15,100 +15,27 @@ import {
 } from "@/shared/components/ui/command";
 import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { Select, SelectContent, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { cn } from "@/shared/lib/utils";
-import { CheckIcon, ChevronsUpDown, X } from "lucide-react";
-import { Select as SelectPrimitive } from "radix-ui";
+import { ChevronsUpDown, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { RunScope, RunScopeMode } from "../../types";
 
-// Ordered broad → narrow so the menu reads as a continuum of run-set
-// restriction. Labels favor chemist-natural English ("Any run" / "Every run"
-// parallel construction; "Last N days" reads more naturally than "Past N
-// days"). Descriptions are rendered as a muted sub-line so the meaning is
-// scannable without a hover tooltip. The wire-shape `value` strings are
-// unchanged — `mode: "all"` still persists in saved searches even though
-// its label is now "Every run".
-const MODE_OPTIONS: {
-  value: RunScopeMode;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "any",
-    label: "Any run",
-    description: "Match if at least one run satisfies the criterion.",
-  },
-  {
-    value: "all",
-    label: "Every run",
-    description: "Match only if every run for this protocol satisfies the criterion.",
-  },
-  {
-    value: "latest",
-    label: "Latest run",
-    description: "Restrict to this protocol's most recent run (by run date).",
-  },
-  {
-    value: "past_n_days",
-    label: "Last N days",
-    description: "Restrict to runs from the last N days.",
-  },
-  {
-    value: "date_range",
-    label: "Date range",
-    description: "Restrict to runs whose run date falls within the chosen window.",
-  },
-  {
-    value: "specific",
-    label: "Specific runs",
-    description: "Restrict to a hand-picked list of runs.",
-  },
+const MODE_OPTIONS: { value: RunScopeMode; label: string }[] = [
+  { value: "any", label: "Any run" },
+  { value: "all", label: "Every run" },
+  { value: "latest", label: "Latest by run date" },
+  { value: "past_n_days", label: "Last N days" },
+  { value: "date_range", label: "Date range" },
+  { value: "specific", label: "Specific runs" },
 ];
-
-/**
- * Mode option rendered via Radix primitives — `<SelectPrimitive.ItemText>`
- * wraps ONLY the label, which is what `<SelectValue />` reads to populate
- * the trigger. The description renders as a sibling outside ItemText so it
- * appears only in the open menu, never collapsed into the trigger row.
- * shadcn's `<SelectItem>` auto-wraps every child in ItemText, which would
- * cause the description to bleed into the trigger; using the Radix
- * primitive directly is the lowest-friction way to honor that contract
- * without patching the shared component.
- */
-function ScopeOption({
-  option,
-  disabledReason,
-}: {
-  option: (typeof MODE_OPTIONS)[number];
-  /** Set to disable the option; shown in place of its description. */
-  disabledReason?: string;
-}) {
-  return (
-    <SelectPrimitive.Item
-      value={option.value}
-      disabled={!!disabledReason}
-      className={cn(
-        "relative flex w-full cursor-default select-none items-start gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none",
-        "focus:bg-accent focus:text-accent-foreground",
-        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      )}
-    >
-      <span className="absolute right-2 top-2 flex h-3.5 w-3.5 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="h-4 w-4" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
-      <div className="flex flex-col gap-0.5">
-        <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
-        <span className="text-xs text-muted-foreground">
-          {disabledReason ?? option.description}
-        </span>
-      </div>
-    </SelectPrimitive.Item>
-  );
-}
 
 /** Status dot driven by run.status + is_locked. */
 function statusColor(status: RunStatus, isLocked: boolean): string {
@@ -175,22 +102,24 @@ export function RunScopePicker({
       <span className="text-sm text-muted-foreground shrink-0 w-24">Runs</span>
 
       <Select value={mode} onValueChange={(v) => setMode(v as RunScopeMode)}>
-        <SelectTrigger className="h-8 w-36 text-sm shrink-0">
+        <SelectTrigger className="h-8 w-44 text-sm shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent
-          className="min-w-[20rem]"
           onCloseAutoFocus={(e) => {
             if (keepFocus.current) e.preventDefault();
             keepFocus.current = false;
           }}
         >
           {MODE_OPTIONS.map((opt) => (
-            <ScopeOption
+            <SelectItem
               key={opt.value}
-              option={opt}
-              disabledReason={opt.value === "latest" ? latestDisabledReason : undefined}
-            />
+              value={opt.value}
+              disabled={opt.value === "latest" && !!latestDisabledReason}
+              aria-description={opt.value === "latest" ? latestDisabledReason : undefined}
+            >
+              {opt.label}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -231,7 +160,7 @@ function DateRangeInputs({
     <>
       <Input
         type="date"
-        className="h-8 w-36 text-sm"
+        className="h-8 w-44 text-sm"
         value={value.date_from ?? ""}
         onChange={(e) => onChange({ ...value, date_from: e.target.value || undefined })}
         aria-label="From date"
@@ -239,7 +168,7 @@ function DateRangeInputs({
       <span className="text-xs text-muted-foreground">→</span>
       <Input
         type="date"
-        className="h-8 w-36 text-sm"
+        className="h-8 w-44 text-sm"
         value={value.date_to ?? ""}
         onChange={(e) => onChange({ ...value, date_to: e.target.value || undefined })}
         aria-label="To date"

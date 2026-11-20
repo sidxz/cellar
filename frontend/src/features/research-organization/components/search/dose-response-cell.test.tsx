@@ -242,7 +242,7 @@ describe("search curve cell frame", () => {
   });
 });
 
-describe("<DoseResponseCell listRuns /> — List all runs", () => {
+describe("<DoseResponseCell listRuns /> — Show all runs", () => {
   const snap = (fitted_value: number, x: number) => ({
     fitted_value,
     top: 100,

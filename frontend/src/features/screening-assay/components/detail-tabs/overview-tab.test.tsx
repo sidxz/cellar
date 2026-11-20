@@ -56,7 +56,7 @@ describe("NameFlagNotice", () => {
   });
 
   it.each([
-    ["needs_discriminator", /share this name/i],
+    ["needs_discriminator", /share a name/i],
     ["name_conflict", /exact same name/i],
   ])("%s explains itself", (flag, text) => {
     render(

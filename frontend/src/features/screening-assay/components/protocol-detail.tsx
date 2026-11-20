@@ -352,7 +352,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                       onClick={() => setForceDeleteOpen(true)}
                     >
                       <AlertTriangle className="mr-2 h-4 w-4" />
-                      Force delete (cascade)…
+                      Review permanent deletion…
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -589,7 +589,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Force delete (cascade) — admin only, driven from the Admin menu. */}
+      {/* Review permanent deletion… — admin only, driven from the Admin menu. */}
       {isAdmin && protocol && (
         <CascadeDeleteDialog
           entityType="protocol"

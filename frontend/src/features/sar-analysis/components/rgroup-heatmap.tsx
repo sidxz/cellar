@@ -146,7 +146,8 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
         </Select>
         {axisY === axisX && (
           <span className="text-amber-700 dark:text-amber-300">
-            Same position on both axes — diagonal only.
+            Both axes show the same R-group position. Choose different positions to compare
+            substituent combinations.
           </span>
         )}
         {data.truncated && (

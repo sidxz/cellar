@@ -43,7 +43,7 @@ describe("AggregationMode helpers", () => {
     expect(aggregationModeToWire("best_r2")).toBe("best_r_squared");
   });
 
-  it("List all runs is search-only and asks the server for the latest run plus every run", () => {
+  it("Show all runs is search-only and asks the server for the latest run plus every run", () => {
     expect(AGGREGATION_MODES).not.toContain("all");
     expect(SEARCH_AGGREGATION_MODES).toEqual([...AGGREGATION_MODES, "all"]);
     expect(aggregationModeToWire("all")).toBe("latest_run");
@@ -51,7 +51,7 @@ describe("AggregationMode helpers", () => {
     expect(listsRuns("latest")).toBe(false);
   });
 
-  it("a stored search keeps List all runs apart from Latest run", () => {
+  it("a stored search keeps Show all runs apart from Latest run", () => {
     expect(aggregationModeToStored("all")).toBe("all_runs");
     expect(wireToAggregationMode(aggregationModeToStored("all"))).toBe("all");
     for (const mode of AGGREGATION_MODES) {

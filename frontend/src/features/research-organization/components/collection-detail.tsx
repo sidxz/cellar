@@ -212,7 +212,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                     onClick={() => setForceDeleteOpen(true)}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Force delete…
+                    Review permanent deletion…
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

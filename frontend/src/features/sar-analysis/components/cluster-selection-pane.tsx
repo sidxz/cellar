@@ -31,8 +31,8 @@ export function ClusterSelectionPane({ allMolecules, basketIds }: ClusterSelecti
       </div>
       {!hasBasket ? (
         <p className="px-4 py-2 text-xs text-muted-foreground">
-          Your cherry-pick basket is empty. Lasso a region and add diverse picks, or seed it from
-          the Diversify representatives.
+          No compounds selected. Draw a lasso around a region to choose compounds, or add
+          representative compounds from Diversify.
         </p>
       ) : (
         // min-h-0 lets this flex child shrink so CardGrid gets a DEFINITE

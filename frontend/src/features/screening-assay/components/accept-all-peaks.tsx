@@ -27,6 +27,9 @@ export function AcceptAllPeaks({
   const steps = peaksToAccept(analysis, channel);
   const note = accept.isError ? apiReason(accept.error) : accept.data?.compute_warning;
   if (steps.length === 0 && !note) return null;
+  const reviewLabel = accept.isPending
+    ? "Marking…"
+    : `Mark ${steps.length} ${steps.length === 1 ? "peak" : "peaks"} reviewed`;
   if (menu)
     return (
       <div className="text-xs">
@@ -49,9 +52,7 @@ export function AcceptAllPeaks({
                 title={analysis.edit_refusal ?? undefined}
                 onClick={() => accept.mutate({ steps })}
               >
-                {accept.isPending
-                  ? "Marking…"
-                  : `Mark ${steps.length} ${steps.length === 1 ? "peak" : "peaks"} reviewed`}
+                {reviewLabel}
               </Button>
             </PopoverContent>
           </Popover>
@@ -62,24 +63,19 @@ export function AcceptAllPeaks({
     <span className="ml-auto inline-flex flex-wrap items-center justify-end gap-2">
       {note && <span className="text-xs text-amber-700 dark:text-amber-400">{note}</span>}
       {steps.length > 0 && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={accept.isPending || !!analysis.edit_refusal}
-            title={
-              analysis.edit_refusal ??
-              "Marks every peak that gives a Tm on this signal as reviewed. Positions that need a look are left out."
-            }
-            onClick={() => accept.mutate({ steps })}
-          >
-            Mark all reviewed
-          </Button>
-          <span className="text-muted-foreground tabular-nums">
-            {steps.length === 1 ? "1 peak" : `${steps.length} peaks`}
-          </span>
-        </>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={accept.isPending || !!analysis.edit_refusal}
+          title={
+            analysis.edit_refusal ??
+            "Marks every peak that gives a Tm on this signal as reviewed. Positions that need a look are left out."
+          }
+          onClick={() => accept.mutate({ steps })}
+        >
+          {reviewLabel}
+        </Button>
       )}
     </span>
   );

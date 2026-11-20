@@ -42,7 +42,9 @@ export function PlateGroupDashboard() {
     if (me?.org_id) setOrgId(me.org_id);
     else if (meFailed && orgs?.length) {
       setOrgId(orgs[0].id);
-      showError("Could not resolve your organization — showing the first org");
+      showError(
+        `Your organization could not be identified. Showing plate groups for ${orgs[0].name}.`,
+      );
     }
   }, [orgId, me, meFailed, orgs]);
 

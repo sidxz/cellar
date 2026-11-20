@@ -91,7 +91,7 @@ export function PlateTemplateListPage() {
           </Button>
         </PageHeader>
         <ErrorState
-          message="Failed to load plate templates. Is the backend running?"
+          message="Couldn’t load plate templates. Refresh the page to try again."
           details={error.message}
         />
       </div>

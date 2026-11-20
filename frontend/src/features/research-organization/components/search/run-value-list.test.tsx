@@ -102,6 +102,6 @@ describe("RunValueList", () => {
         mode="all"
       />,
     );
-    expect(lines()[0].textContent).toBe("0.2600 uM2026-08-01");
+    expect(lines()[0].textContent).toBe("0.2600 µM2026-08-01");
   });
 });

@@ -102,9 +102,9 @@ describe("<InterceptCell />", () => {
       <InterceptCell av={av} spec={{ kind: "ic", level: 50.0 }} isPrimary={false} mode="latest" />,
     );
     // gmean line: shows geometric mean with 3 sig figs + fold-range chip
-    expect(screen.getByText(/gmean.*0\.180.*×4\.2/)).toBeTruthy();
+    expect(screen.getByText(/Geometric mean 0\.180 µM · 4\.2-fold range/)).toBeTruthy();
     // pX line: label is pIC50, value 6.74, ± 0.30
-    expect(screen.getByText(/pIC50.*6\.74.*±.*0\.30/)).toBeTruthy();
+    expect(screen.getByText(/pIC₅₀.*6\.74.*±.*0\.30 \(SD\)/)).toBeTruthy();
   });
 
   it("multi-run Geometric mean cell skips the gmean line (it's the headline) but keeps pX", () => {
@@ -131,9 +131,9 @@ describe("<InterceptCell />", () => {
       <InterceptCell av={av} spec={{ kind: "ec", level: 90.0 }} isPrimary={false} mode="gmean" />,
     );
     // No gmean line — it's redundant when the headline IS the geometric mean
-    expect(screen.queryByText(/gmean/)).toBeNull();
+    expect(screen.queryByText(/Geometric mean/)).toBeNull();
     // pX line still shows with pEC90 label (kind=ec, level=90)
-    expect(screen.getByText(/pEC90.*6\.35.*±.*0\.20/)).toBeTruthy();
+    expect(screen.getByText(/pEC₉₀.*6\.35.*±.*0\.20/)).toBeTruthy();
   });
 
   it("multi-run ND cell skips the aggregate summary lines (nothing to summarize)", () => {
@@ -159,11 +159,11 @@ describe("<InterceptCell />", () => {
       ],
     };
     render(<InterceptCell av={av} spec={null} isPrimary={true} mode="latest" />);
-    expect(screen.queryByText(/gmean/)).toBeNull();
+    expect(screen.queryByText(/Geometric mean/)).toBeNull();
     expect(screen.queryByText(/pIC|pEC|pX/)).toBeNull();
   });
 
-  it("List all runs lists each run's value with the gmean line under it, no headline", () => {
+  it("Show all runs lists each run's value with the gmean line under it, no headline", () => {
     const runs = [0.12, 0.3].map((value, i) => ({
       run_id: `run-${i}`,
       run_date: `2026-0${3 - i}-01`,
@@ -193,8 +193,8 @@ describe("<InterceptCell />", () => {
     };
     render(<InterceptCell av={listed} spec={null} isPrimary={true} mode="all" />);
     const items = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(items).toEqual(["0.1200 uM2026-03-01", "0.3000 uM2026-02-01"]);
-    expect(screen.getByText(/gmean 0\.190 uM/)).toBeInTheDocument();
+    expect(items).toEqual(["0.1200 µM2026-03-01", "0.3000 µM2026-02-01"]);
+    expect(screen.getByText(/Geometric mean 0\.190 µM/)).toBeInTheDocument();
     expect(screen.queryByText(/₂/)).toBeNull();
     expect(screen.getByText("2 runs")).toBeInTheDocument();
   });
@@ -202,7 +202,7 @@ describe("<InterceptCell />", () => {
   it("single-run cell shows no aggregate summary lines", () => {
     // run_count=1 default; nothing to aggregate, no muted lines
     render(<InterceptCell av={baseAv} spec={null} isPrimary={true} mode="latest" />);
-    expect(screen.queryByText(/gmean/)).toBeNull();
+    expect(screen.queryByText(/Geometric mean/)).toBeNull();
     expect(screen.queryByText(/±/)).toBeNull();
   });
 

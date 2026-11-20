@@ -137,7 +137,7 @@ export function MoleculeList() {
   if (error) {
     return (
       <ErrorState
-        message="Failed to load compounds. Is the backend running?"
+        message="Couldn’t load compounds. Refresh the page to try again."
         details={error.message}
       />
     );

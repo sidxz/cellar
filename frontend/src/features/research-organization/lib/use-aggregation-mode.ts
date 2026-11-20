@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SelectionRule } from "@/shared/lib/api/model";
 import type { SearchCriterion } from "../types";
 
-/** `all` ("List all runs") is search-only: each cell lists every run, while
+/** `all` ("Show all runs") is search-only: each cell lists every run, while
  *  the headline, sorting and export follow the latest run. */
 export type AggregationMode = "latest" | "gmean" | "mean" | "best_r2" | "all";
 
@@ -18,7 +18,7 @@ export const AGGREGATION_MODES: readonly AggregationMode[] = [
   "best_r2",
 ] as const;
 
-/** The search grid's options: the rules plus List all runs. */
+/** The search grid's options: the rules plus Show all runs. */
 export const SEARCH_AGGREGATION_MODES: readonly AggregationMode[] = [
   ...AGGREGATION_MODES,
   "all",
@@ -28,14 +28,8 @@ export const AGGREGATION_LABELS: Record<AggregationMode, string> = {
   latest: "Latest run",
   gmean: "Geometric mean",
   mean: "Arithmetic mean",
-  best_r2: "Best fit (R²)",
-  all: "List all runs",
-};
-
-/** What each rule picks, shown under its label in the menu. */
-export const AGGREGATION_DESCRIPTIONS: Partial<Record<AggregationMode, string>> = {
-  latest: "Newest run that isn't rejected.",
-  all: "Every run's value and curve, newest first.",
+  best_r2: "Highest R²",
+  all: "Show all runs",
 };
 
 const URL_TO_MODE: Record<string, AggregationMode> = {
@@ -90,7 +84,7 @@ export function listsRuns(mode: AggregationMode): boolean {
 }
 
 /** The `aggregation` a saved or recent search stores inside its query: the
- *  wire rule, except List all runs, which must reload as itself. */
+ *  wire rule, except Show all runs, which must reload as itself. */
 export function aggregationModeToStored(mode: AggregationMode): string {
   return mode === "all" ? "all_runs" : MODE_TO_WIRE[mode];
 }

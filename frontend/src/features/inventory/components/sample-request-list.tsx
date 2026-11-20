@@ -96,10 +96,7 @@ export function SampleRequestListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Sample Requests"
-        subtitle="Track and manage sample requests across the workspace."
-      >
+      <PageHeader title="Sample Requests">
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Request

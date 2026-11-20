@@ -8,7 +8,6 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import {
-  AGGREGATION_DESCRIPTIONS,
   AGGREGATION_LABELS,
   AGGREGATION_MODES,
   type AggregationMode,
@@ -25,7 +24,7 @@ export interface AggregationControlProps {
    */
   disabled?: boolean;
   busy?: boolean;
-  /** The options offered; the search grid adds List all runs. */
+  /** The options offered; the search grid adds Show all runs. */
   modes?: readonly AggregationMode[];
 }
 
@@ -38,8 +37,8 @@ const DISABLED_TOOLTIP =
 /**
  * Compact toolbar control for picking the multi-run aggregation rule used
  * when collapsing per-(compound, intercept) cells in the search results
- * grid: Latest run, Geometric mean, Arithmetic mean, Best fit (R²), and in
- * search List all runs (`modes`). The actual URL state + wire mapping lives in
+ * grid: Latest run, Geometric mean, Arithmetic mean, Highest R², and in
+ * search Show all runs (`modes`). The actual URL state + wire mapping lives in
  * {@link useAggregationMode}; this component is a pure render+callback
  * pair so it stays trivially testable.
  *
@@ -77,12 +76,7 @@ export function AggregationControl({
         </SelectTrigger>
         <SelectContent>
           {modes.map((m) => (
-            <SelectItem
-              key={m}
-              value={m}
-              className="text-xs"
-              description={AGGREGATION_DESCRIPTIONS[m]}
-            >
+            <SelectItem key={m} value={m} className="text-xs">
               {AGGREGATION_LABELS[m]}
             </SelectItem>
           ))}

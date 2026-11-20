@@ -213,20 +213,21 @@ function TimelineSkeleton() {
 
 // ─── Timeline (data-driven) ─────────────────────────────────────────────────
 
-function TimelineContent({
+export function AuditTimelineView({
   operations,
   isLoading,
+  filtered = false,
 }: {
   operations: AuditOperation[] | undefined;
   isLoading: boolean;
+  filtered?: boolean;
 }) {
   if (isLoading) return <TimelineSkeleton />;
   if (!operations || operations.length === 0)
     return (
       <EmptyState
         icon={Clock}
-        title="No audit operations"
-        description="No audit operations found."
+        title={filtered ? "No audit entries match these filters." : "No audit entries to display."}
       />
     );
 
@@ -261,16 +262,11 @@ export function AuditTimeline(props: {
   const isEntityMode = !!(props.entityType && props.entityId);
   const { data, isLoading } = isEntityMode ? entityQuery : listQuery;
 
-  return <TimelineContent operations={data} isLoading={isLoading} />;
-}
-
-/** Data-only timeline that receives pre-fetched operations. */
-export function AuditTimelineView({
-  operations,
-  isLoading,
-}: {
-  operations: AuditOperation[] | undefined;
-  isLoading: boolean;
-}) {
-  return <TimelineContent operations={operations} isLoading={isLoading} />;
+  return (
+    <AuditTimelineView
+      operations={data}
+      isLoading={isLoading}
+      filtered={Boolean(props.entityType)}
+    />
+  );
 }

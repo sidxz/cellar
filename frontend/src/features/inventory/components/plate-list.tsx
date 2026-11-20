@@ -143,7 +143,9 @@ export function PlateList() {
 
   useEffect(() => {
     if (meFailed && filterOrg === MY_ORG) {
-      showError("Could not resolve your organization — showing all orgs");
+      showError(
+        "Your organization could not be identified. Showing plates across all organizations.",
+      );
     }
   }, [meFailed, filterOrg]);
 
@@ -257,7 +259,7 @@ export function PlateList() {
       <div>
         {header}
         <ErrorState
-          message="Failed to load plates. Is the backend running?"
+          message="Couldn’t load plates. Refresh the page to try again."
           details={error.message}
         />
       </div>

@@ -6,6 +6,7 @@ import { EntityLink } from "@/shared/components/entity-link";
 import { overlayColor } from "@structflo/components/dose-response";
 import type { ReactNode } from "react";
 
+import { displayConcentrationUnit } from "@/features/screening-assay/lib/intercept-label";
 import { sameUnit } from "../../lib/assay-evidence";
 import type { AggregationMode } from "../../lib/use-aggregation-mode";
 import type { ActivityValue, InterceptKey } from "../../types";
@@ -39,7 +40,7 @@ interface RunValueListProps {
 }
 
 /**
- * "List all runs": every run's value for this column, newest first, each with
+ * "Show all runs": every run's value for this column, newest first, each with
  * its run date linking to the run. A fitted run carries a dot in the colour its
  * curve takes in the plot (same order, so IC50 and IC90 columns line up). The
  * list scrolls inside the row; the run-history control stays at the bottom.
@@ -55,7 +56,8 @@ export function RunValueList({
 }: RunValueListProps) {
   const runs = av.runs ?? [];
   const total = av.run_count ?? runs.length;
-  const unit = av.unit && !sameUnit(av.unit, headerUnit) ? ` ${av.unit}` : "";
+  const unit =
+    av.unit && !sameUnit(av.unit, headerUnit) ? ` ${displayConcentrationUnit(av.unit)}` : "";
   const dotted = colourRuns && runs.some((r) => r.curve_snapshot);
   return (
     <div className="flex h-full min-w-0 flex-col gap-1">

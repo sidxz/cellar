@@ -27,7 +27,7 @@ export function TargetList() {
   if (error) {
     return (
       <ErrorState
-        message="Failed to load targets. Is the backend running?"
+        message="Couldn’t load targets. Refresh the page to try again."
         details={error.message}
       />
     );

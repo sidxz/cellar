@@ -149,7 +149,7 @@ describe("describeValue", () => {
       "All 2 values censored — showing the tightest bound",
     ]);
     expect(describeValue(compounds, "rd:s:raw", 2)?.lines).toEqual([
-      "Censored both ways — no value",
+      "The measurements give both upper and lower bounds. No single bound can summarize them.",
     ]);
   });
 
@@ -211,7 +211,7 @@ describe("describeValue", () => {
       },
     };
     expect(describeValue(both, "dr:e", 0)?.lines).toEqual([
-      "Censored both ways — no value",
+      "The curves give both upper and lower bounds. No single bound can summarize them.",
       "1 inactive curve",
     ]);
   });

@@ -30,11 +30,10 @@ function show(a: MeltingAnalysis) {
 describe("AcceptAllPeaks", () => {
   beforeEach(() => customInstance.mockReset());
 
-  it("shows the count beside the button and sends every unreviewed peak in one request", async () => {
+  it("shows the count on the button and sends every unreviewed peak in one request", async () => {
     customInstance.mockResolvedValue({ steps: [], skipped: 0, compute_warning: null });
     show(analysis(["unreviewed", "accepted", "unreviewed"]));
-    expect(screen.getByText("2 peaks")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Mark all reviewed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark 2 peaks reviewed" }));
     await waitFor(() => expect(customInstance).toHaveBeenCalledTimes(1));
     expect(customInstance).toHaveBeenCalledWith({
       url: "/api/v1/runs/r1/melting-steps/accept",
@@ -50,7 +49,7 @@ describe("AcceptAllPeaks", () => {
 
   it("says 1 peak for one", () => {
     show(analysis(["unreviewed"]));
-    expect(screen.getByText("1 peak")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark 1 peak reviewed" })).toBeInTheDocument();
   });
 
   it("shows nothing when every peak is reviewed", () => {
@@ -60,7 +59,7 @@ describe("AcceptAllPeaks", () => {
 
   it("is disabled, with the reason as its title, on a run that refuses peak edits", () => {
     show(analysis(["unreviewed"], "Peaks cannot be changed on an approved run"));
-    const button = screen.getByRole("button", { name: "Mark all reviewed" });
+    const button = screen.getByRole("button", { name: "Mark 1 peak reviewed" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Peaks cannot be changed on an approved run");
   });
@@ -68,7 +67,7 @@ describe("AcceptAllPeaks", () => {
   it("shows the server's reason when the request fails", async () => {
     customInstance.mockRejectedValueOnce(new Error("API error: 409 — A peak changed. Reload."));
     show(analysis(["unreviewed"]));
-    fireEvent.click(screen.getByRole("button", { name: "Mark all reviewed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark 1 peak reviewed" }));
     expect(await screen.findByText("A peak changed. Reload.")).toBeInTheDocument();
   });
 });

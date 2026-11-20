@@ -106,7 +106,7 @@ export function LibrariesSection({ campaign, readOnly }: LibrariesSectionProps) 
         <p className="text-sm text-muted-foreground">
           {readOnly
             ? "No libraries were named for this campaign."
-            : "No libraries yet — name the decks this campaign screened to see how much of each was read."}
+            : "Add a library to see how many of its compounds were screened."}
         </p>
       ) : (
         <>
@@ -123,7 +123,7 @@ export function LibrariesSection({ campaign, readOnly }: LibrariesSectionProps) 
           </div>
           {!hasSeedRuns && (
             <p className="mt-2 text-[11px] text-muted-foreground">
-              This campaign was not built from runs, so nothing counts as screened in it.
+              Screening coverage is calculated from source runs. This campaign has no source runs.
             </p>
           )}
         </>

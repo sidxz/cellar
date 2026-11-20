@@ -15,7 +15,7 @@ import { AuditTimelineView } from "./audit-timeline";
 // ─── Filter options ──────────────────────────────────────────────────────────
 
 const ENTITY_TYPE_OPTIONS = [
-  { value: "_all", label: "All Entity Types" },
+  { value: "_all", label: "All record types" },
   { value: "molecule", label: "Molecule" },
   { value: "batch", label: "Batch" },
   { value: "sample", label: "Sample" },
@@ -59,8 +59,8 @@ export function AuditList() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={entityType} onValueChange={setEntityType}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Entity type" />
+          <SelectTrigger aria-label="Record type" className="w-[180px]">
+            <SelectValue placeholder="Record type" />
           </SelectTrigger>
           <SelectContent>
             {ENTITY_TYPE_OPTIONS.map((opt) => (
@@ -71,9 +71,12 @@ export function AuditList() {
           </SelectContent>
         </Select>
 
+        <span id="audit-limit-label" className="text-sm">
+          Maximum entries to show
+        </span>
         <Select value={limit} onValueChange={setLimit}>
-          <SelectTrigger className="w-[100px]">
-            <SelectValue placeholder="Limit" />
+          <SelectTrigger aria-labelledby="audit-limit-label" className="w-[100px]">
+            <SelectValue placeholder="Maximum entries to show" />
           </SelectTrigger>
           <SelectContent>
             {LIMIT_OPTIONS.map((opt) => (
@@ -92,7 +95,7 @@ export function AuditList() {
       </div>
 
       {/* Timeline */}
-      <AuditTimelineView operations={data} isLoading={isLoading} />
+      <AuditTimelineView operations={data} isLoading={isLoading} filtered={entityType !== "_all"} />
     </div>
   );
 }

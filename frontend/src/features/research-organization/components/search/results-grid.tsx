@@ -16,7 +16,11 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { activityCatalog } from "@/features/screening-assay/lib/activity-columns";
 import { curveLayer } from "@/features/screening-assay/lib/curve-frame";
 import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
-import { interceptLabel } from "@/features/screening-assay/lib/intercept-label";
+import {
+  displayConcentrationUnit,
+  displayEndpoint,
+  interceptLabel,
+} from "@/features/screening-assay/lib/intercept-label";
 import { type Protocol, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -98,7 +102,7 @@ interface ResultsGridProps {
   selectionActions?: React.ReactNode;
 }
 
-/** A value column under List all runs: room for "< 0.005081" and its run date. */
+/** A value column under Show all runs: room for "< 0.005081" and its run date. */
 const LISTED_RUNS_WIDTH = 200;
 
 // ─── Row height by image size ───────────────────────────────────────────────
@@ -156,7 +160,7 @@ const PROPERTY_COLUMNS: Record<
     header: "TPSA",
     width: 80,
     digits: 1,
-    tooltip: "Topological polar surface area (Veber's rule — predicts permeability)",
+    tooltip: "Topological polar surface area (Å²)",
   },
   hbd: { header: "HBD", width: 70, tooltip: "Hydrogen-bond donors (Lipinski Rule of Five)" },
   hba: { header: "HBA", width: 70, tooltip: "Hydrogen-bond acceptors (Lipinski Rule of Five)" },
@@ -367,7 +371,7 @@ export function buildDrcColumns(
   visibleIntercepts?: ReadonlyArray<{ kind: string; level: number }> | null,
   aggregationMode: AggregationMode = "latest",
   groupKey = "",
-  /** List all runs gives each fitted run its curve's colour; an overlaid split
+  /** Show all runs gives each fitted run its curve's colour; an overlaid split
    *  protocol's colours name its groups instead, so its runs go uncoloured. */
   colourRuns = true,
 ): ColDef<EnrichedMolecule>[] {
@@ -393,9 +397,9 @@ export function buildDrcColumns(
     // a single anonymous value column so the grid still surfaces the
     // headline fitted_value.
     cols.push({
-      headerName: `${rd?.name ?? "Curve"}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
+      headerName: `${displayEndpoint(rd?.name ?? "Curve")}${proto?.dose_unit ? ` (${displayConcentrationUnit(proto.dose_unit)})` : ""}`,
       colId: columnId("value"),
-      width: listsRuns(aggregationMode) ? LISTED_RUNS_WIDTH : 130,
+      width: 255,
       valueGetter: (p) => {
         const av = p.data?.activity?.[colId];
         if (!av) return null;
@@ -417,10 +421,10 @@ export function buildDrcColumns(
     intercepts.forEach((spec, idx) => {
       const isPrimary = idx === 0;
       cols.push({
-        headerName: `${interceptLabel(spec)}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
+        headerName: `${displayEndpoint(interceptLabel(spec))}${proto?.dose_unit ? ` (${displayConcentrationUnit(proto.dose_unit)})` : ""}`,
         headerTooltip: `${rd?.name ?? "Endpoint"} · ${proto?.name ?? "Assay"}`,
         colId: columnId(`${spec.kind}:${spec.level}`),
-        width: listsRuns(aggregationMode) ? LISTED_RUNS_WIDTH : 150,
+        width: 255,
         valueGetter: (p) => {
           const av = p.data?.activity?.[colId];
           if (!av) return null;

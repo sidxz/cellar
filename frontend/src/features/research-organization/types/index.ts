@@ -481,7 +481,7 @@ export interface RunSummary {
     /** Single-point runs: "=" | "<" | ">" | "nd". */
     qualifier?: string;
   }>;
-  /** The run's curve, sent only for "List all runs" (`list_runs`); null for a
+  /** The run's curve, sent only for "Show all runs" (`list_runs`); null for a
    *  run without a fit. */
   curve_snapshot?: CurveSnapshot | null;
 }

@@ -112,7 +112,7 @@ export function CreateCampaignDialog({
         <DialogHeader>
           <DialogTitle>Create Campaign</DialogTitle>
           <DialogDescription>
-            Name your campaign. Channels and compounds are curated in the builder after creation.
+            Add readouts and compounds after creating the campaign.
           </DialogDescription>
         </DialogHeader>
 

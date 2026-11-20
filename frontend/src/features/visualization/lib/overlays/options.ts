@@ -51,7 +51,7 @@ export function overlayOptions(
       !!xCol && isP(xCol) && isP() && xCol.provenance.protocol_id !== yCol?.provenance.protocol_id;
     out.selectivity = twoProtocols
       ? linear(p.logX, p.logY)
-      : "Plot a p-potency from each protocol on X and Y";
+      : "Choose a log potency such as pIC₅₀ for each axis. Use a different protocol on each axis.";
   }
   return out;
 }

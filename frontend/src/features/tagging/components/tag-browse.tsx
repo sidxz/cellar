@@ -135,10 +135,7 @@ export function TagBrowse() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Browse by Tag"
-        subtitle="Pick one or more tags to see everything that carries them."
-      >
+      <PageHeader title="Browse by Tag" subtitle="Select one or more tags to find tagged records.">
         <TagFilter
           value={filter}
           onChange={(v) => {
@@ -147,13 +144,6 @@ export function TagBrowse() {
           }}
         />
       </PageHeader>
-
-      {!hasTags && (
-        <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          Select one or more tags above to see every molecule, protocol, run, batch, plate and more
-          that carries them.
-        </div>
-      )}
 
       {hasTags && error && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">

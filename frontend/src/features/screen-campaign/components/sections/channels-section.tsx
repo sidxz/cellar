@@ -594,9 +594,8 @@ function MirrorProtocolPopover({
         <div>
           <h4 className="text-sm font-semibold">Mirror protocol</h4>
           <p className="text-xs text-muted-foreground mt-1">
-            Adds a readout here for each of the protocol's readouts. Multi-intercept dose-response
-            readouts emit one per intercept (EC50, EC90, …). Matching readouts already present are
-            skipped.
+            Add the protocol’s readouts to this campaign. For dose–response results, each endpoint
+            gets its own column. Existing matches are skipped.
           </p>
         </div>
         <div className="space-y-1">

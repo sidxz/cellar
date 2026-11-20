@@ -5,7 +5,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/
 import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
 import { Star } from "lucide-react";
-import { type CatalogColumn, compareForDirection } from "../../lib/activity-columns";
+import {
+  type CatalogColumn,
+  compareForDirection,
+  selectionLabels,
+} from "../../lib/activity-columns";
 import type { CurveFrame } from "../../lib/curve-frame";
 import { doseRange, findInterceptValue, formatInterceptDisplay } from "../../lib/intercept-label";
 import type {
@@ -48,9 +52,9 @@ function fmtValue(v: number, signed: boolean): string {
 }
 
 const HIT_LABEL: Record<HitStatus, string> = {
-  meets: "Meets",
-  fails: "Doesn't meet",
-  no_data: "No data",
+  meets: "Meets criteria",
+  fails: "Does not meet criteria",
+  no_data: "Insufficient data to assess",
 };
 const HIT_RANK: Record<HitStatus, number> = { meets: 0, no_data: 1, fails: 2 };
 
@@ -122,10 +126,11 @@ function valueColumn(
   rd: ReadoutDefInfo | undefined,
   o: ActivityColumnOptions,
 ): ColDef<CompoundActivity> {
+  const selection = selectionLabels[rd?.best_direction ?? "high"];
   const signed = SIGNED.has(rd?.melt_config?.measure ?? "");
   return {
     headerName: c.label,
-    headerTooltip: c.readout,
+    headerTooltip: `${c.readout} · ${o.statistic === "mean" ? "Arithmetic mean" : selection} across completed and approved runs`,
     colId: c.colId,
     hide: !o.visible.has(c.colId),
     width: 130,
@@ -141,7 +146,7 @@ function valueColumn(
       const rv = p.data?.readouts?.[c.readout];
       const parts = [
         rv?.n != null ? `n=${rv.n}` : null,
-        rv?.best != null ? `best ${fmtValue(rv.best, signed)}` : null,
+        rv?.best != null ? `${selection} ${fmtValue(rv.best, signed)}` : null,
         rv?.mean != null ? `mean ${fmtValue(rv.mean, signed)}` : null,
         rv?.sd != null ? `SD ${rv.sd.toPrecision(2)}` : null,
       ].filter(Boolean);
@@ -182,7 +187,9 @@ function interceptColumn(
   };
   return {
     headerName: useMean ? `${c.label} · geo. mean` : c.label,
-    headerTooltip: c.readout,
+    headerTooltip: useMean
+      ? `${c.readout} · Geometric mean across completed and approved runs`
+      : `${c.readout} · Curve selection prioritizes endpoints below the tested range, then exact fits, then above-range or undetermined endpoints. Within each group, the lowest fitted value is selected.`,
     colId: c.colId,
     hide: !o.visible.has(c.colId),
     width: 130,
@@ -281,8 +288,9 @@ export function buildColumnDefs(o: ActivityColumnOptions): Col[] {
       headerName: "Hit",
       colId: "hit",
       pinned: "left",
-      width: 130,
-      headerTooltip: "The protocol's recommended hit rule, on each compound's best values",
+      width: 195,
+      headerTooltip:
+        "Hit criteria use the selected value or curve for each readout across completed and approved runs, even when the table shows means.",
       valueGetter: (p) => {
         const s = p.data ? hits.get(p.data.molecule_id) : undefined;
         return s ? HIT_RANK[s] : null;

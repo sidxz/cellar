@@ -33,7 +33,7 @@ export function AssayEvidence({
   const rule = av.selection_rule
     ? AGGREGATION_LABELS[wireToAggregationMode(av.selection_rule)]
     : null;
-  // A lone run's date names it, unless the cell already lists it (List all runs).
+  // A lone run's date names it, unless the cell already lists it (Show all runs).
   const date = count === 1 && !listsRuns(mode) ? av.runs?.[0]?.run_date : null;
   return (
     <Popover>

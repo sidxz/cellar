@@ -82,8 +82,7 @@ export function CreateSynthesisRequestDialog({
         <DialogHeader>
           <DialogTitle>New Synthesis Request</DialogTitle>
           <DialogDescription>
-            Submit a request to synthesize a compound. The request is created in draft status —
-            submit it to begin the approval workflow.
+            Create a draft synthesis request. Submit it for approval when it is ready.
           </DialogDescription>
         </DialogHeader>
 
@@ -159,7 +158,7 @@ export function CreateSynthesisRequestDialog({
 
         <DialogFooter>
           <Button onClick={handleSubmit} disabled={!isValid || mutation.isPending}>
-            {mutation.isPending ? "Creating..." : "Create Request"}
+            {mutation.isPending ? "Creating..." : "Create draft"}
           </Button>
         </DialogFooter>
       </DialogContent>

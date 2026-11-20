@@ -165,8 +165,8 @@ function Controls({
             <AlertDialogHeader>
               <AlertDialogTitle>This view changed since you opened it</AlertDialogTitle>
               <AlertDialogDescription>
-                Someone saved a newer version. Reload it to see theirs — your unsaved changes are
-                lost — or keep yours as a new view.
+                A newer version is available. Reload view discards your unsaved changes. Save as new
+                view keeps your edits in a separate copy.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

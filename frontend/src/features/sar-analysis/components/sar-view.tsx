@@ -265,7 +265,9 @@ export function SarView(props: SarViewProps) {
             }
             setSaveIntent(null);
           } catch {
-            showError("Collection created, but adding compounds failed. Please retry.");
+            showError(
+              `Collection “${name}” was created. The compounds could not be added. Open the collection to check its contents before retrying.`,
+            );
           }
         }}
         count={

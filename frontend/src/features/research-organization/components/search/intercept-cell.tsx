@@ -13,6 +13,10 @@ import { cn } from "@/shared/lib/utils";
 import { type AggregationMode, listsRuns } from "../../lib/use-aggregation-mode";
 import type { ActivityValue, InterceptKey } from "../../types";
 
+import {
+  displayConcentrationUnit,
+  displayEndpoint,
+} from "@/features/screening-assay/lib/intercept-label";
 import { activityEndpoint, molarFactor, sameUnit } from "../../lib/assay-evidence";
 import { AssayEvidence } from "./assay-evidence";
 import { RunValueList } from "./run-value-list";
@@ -30,7 +34,7 @@ export interface InterceptCellProps {
   curves?: CompoundCurvesTarget | null;
   /** The unit the column header states; a value in that unit omits it. */
   headerUnit?: string | null;
-  /** List all runs: mark each fitted run with its curve's colour (not when an
+  /** Show all runs: mark each fitted run with its curve's colour (not when an
    *  overlaid split protocol's colours name its groups). */
   colourRuns?: boolean;
 }
@@ -58,10 +62,9 @@ function pXLabel(
   return "pX";
 }
 
-/** Format the fold-range as `×N` — integer when ≥10, one decimal otherwise.
- *  Matches the inline chip's compact, scannable form. */
+/** Keep one decimal of precision for fold ranges below ten. */
 function formatFoldRange(foldRange: number): string {
-  return foldRange >= 10 ? `×${Math.round(foldRange)}` : `×${foldRange.toFixed(1)}`;
+  return `${Number(foldRange.toFixed(foldRange >= 10 ? 0 : 1))}-fold range`;
 }
 
 export function InterceptCell({
@@ -87,7 +90,10 @@ export function InterceptCell({
   const q =
     wireQualifier && wireQualifier !== "=" && display.kind === "scalar" ? `${wireQualifier} ` : "";
   const showUnit = display.kind === "scalar" || display.kind === "qualifier";
-  const unitSuffix = showUnit && av.unit && !sameUnit(av.unit, headerUnit) ? ` ${av.unit}` : "";
+  const unitSuffix =
+    showUnit && av.unit && !sameUnit(av.unit, headerUnit)
+      ? ` ${displayConcentrationUnit(av.unit)}`
+      : "";
 
   // Shared disagreement glyph — rendered in BOTH the Badge and span paths
   // so a scalar amber-warning cell still surfaces the per-run conflict
@@ -183,7 +189,8 @@ export function InterceptCell({
     stats?.geometric_mean != null &&
     stats.fold_range != null ? (
       <div className="font-mono text-[10px] text-muted-foreground tabular-nums">
-        gmean {stats.geometric_mean.toPrecision(3)} {av.unit ?? "(unit unavailable)"} ·{" "}
+        Geometric mean {stats.geometric_mean.toPrecision(3)}{" "}
+        {av.unit ? displayConcentrationUnit(av.unit) : "(unit unavailable)"} ·{" "}
         {formatFoldRange(stats.fold_range)}
       </div>
     ) : null;
@@ -194,12 +201,13 @@ export function InterceptCell({
     stats.log_value_sd != null &&
     factor !== null ? (
       <div className="font-mono text-[10px] text-muted-foreground tabular-nums">
-        {pXLabel(aggregate?.spec ?? null, av.curve_type)}{" "}
-        {(-Math.log10(factor) - stats.log_value_mean).toFixed(2)} ± {stats.log_value_sd.toFixed(2)}
+        {displayEndpoint(pXLabel(aggregate?.spec ?? null, av.curve_type))}{" "}
+        {(-Math.log10(factor) - stats.log_value_mean).toFixed(2)} ± {stats.log_value_sd.toFixed(2)}{" "}
+        (SD)
       </div>
     ) : null;
 
-  // "List all runs": every run's value instead of the headline; the spread
+  // "Show all runs": every run's value instead of the headline; the spread
   // line stays under the list.
   if (listsRuns(mode) && av.runs?.length) {
     return (

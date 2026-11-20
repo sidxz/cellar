@@ -130,7 +130,7 @@ function setup(
   return navigate;
 }
 
-describe("compound drawer under List all runs", () => {
+describe("compound drawer under Show all runs", () => {
   function renderListed(runCurves: Array<number | null>) {
     const runs = runCurves.map((fitted_value, i) => ({
       run_id: `run-${i}`,
@@ -287,8 +287,8 @@ describe("compound drawer evidence", () => {
       { ...av, value: 30, qualifier: "=", selection_rule: "geometric_mean" },
     );
     const reported = screen.getByRole("region", { name: "Reported search results" });
-    expect(within(reported).getByText("30.00 uM")).toBeInTheDocument();
-    expect(within(reported).queryByText("10.00 uM")).not.toBeInTheDocument();
+    expect(within(reported).getByText("30.00 µM")).toBeInTheDocument();
+    expect(within(reported).queryByText("10.00 µM")).not.toBeInTheDocument();
   });
   it("keeps ND as the reported result and labels the fitted scalar as diagnostics", async () => {
     setup();

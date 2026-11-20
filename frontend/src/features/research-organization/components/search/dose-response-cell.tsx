@@ -21,7 +21,7 @@ export const CurveFramesContext = createContext<
 >(null);
 
 /** One frame per curve column over every loaded result, worked out once per column.
- *  With "List all runs" each run's own curve is drawn, so its points count too. */
+ *  With "Show all runs" each run's own curve is drawn, so its points count too. */
 export function useCurveFramesFor(
   rows: readonly { activity?: Record<string, ActivityValue> | null }[],
 ) {
@@ -48,7 +48,7 @@ export function useCurveFramesFor(
   }, [rows]);
 }
 
-/** "List all runs": each listed run's curve, labelled by its date. Entry i takes
+/** "Show all runs": each listed run's curve, labelled by its date. Entry i takes
  *  `overlayColor(i)`, the colour of the i-th dot in the value list (a run without
  *  a fit keeps its slot). Null when no run carries a curve. */
 export function runOverlayCurves(value: ActivityValue | undefined) {
@@ -63,7 +63,7 @@ interface DoseResponseCellProps {
   frameKey?: string;
   /** The curve fits a % layer, so its frame keeps the 0 % and 100 % anchors. */
   percent?: boolean;
-  /** "List all runs": draw every listed run's curve, coloured like its dot. */
+  /** "Show all runs": draw every listed run's curve, coloured like its dot. */
   listRuns?: boolean;
 }
 
