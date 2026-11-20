@@ -38,6 +38,8 @@ export const overlaySchema = z.object({
 
 export const panelSchema = z.object({
   id: z.string(),
+  // The backend accepts only these types when a view is saved: keep in step with ViewPanel.type
+  // in backend/src/cellar/domain/research_organization/saved_visualization.py.
   type: z.enum(["scatter", "histogram", "bar", "box", "rgroup-matrix"]),
   x: z.string().optional(),
   y: z.string().optional(),

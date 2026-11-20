@@ -37,7 +37,8 @@ STALE_VIEW_MESSAGE = (
 
 class ViewPanel(BaseModel):
     """A plot; its settings beyond id and type pass through untouched. The types are the
-    workbench's own (its panel schema), one for one."""
+    workbench's own, one for one: keep them in step with ``panelSchema.type`` in
+    frontend/src/features/visualization/lib/config-schema.ts."""
 
     model_config = ConfigDict(extra="allow")
 
