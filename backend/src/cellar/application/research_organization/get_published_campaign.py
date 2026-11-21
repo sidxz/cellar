@@ -443,6 +443,8 @@ def _serialize_result(
         "molecule": molecule_dict,
         "representative_batch": rep_batch,
         "notes": result.notes,
+        "notes_edited_by": str(result.notes_edited_by) if result.notes_edited_by else None,
+        "notes_edited_at": result.notes_edited_at.isoformat() if result.notes_edited_at else None,
         "measurements": measurements,
         "stage_outcomes": [_serialize_stage_outcome(o) for o in stage_outcomes],
     }

@@ -269,8 +269,10 @@ async def test_curation_stays_open_on_a_managed_campaign(
     m = await _build(client, session_factory, workspace_id)
     c = f"/api/v1/campaigns/{m.campaign_id}"
 
-    notes = await client.patch(f"{c}/results/{m.result_id}", json={"notes": "clean curve"})
-    assert notes.status_code == 204, notes.text
+    notes = await client.patch(
+        f"{c}/results/{m.result_id}", json={"notes": "clean curve", "expected_notes": None}
+    )
+    assert notes.status_code == 200, notes.text
     override = await client.put(
         f"{c}/stages/{m.stage_id}/overrides",
         json={"result_ids": [m.result_id], "outcome": "hit", "reason": "looked active"},

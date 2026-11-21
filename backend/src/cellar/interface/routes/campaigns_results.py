@@ -24,6 +24,9 @@ from cellar.application.research_organization.add_result_row import (
     AddResultRowCommand,
 )
 from cellar.application.research_organization.campaign_row_selection import RowSelection
+from cellar.application.research_organization.get_result_note_history import (
+    GetResultNoteHistoryQuery,
+)
 from cellar.application.research_organization.list_campaign_results import (
     ListCampaignResultsQuery,
 )
@@ -47,6 +50,7 @@ from cellar.interface.dependencies import (
     ActingServiceDep,
     AddResultRowDep,
     AuthDep,
+    GetResultNoteHistoryDep,
     ListCampaignResultsDep,
     OverrideResultCellDep,
     RemoveResultRowDep,
@@ -67,6 +71,8 @@ from cellar.interface.routes._campaign_dtos import (
     CampaignResultResponse,
     OverrideCellRequest,
     QcVerdictCountsResponse,
+    ResultNoteHistoryResponse,
+    ResultNoteResponse,
     SetQcVerdictsRequest,
     SetResultNotesRequest,
 )
@@ -178,23 +184,49 @@ async def list_campaign_results(
     )
 
 
-@router.patch("/{campaign_id}/results/{result_id}", status_code=204)
+@router.patch("/{campaign_id}/results/{result_id}", response_model=ResultNoteResponse)
 async def set_result_notes(
     campaign_id: uuid.UUID,
     result_id: uuid.UUID,
     body: SetResultNotesRequest,
     auth: AuthDep,
     uc: SetResultNotesDep,
-) -> Response:
-    """Set (or, with ``null``, clear) the free-text notes on one result row."""
+) -> ResultNoteResponse:
+    """Save (or, with ``null``, clear) the note on one result row, on any campaign status.
+
+    Answers with the row's note and who saved it when. A save whose
+    ``expected_notes`` is no longer the current note is a 409 ``StaleEditError``
+    whose ``current`` is the note as it now stands.
+    """
     cmd = SetResultNotesCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         result_id=result_id,
         notes=body.notes,
+        expected_notes=body.expected_notes,
     )
-    result_to_response(await uc(cmd, auth=auth))
-    return Response(status_code=204)
+    return ResultNoteResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
+
+
+@router.get(
+    "/{campaign_id}/results/{result_id}/notes/history",
+    response_model=ResultNoteHistoryResponse,
+)
+async def get_result_note_history(
+    campaign_id: uuid.UUID,
+    result_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetResultNoteHistoryDep,
+) -> ResultNoteHistoryResponse:
+    """Every version of one row's note, newest first; ``versions[0]`` is the current note.
+
+    A removed note is a version with ``notes: null``. A note written before saves
+    were tracked is the oldest version, with ``edited_by`` and ``edited_at`` null.
+    """
+    query = GetResultNoteHistoryQuery(
+        workspace_id=auth.workspace_id, campaign_id=campaign_id, result_id=result_id
+    )
+    return ResultNoteHistoryResponse.from_domain(result_to_response(await uc(query, auth=auth)))
 
 
 @router.patch(

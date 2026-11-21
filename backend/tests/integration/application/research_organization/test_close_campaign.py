@@ -338,6 +338,52 @@ async def test_reopen_campaign_integration(session_factory) -> None:
 
 
 @pytest.mark.asyncio
+async def test_closed_campaign_row_takes_note_edits_and_nothing_else(session_factory) -> None:
+    """A note can be saved on any campaign status (owner 2026-11-21), so the lock
+    trigger lets an UPDATE through that changes only a row's note and its stamp.
+    Anything else on a closed campaign's row (another column, alongside a note or
+    alone, an insert, a delete) is still refused at the database."""
+    ws_id, campaign_id, _protocol_id, user_id = await _seed_and_close_campaign(
+        session_factory, note="closing for note trigger test"
+    )
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        reloaded = await SQLAlchemyCampaignRepository(uow_check).find_by_id_in_workspace(
+            ws_id, campaign_id
+        )
+    result_id = reloaded.results[0].id
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await uow.session.execute(
+            sa.text(
+                # As the ORM writes it: the row's own updated_at moves with the note.
+                "UPDATE campaign_result SET notes = 'seen again', notes_edited_by = :by, "
+                "notes_edited_at = now(), updated_at = now() WHERE id = :id"
+            ),
+            {"id": result_id, "by": user_id},
+        )
+        await uow.session.commit()
+
+    blocked = [
+        ("UPDATE campaign_result SET representative_batch_id = :x WHERE id = :id", True),
+        ("UPDATE campaign_result SET notes = 'n', molecule_id = :x WHERE id = :id", True),
+        ("DELETE FROM campaign_result WHERE id = :id", False),
+    ]
+    for sql, takes_x in blocked:
+        params = {"id": result_id, **({"x": uuid.uuid4()} if takes_x else {})}
+        async with AsyncUnitOfWork(session_factory) as uow:
+            with pytest.raises(sa.exc.IntegrityError, match="writes blocked"):
+                await uow.session.execute(sa.text(sql), params)
+            await uow.rollback()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        notes = (
+            await uow.session.execute(
+                sa.text("SELECT notes FROM campaign_result WHERE id = :id"), {"id": result_id}
+            )
+        ).scalar_one()
+    assert notes == "seen again"
+
+
 async def test_stage_writes_blocked_while_closed_then_allowed_after_reopen(
     session_factory,
 ) -> None:
