@@ -74,6 +74,9 @@ class CampaignResult:
     #: Who last saved ``notes`` and when; None for a note that predates tracking.
     notes_edited_by: uuid.UUID | None = None
     notes_edited_at: datetime | None = None
+    #: How many versions the note's history lists: 0 for a row that never had a
+    #: note, 1 for one save or a note from before tracking, +1 per change after.
+    notes_version_count: int = 0
     added_from: SourceRef | None = None
     measurements: list[CampaignMeasurement] = field(default_factory=list)
     #: Manual per-(result, stage) hit/miss overrides, keyed by stage_id. See
@@ -105,6 +108,7 @@ class CampaignResult:
         if normalize_notes(expected_notes) != self.notes:
             raise StaleNoteError(self.note)
         self.notes, self.notes_edited_by, self.notes_edited_at = new, by, at
+        self.notes_version_count += 1
         return True
 
     def add_measurement(self, m: CampaignMeasurement) -> None:

@@ -357,7 +357,8 @@ async def test_closed_campaign_row_takes_note_edits_and_nothing_else(session_fac
             sa.text(
                 # As the ORM writes it: the row's own updated_at moves with the note.
                 "UPDATE campaign_result SET notes = 'seen again', notes_edited_by = :by, "
-                "notes_edited_at = now(), updated_at = now() WHERE id = :id"
+                "notes_edited_at = now(), notes_version_count = notes_version_count + 1, "
+                "updated_at = now() WHERE id = :id"
             ),
             {"id": result_id, "by": user_id},
         )

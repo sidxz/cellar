@@ -1477,6 +1477,27 @@ class TestCampaignResults:
         assert {v["edited_by"] for v in versions} == {str(user_id)}
         assert all(v["edited_at"] is not None for v in versions)
 
+    async def test_note_version_count_matches_history(self, client: AsyncClient) -> None:
+        """A row says how many versions its history lists, on every read of the row."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes-count")
+        url = f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+
+        async def count_and_history() -> tuple[int, int, int]:
+            campaign = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+            row = next(r for r in campaign["results"] if r["id"] == result_id)
+            [page_row] = (await client.get(f"/api/v1/campaigns/{campaign_id}/results")).json()[
+                "items"
+            ]
+            versions = (await client.get(f"{url}/notes/history")).json()["versions"]
+            return row["notes_version_count"], page_row["notes_version_count"], len(versions)
+
+        assert await count_and_history() == (0, 0, 0)
+        for notes, expected in (("a", None), ("b", "a")):
+            await client.patch(url, json={"notes": notes, "expected_notes": expected})
+        assert await count_and_history() == (2, 2, 2)
+        await client.patch(url, json={"notes": None, "expected_notes": "b"})
+        assert await count_and_history() == (3, 3, 3)
+
     async def test_note_history_unknown_result_404(self, client: AsyncClient) -> None:
         campaign_id, _ = await self._noted_row(client, "Asp-notes-404")
         resp = await client.get(
@@ -1791,6 +1812,7 @@ class TestGetPublishedCampaign:
         assert row["notes"] == "Watch hERG"
         assert row["notes_edited_by"] == str(user_id)
         assert row["notes_edited_at"] is not None
+        assert row["notes_version_count"] == 1
 
 
 # ---------------------------------------------------------------------------

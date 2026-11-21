@@ -354,6 +354,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             notes=model.notes,
             notes_edited_by=model.notes_edited_by,
             notes_edited_at=model.notes_edited_at,
+            notes_version_count=model.notes_version_count,
             added_from=added_from,
             measurements=[self._measurement_to_domain(mm) for mm in model.measurements],
             stage_overrides={
@@ -370,6 +371,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             notes=r.notes,
             notes_edited_by=r.notes_edited_by,
             notes_edited_at=r.notes_edited_at,
+            notes_version_count=r.notes_version_count,
             added_from=r.added_from.to_dict() if r.added_from is not None else None,
             measurements=[self._measurement_to_model(m) for m in r.measurements],
             stage_overrides=[self._override_to_model(so) for so in r.stage_overrides.values()],
@@ -381,6 +383,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.notes = r.notes
         model.notes_edited_by = r.notes_edited_by
         model.notes_edited_at = r.notes_edited_at
+        model.notes_version_count = r.notes_version_count
         # added_from is immutable after first write — only set if not already persisted
         if model.added_from is None and r.added_from is not None:
             model.added_from = r.added_from.to_dict()

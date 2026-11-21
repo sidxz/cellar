@@ -895,6 +895,7 @@ async def test_result_note_stamp_round_trips(
     r = c.results[0]
     by, at = uuid.uuid4(), datetime(2026, 11, 21, 14, 3, tzinfo=UTC)
     r.notes, r.notes_edited_by, r.notes_edited_at = "Watch hERG", by, at
+    r.notes_version_count = 1
     async with AsyncUnitOfWork(session_factory) as uow:
         await SQLAlchemyCampaignRepository(uow).save(c)
         await uow.commit()
@@ -906,7 +907,9 @@ async def test_result_note_stamp_round_trips(
         assert loaded is not None
         lr = loaded.results[0]
         assert (lr.notes, lr.notes_edited_by, lr.notes_edited_at) == ("Watch hERG", by, at)
+        assert lr.notes_version_count == 1
         lr.notes, lr.notes_edited_by, lr.notes_edited_at = None, by2, at2
+        lr.notes_version_count = 2
         await repo.save(loaded)
         await uow.commit()
 
@@ -915,6 +918,7 @@ async def test_result_note_stamp_round_trips(
     assert again is not None
     ar = again.results[0]
     assert (ar.notes, ar.notes_edited_by, ar.notes_edited_at) == (None, by2, at2)
+    assert ar.notes_version_count == 2
 
 
 async def test_find_result_note(

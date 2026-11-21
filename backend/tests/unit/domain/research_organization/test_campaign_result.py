@@ -180,6 +180,34 @@ class TestSetNotes:
         assert r.notes == "first"
 
 
+class TestNoteVersionCount:
+    """``notes_version_count`` is the number of versions the note's history lists."""
+
+    def test_each_change_counts_a_version(self) -> None:
+        r, u = _row(), uuid.uuid4()
+        assert r.notes_version_count == 0
+        counts = []
+        for text, expected in (("a", None), ("b", "a"), (None, "b")):
+            r.set_notes(text, expected_notes=expected, by=u, at=_T)
+            counts.append(r.notes_version_count)
+        assert counts == [1, 2, 3]
+
+    def test_no_op_and_stale_saves_do_not_count(self) -> None:
+        r = _row("keep", uuid.uuid4(), _T0)
+        r.notes_version_count = 1
+        r.set_notes(" keep ", expected_notes="keep", by=uuid.uuid4(), at=_T)
+        with pytest.raises(StaleNoteError):
+            r.set_notes("mine", expected_notes="what I opened", by=uuid.uuid4(), at=_T)
+        assert r.notes_version_count == 1
+
+    def test_legacy_note_counts_from_one(self) -> None:
+        r = CampaignResult(
+            campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4(), notes="x", notes_version_count=1
+        )
+        r.set_notes("y", expected_notes="x", by=uuid.uuid4(), at=_T)
+        assert r.notes_version_count == 2
+
+
 def test_stale_note_error_body() -> None:
     u = uuid.uuid4()
     assert StaleNoteError(ResultNote("x", u, _T)).body_extras() == {

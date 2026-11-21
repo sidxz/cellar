@@ -609,6 +609,8 @@ class CampaignResultResponse(BaseModel):
     #: Who last saved ``notes`` and when; null for a note that predates tracking.
     notes_edited_by: uuid.UUID | None = None
     notes_edited_at: datetime | None = None
+    #: How many versions ``GET …/notes/history`` lists for this row (0 = never noted).
+    notes_version_count: int = 0
     measurements: list[CampaignMeasurementResponse]
     stage_outcomes: list[StageOutcomeResponse]
 
@@ -625,6 +627,7 @@ class CampaignResultResponse(BaseModel):
             notes=r.notes,
             notes_edited_by=r.notes_edited_by,
             notes_edited_at=r.notes_edited_at,
+            notes_version_count=r.notes_version_count,
             measurements=[CampaignMeasurementResponse.from_domain(m) for m in r.measurements],
             stage_outcomes=[
                 StageOutcomeResponse.from_domain(o) for o in (outcomes or {}).values()
