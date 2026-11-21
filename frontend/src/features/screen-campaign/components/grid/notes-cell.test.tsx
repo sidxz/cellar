@@ -52,6 +52,19 @@ describe("NotesCell", () => {
     expect(screen.queryByText(/versions/)).toBeNull();
   });
 
+  it("tells an editor a removed note has history", () => {
+    renderCell({ ...makeResult(null, true), notes_version_count: 2 }, false);
+    expect(screen.getByText("Add note")).toBeInTheDocument();
+    expect(screen.getByText("Note removed · 2 versions")).toBeInTheDocument();
+  });
+
+  it("tells a viewer a removed note has history", () => {
+    renderCell({ ...makeResult(null, true), notes_version_count: 2 }, true);
+    expect(screen.getByRole("button", { name: "Note history" })).toHaveTextContent(
+      "Note removed · 2 versions",
+    );
+  });
+
   it("shows no stamp under a note that predates tracking", () => {
     renderCell(makeResult("Old note", false), false);
     expect(screen.queryByText(/^by /)).toBeNull();

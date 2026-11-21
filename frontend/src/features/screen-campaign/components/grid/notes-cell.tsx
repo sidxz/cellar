@@ -24,6 +24,9 @@ export function NotesCell({ campaignId, result, readOnly }: NotesCellProps) {
   const nameOf = useMemberNames();
   const notes = result.notes?.trim() ?? "";
   const versions = result.notes_version_count ?? 0;
+  const versionsSuffix = versions > 1 ? ` · ${versions} versions` : "";
+  // A removed note still has history: say so rather than look like an empty row.
+  const removed = !notes && (versions > 0 || Boolean(result.notes_edited_at));
 
   const body = notes ? (
     <>
@@ -33,19 +36,22 @@ export function NotesCell({ campaignId, result, readOnly }: NotesCellProps) {
       {result.notes_edited_at && (
         <p className="text-[10px] leading-tight text-muted-foreground/70">
           {noteStamp(nameOf(result.notes_edited_by), result.notes_edited_at)}
-          {versions > 1 && ` · ${versions} versions`}
+          {versionsSuffix}
         </p>
       )}
     </>
-  ) : readOnly ? (
-    // Only reached for a removed note (it has a stamp): say so, so the history
-    // button is visible rather than a blank, focusable cell.
-    <span className="text-[11px] italic text-muted-foreground/70">Note removed</span>
   ) : (
-    <span className="text-[11px] italic text-muted-foreground/70">Add note</span>
+    <>
+      {!readOnly && <span className="text-[11px] italic text-muted-foreground/70">Add note</span>}
+      {removed && (
+        <p className="text-[10px] italic leading-tight text-muted-foreground/70">
+          Note removed{versionsSuffix}
+        </p>
+      )}
+    </>
   );
 
-  if (readOnly && !notes && !result.notes_edited_at) {
+  if (readOnly && !notes && !removed) {
     return <div className="max-w-[200px] py-1 text-left" />;
   }
 
