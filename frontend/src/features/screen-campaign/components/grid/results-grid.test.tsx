@@ -30,11 +30,12 @@ import {
 // ResultsGridV2 hands its column defs to DataGrid; the mock keeps them for
 // the header tests below instead of mounting AG Grid.
 const { grid } = vi.hoisted(() => ({
-  grid: { columnDefs: [] as (ColDef | ColGroupDef)[] },
+  grid: { columnDefs: [] as (ColDef | ColGroupDef)[], selectionToolbar: undefined as unknown },
 }));
 vi.mock("@/shared/components/data-grid/data-grid", () => ({
-  DataGrid: (props: { columnDefs: (ColDef | ColGroupDef)[] }) => {
+  DataGrid: (props: { columnDefs: (ColDef | ColGroupDef)[]; selectionToolbar?: unknown }) => {
     grid.columnDefs = props.columnDefs;
+    grid.selectionToolbar = props.selectionToolbar;
     return null;
   },
 }));
@@ -617,5 +618,39 @@ describe("curveFramesByChannel", () => {
       protocols,
     );
     expect(frames.get("c2")?.yRange).toEqual([900, 3100]);
+  });
+});
+
+describe("ResultsGridV2 on a campaign another app manages", () => {
+  const campaign = {
+    id: "c-managed",
+    stages: [],
+    channels: [],
+    results: [{ id: "r1", molecule_id: "mol-1", measurements: [], stage_outcomes: [] }],
+  } as unknown as CampaignResponse;
+
+  function renderGrid(rowsLocked: boolean) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ResultsGridV2
+          campaign={campaign}
+          filters={emptyFilters()}
+          selectedStageId={null}
+          readOnly={false}
+          rowsLocked={rowsLocked}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("offers no compound removal while rows are locked", () => {
+    renderGrid(true);
+    expect(grid.selectionToolbar).toBeUndefined();
+  });
+
+  it("keeps compound removal on a campaign ChemCellar manages", () => {
+    renderGrid(false);
+    expect(grid.selectionToolbar).toBeTypeOf("function");
   });
 });

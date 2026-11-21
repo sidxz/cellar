@@ -28,6 +28,7 @@ from cellar.application.auth import AuthContext, require_editor, require_same_wo
 from cellar.application.research_organization.add_results_from_collection import (
     AddResultsOutcome,
 )
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
@@ -65,6 +66,8 @@ class AddResultsFromRunsCommand(Command):
     #: funnel. On reuse of an existing stage, ``None`` leaves the current
     #: parent alone.
     parent_stage_id: uuid.UUID | None = None
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 @dataclass
@@ -108,6 +111,9 @@ class AddResultsFromRuns:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
             if campaign.status != CampaignStatus.DRAFT:
                 return Failure(
                     ValidationError(f"Cannot add results: campaign is {campaign.status.value}")

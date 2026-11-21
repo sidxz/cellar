@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -43,6 +44,8 @@ class UpdateCampaignStageCommand(Command):
     criteria: list[StageCriterion] | object = UNSET
     display_order: int | object = UNSET
     kind: StageKind | object = UNSET
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class UpdateCampaignStage:
@@ -83,6 +86,9 @@ class UpdateCampaignStage:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
 
             if campaign.status != CampaignStatus.DRAFT:
                 return Failure(DataLockedError(f"Campaign is {campaign.status.value}"))

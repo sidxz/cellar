@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
@@ -31,6 +32,8 @@ class RemoveRunFromStageCommand(Command):
     campaign_id: uuid.UUID
     stage_id: uuid.UUID
     run_id: uuid.UUID
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class RemoveRunFromStage:
@@ -61,6 +64,9 @@ class RemoveRunFromStage:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
             if campaign.status != CampaignStatus.DRAFT:
                 # 423, like every other stage write.
                 return Failure(DataLockedError(f"Campaign is {campaign.status.value}"))

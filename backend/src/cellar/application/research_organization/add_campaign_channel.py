@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
@@ -59,6 +60,8 @@ class AddCampaignChannelCommand(Command):
     #: The stage that owns the column (it reads that stage's runs); None for a
     #: campaign column.
     stage_id: uuid.UUID | None = None
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class AddCampaignChannel:
@@ -100,6 +103,9 @@ class AddCampaignChannel:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
 
             try:
                 channel = CampaignChannel(

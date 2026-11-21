@@ -235,6 +235,10 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     # Migration 074 — freeform note recorded by CloseCampaign, cleared by ReopenCampaign.
     close_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The realm app that manages the campaign (only it changes structure); all three or none.
+    managed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    managed_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    managed_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Migration 079 — runs the campaign was seeded from, [{run_id, protocol_id}]
     # in insertion order (spec D4). Appended by every add-from-runs call.
     seed_runs: Mapped[list] = mapped_column(

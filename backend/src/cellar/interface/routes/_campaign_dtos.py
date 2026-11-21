@@ -126,6 +126,9 @@ class CreateCampaignRequest(BaseModel):
     description: str | None = None
     project_id: uuid.UUID
     supersedes_campaign_id: uuid.UUID | None = None
+    # Sent by the app that will manage the campaign (with its X-Service-Token).
+    managed_url: str | None = None
+    managed_label: str | None = None
 
 
 class UpdateCampaignRequest(BaseModel):
@@ -338,6 +341,21 @@ class CloseCampaignRequest(BaseModel):
 
 class ReopenCampaignRequest(BaseModel):
     reason: str
+
+
+class SetCampaignManagementRequest(BaseModel):
+    """Sent by the managing app: where the campaign lives there, and what to call that app."""
+
+    managed_url: str
+    managed_label: str
+
+    model_config = {"extra": "forbid"}
+
+
+class ReleaseCampaignRequest(BaseModel):
+    reason: str
+
+    model_config = {"extra": "forbid"}
 
 
 class MirrorProtocolRequest(BaseModel):
@@ -770,6 +788,11 @@ class _CampaignFieldsResponse(BaseModel):
     closed_at: datetime | None = None
     closed_by: uuid.UUID | None = None
     close_note: str | None = None
+    #: The realm app that manages the campaign (only it changes structure), where the campaign
+    #: lives there, and that app's display name; all null when ChemCellar manages it.
+    managed_by: str | None = None
+    managed_url: str | None = None
+    managed_label: str | None = None
     source_protocols: list[dict[str, Any]]
     #: Runs the campaign was seeded from, in insertion order (spec D4).
     seed_runs: list[SeedRunResponse]
@@ -816,6 +839,9 @@ class _CampaignFieldsResponse(BaseModel):
             "closed_at": c.closed_at,
             "closed_by": c.closed_by,
             "close_note": c.close_note,
+            "managed_by": c.management.managed_by if c.management else None,
+            "managed_url": c.management.url if c.management else None,
+            "managed_label": c.management.label if c.management else None,
             "source_protocols": c.source_protocols,
             "seed_runs": [SeedRunResponse.from_domain(s) for s in c.seed_runs],
             "created_by": c.created_by,

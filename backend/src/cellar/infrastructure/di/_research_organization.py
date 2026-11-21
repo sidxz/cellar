@@ -100,6 +100,7 @@ from cellar.application.research_organization.recompute_channel import Recompute
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
 )
+from cellar.application.research_organization.release_campaign import ReleaseCampaign
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
@@ -114,6 +115,9 @@ from cellar.application.research_organization.saved_visualizations import (
 )
 from cellar.application.research_organization.search_reference_resolution import (
     SearchReferenceResolver,
+)
+from cellar.application.research_organization.set_campaign_management import (
+    SetCampaignManagement,
 )
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
@@ -712,6 +716,22 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _set_campaign_management(c: Container) -> SetCampaignManagement:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetCampaignManagement(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _release_campaign(c: Container) -> ReleaseCampaign:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ReleaseCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     def _supersede(c: Container) -> SupersedeCampaignUC:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SupersedeCampaignUC(
@@ -801,6 +821,8 @@ def register_research_organization(container: Container) -> None:
     container.define(RefreshFromSources, _refresh)
     container.define(CloseCampaign, _close_campaign)
     container.define(ReopenCampaign, _reopen_campaign)
+    container.define(SetCampaignManagement, _set_campaign_management)
+    container.define(ReleaseCampaign, _release_campaign)
     container.define(SupersedeCampaignUC, _supersede)
     container.define(GetPublishedCampaign, _get_published)
     container.define(CampaignScientistReader, _campaign_scientist_reader)

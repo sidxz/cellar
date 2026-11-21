@@ -39,8 +39,14 @@ from cellar.application.research_organization.preview_run_import import (
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSourcesCommand,
 )
+from cellar.application.research_organization.release_campaign import (
+    ReleaseCampaignCommand,
+)
 from cellar.application.research_organization.reopen_campaign import (
     ReopenCampaignCommand,
+)
+from cellar.application.research_organization.set_campaign_management import (
+    SetCampaignManagementCommand,
 )
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaignCommand,
@@ -50,6 +56,7 @@ from cellar.application.research_organization.update_campaign_metadata import (
 )
 from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.interface.dependencies import (
+    ActingServiceDep,
     AddResultsFromCampaignDep,
     AddResultsFromCollectionDep,
     AddResultsFromRunsDep,
@@ -60,7 +67,9 @@ from cellar.interface.dependencies import (
     ListCampaignsDep,
     PreviewRunImportDep,
     RefreshFromSourcesDep,
+    ReleaseCampaignDep,
     ReopenCampaignDep,
+    SetCampaignManagementDep,
     SupersedeCampaignDep,
     UpdateCampaignMetadataDep,
 )
@@ -76,7 +85,9 @@ from cellar.interface.routes._campaign_dtos import (
     CloseCampaignRequest,
     CreateCampaignRequest,
     PreviewRunImportRequest,
+    ReleaseCampaignRequest,
     ReopenCampaignRequest,
+    SetCampaignManagementRequest,
     SupersedeRequest,
     UpdateCampaignRequest,
 )
@@ -89,15 +100,19 @@ async def create_campaign(
     body: CreateCampaignRequest,
     auth: AuthDep,
     uc: CreateCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Create an empty draft Campaign. Compounds are added via add-from-* endpoints."""
     cmd = CreateCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         project_id=body.project_id,
         name=body.name,
         description=body.description,
         created_by=auth.user_id,
         supersedes_campaign_id=body.supersedes_campaign_id,
+        managed_url=body.managed_url,
+        managed_label=body.managed_label,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -177,6 +192,7 @@ async def update_campaign(
     body: UpdateCampaignRequest,
     auth: AuthDep,
     uc: UpdateCampaignMetadataDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Update campaign name/description."""
     provided = body.model_fields_set
@@ -188,7 +204,7 @@ async def update_campaign(
         cmd_kwargs["name"] = body.name
     if "description" in provided:
         cmd_kwargs["description"] = body.description
-    cmd = UpdateCampaignMetadataCommand(**cmd_kwargs)
+    cmd = UpdateCampaignMetadataCommand(acting_service=acting, **cmd_kwargs)
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
 
@@ -199,9 +215,11 @@ async def add_results_from_collection(
     body: AddFromCollectionRequest,
     auth: AuthDep,
     uc: AddResultsFromCollectionDep,
+    acting: ActingServiceDep,
 ) -> AddResultsOutcomeResponse:
     """Add compound results from a Collection to a DRAFT campaign (idempotent)."""
     cmd = AddResultsFromCollectionCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         collection_id=body.collection_id,
@@ -217,9 +235,11 @@ async def add_results_from_campaign(
     body: AddFromCampaignRequest,
     auth: AuthDep,
     uc: AddResultsFromCampaignDep,
+    acting: ActingServiceDep,
 ) -> AddResultsOutcomeResponse:
     """Add compound results from another Campaign's filtered result set (idempotent)."""
     cmd = AddResultsFromCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         source_campaign_id=body.source_campaign_id,
@@ -260,6 +280,7 @@ async def add_results_from_runs(
     body: AddFromRunsRequest,
     auth: AuthDep,
     uc: AddResultsFromRunsDep,
+    acting: ActingServiceDep,
 ) -> AddResultsOutcomeResponse:
     """Add compound results from one or more protocol Runs (B6).
 
@@ -269,6 +290,7 @@ async def add_results_from_runs(
     when scope=hits_only.
     """
     cmd = AddResultsFromRunsCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         run_ids=body.run_ids,
@@ -289,9 +311,11 @@ async def refresh_campaign(
     campaign_id: uuid.UUID,
     auth: AuthDep,
     uc: RefreshFromSourcesDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Re-resolve all non-override measurements in a DRAFT campaign."""
     cmd = RefreshFromSourcesCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
     )
@@ -305,13 +329,58 @@ async def close_campaign(
     body: CloseCampaignRequest,
     auth: AuthDep,
     uc: CloseCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Lock a DRAFT campaign. No signature, no published Collection."""
     cmd = CloseCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         user_id=auth.user_id,
         note=body.note,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.put("/{campaign_id}/managed-by", response_model=CampaignResponse)
+async def set_campaign_management(
+    campaign_id: uuid.UUID,
+    body: SetCampaignManagementRequest,
+    auth: AuthDep,
+    uc: SetCampaignManagementDep,
+    acting: ActingServiceDep,
+) -> CampaignResponse:
+    """The app making the call (its X-Service-Token) manages this campaign from now on.
+
+    Only that app then changes the campaign's lifecycle and structure; calling again
+    updates where the campaign lives there.
+    """
+    cmd = SetCampaignManagementCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        managed_url=body.managed_url,
+        managed_label=body.managed_label,
+        acting_service=acting,
+        user_id=auth.user_id,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.post("/{campaign_id}/release", response_model=CampaignResponse)
+async def release_campaign(
+    campaign_id: uuid.UUID,
+    body: ReleaseCampaignRequest,
+    auth: AuthDep,
+    uc: ReleaseCampaignDep,
+) -> CampaignResponse:
+    """A workspace admin gives a managed campaign back to ChemCellar, with a reason."""
+    cmd = ReleaseCampaignCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        user_id=auth.user_id,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -323,9 +392,11 @@ async def reopen_campaign(
     body: ReopenCampaignRequest,
     auth: AuthDep,
     uc: ReopenCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Move a CLOSED campaign back to DRAFT. Superseded campaigns refuse this."""
     cmd = ReopenCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         user_id=auth.user_id,
@@ -341,6 +412,7 @@ async def supersede_campaign(
     body: SupersedeRequest,
     auth: AuthDep,
     uc: SupersedeCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Mark a closed campaign as superseded by a newer one.
 
@@ -349,6 +421,7 @@ async def supersede_campaign(
     Returns the old campaign (now SUPERSEDED).
     """
     cmd = SupersedeCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         old_campaign_id=campaign_id,
         new_campaign_id=body.new_campaign_id,

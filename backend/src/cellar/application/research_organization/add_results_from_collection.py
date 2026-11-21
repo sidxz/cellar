@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
@@ -38,6 +39,8 @@ class AddResultsFromCollectionCommand(Command):
     campaign_id: uuid.UUID
     collection_id: uuid.UUID
     description: str | None = None
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 @dataclass
@@ -90,6 +93,9 @@ class AddResultsFromCollection:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
 
             collection = await self._collection_repo.find_by_id_in_workspace(
                 input.workspace_id, input.collection_id

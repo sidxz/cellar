@@ -94,6 +94,7 @@ from cellar.application.research_organization.recompute_channel import Recompute
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
 )
+from cellar.application.research_organization.release_campaign import ReleaseCampaign
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
@@ -105,6 +106,9 @@ from cellar.application.research_organization.saved_visualizations import (
     GetSavedVisualization,
     ListSavedVisualizations,
     UpdateSavedVisualization,
+)
+from cellar.application.research_organization.set_campaign_management import (
+    SetCampaignManagement,
 )
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
@@ -192,6 +196,7 @@ __all__ = [
     "PreviewRunImportDep",
     "RecomputeChannelDep",
     "RefreshFromSourcesDep",
+    "ReleaseCampaignDep",
     "RemoveCampaignChannelDep",
     "RemoveCampaignCollectionDep",
     "RemoveCampaignStageDep",
@@ -201,6 +206,7 @@ __all__ = [
     "RemoveResultRowDep",
     "RemoveRunFromStageDep",
     "ReopenCampaignDep",
+    "SetCampaignManagementDep",
     "SetResultNotesDep",
     "SetStageOverrideDep",
     "SupersedeCampaignDep",
@@ -370,6 +376,10 @@ RemoveResultRowDep = Annotated[RemoveResultRow, Depends(_get_use_case(RemoveResu
 RefreshFromSourcesDep = Annotated[RefreshFromSources, Depends(_get_use_case(RefreshFromSources))]
 CloseCampaignDep = Annotated[CloseCampaign, Depends(_get_use_case(CloseCampaign))]
 ReopenCampaignDep = Annotated[ReopenCampaign, Depends(_get_use_case(ReopenCampaign))]
+ReleaseCampaignDep = Annotated[ReleaseCampaign, Depends(_get_use_case(ReleaseCampaign))]
+SetCampaignManagementDep = Annotated[
+    SetCampaignManagement, Depends(_get_use_case(SetCampaignManagement))
+]
 SupersedeCampaignDep = Annotated[SupersedeCampaignUC, Depends(_get_use_case(SupersedeCampaignUC))]
 GetPublishedCampaignDep = Annotated[
     GetPublishedCampaign, Depends(_get_use_case(GetPublishedCampaign))

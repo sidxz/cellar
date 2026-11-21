@@ -18,6 +18,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_management import (
+    CampaignManagement,
+    ensure_writable_by,
+)
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import (
     MAX_STAGE_CRITERIA,
@@ -30,6 +34,8 @@ from cellar.domain.research_organization.enums import CampaignStatus, StageKind
 from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
+    CampaignManagementSet,
+    CampaignReleased,
     CampaignReopened,
     CampaignSuperseded,
 )
@@ -72,6 +78,7 @@ class Campaign(AggregateRoot):
         stages: list[CampaignStage] | None = None,
         close_note: str | None = None,
         seed_runs: list[SeedRun] | None = None,
+        management: CampaignManagement | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         if not name or not name.strip():
@@ -92,6 +99,8 @@ class Campaign(AggregateRoot):
         self.stages: list[CampaignStage] = stages or []
         self.close_note = close_note
         self.seed_runs: list[SeedRun] = seed_runs or []
+        # The app that manages this campaign (only it changes lifecycle and structure), or None.
+        self.management = management
 
     # ----- factory -----
 
@@ -446,6 +455,51 @@ class Campaign(AggregateRoot):
                 workspace_id=self.workspace_id,
                 closed_by=closed_by,
                 note=note,
+            )
+        )
+
+    # ----- managed by another app -----
+
+    def ensure_writable_by(self, acting_service: str | None) -> None:
+        """Refuse a lifecycle or structural change unless the caller manages the campaign."""
+        ensure_writable_by(self.management, acting_service)
+
+    def set_management(self, management: CampaignManagement, *, user_id: uuid.UUID | None) -> None:
+        """Hand the campaign to the app that manages it (that app again: update where it lives)."""
+        if self.management is not None and self.management.managed_by != management.managed_by:
+            raise ConflictError(f"This campaign is already managed in {self.management.label}")
+        self.management = management
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            CampaignManagementSet(
+                aggregate_id=self.id,
+                aggregate_type="Campaign",
+                workspace_id=self.workspace_id,
+                managed_by=management.managed_by,
+                url=management.url,
+                label=management.label,
+                set_by=user_id,
+            )
+        )
+
+    def release_management(self, *, reason: str, user_id: uuid.UUID | None) -> None:
+        """Give a managed campaign back to ChemCellar (an admin's call, with a reason)."""
+        if not reason or not reason.strip():
+            raise ValidationError("Releasing a campaign needs a reason")
+        if self.management is None:
+            raise ConflictError("This campaign is not managed by another app")
+        previous = self.management
+        self.management = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            CampaignReleased(
+                aggregate_id=self.id,
+                aggregate_type="Campaign",
+                workspace_id=self.workspace_id,
+                previous_managed_by=previous.managed_by,
+                previous_label=previous.label,
+                reason=reason.strip(),
+                released_by=user_id,
             )
         )
 

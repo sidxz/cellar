@@ -141,6 +141,11 @@ function CampaignBuilderV2({
   const refreshing = refreshMutation.isPending;
   const onRefresh = () => refreshMutation.mutate({ campaignId: campaign.id });
 
+  // Curation (notes, outcome overrides, a cell pick) follows the draft status; structure
+  // (sources, columns, stages, compound rows) is also locked when another app manages it.
+  const curationLocked = campaign.status !== "draft";
+  const structureLocked = curationLocked || Boolean(campaign.managed_by);
+
   return (
     <div className="flex flex-col">
       <HeaderStrip
@@ -155,23 +160,19 @@ function CampaignBuilderV2({
       <SourcesSection
         campaign={campaign}
         projectId={projectId}
-        readOnly={campaign.status !== "draft"}
+        readOnly={structureLocked}
         selectedStageId={effectiveStageId}
       />
       {/* Libraries section hidden for now (owner's call, 2026-09-14). The
           backend endpoints and libraries-section.tsx stay as they are —
           uncomment this line and its import to bring the section back. */}
       {/* <LibrariesSection campaign={campaign} readOnly={campaign.status !== "draft"} /> */}
-      <ChannelsSection
-        campaign={campaign}
-        projectId={projectId}
-        readOnly={campaign.status !== "draft"}
-      />
+      <ChannelsSection campaign={campaign} projectId={projectId} readOnly={structureLocked} />
       <StagesSection
         campaign={campaign}
         selectedStageId={effectiveStageId}
         onSelectStage={selectStage}
-        readOnly={campaign.status !== "draft"}
+        readOnly={structureLocked}
       />
       <CampaignFilterBar
         campaign={campaign}
@@ -184,13 +185,14 @@ function CampaignBuilderV2({
         campaign={campaign}
         filters={filters}
         selectedStageId={effectiveStageId}
-        readOnly={campaign.status !== "draft"}
+        readOnly={curationLocked}
       />
       <ResultsGridV2
         campaign={campaign}
         filters={filters}
         selectedStageId={effectiveStageId}
-        readOnly={campaign.status !== "draft"}
+        readOnly={curationLocked}
+        rowsLocked={structureLocked}
       />
 
       <PreviewAsPublishedDialog

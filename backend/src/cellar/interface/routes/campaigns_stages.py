@@ -24,6 +24,7 @@ from cellar.application.research_organization.update_campaign_stage import (
 from cellar.domain.research_organization.campaign_stage import UNSET, StageCriterion
 from cellar.domain.research_organization.enums import StageKind, StageOutcome
 from cellar.interface.dependencies import (
+    ActingServiceDep,
     AddCampaignStageDep,
     AuthDep,
     RemoveCampaignStageDep,
@@ -49,9 +50,11 @@ async def add_campaign_stage(
     body: AddStageRequest,
     auth: AuthDep,
     uc: AddCampaignStageDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Add a hit-triage stage to a draft Campaign."""
     cmd = AddCampaignStageCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         name=body.name,
@@ -70,6 +73,7 @@ async def update_campaign_stage(
     body: UpdateStageRequest,
     auth: AuthDep,
     uc: UpdateCampaignStageDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Update a campaign stage.
 
@@ -100,6 +104,7 @@ async def update_campaign_stage(
     )
 
     cmd = UpdateCampaignStageCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         stage_id=stage_id,
@@ -119,9 +124,11 @@ async def remove_campaign_stage(
     stage_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveCampaignStageDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Remove a stage from a draft Campaign. 409 when child stages exist."""
     cmd = RemoveCampaignStageCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         stage_id=stage_id,
@@ -137,6 +144,7 @@ async def remove_run_from_stage(
     run_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveRunFromStageDep,
+    acting: ActingServiceDep,
 ) -> Response:
     """Take a run off a stage; the stage's columns recompute over the runs it has left.
 
@@ -145,6 +153,7 @@ async def remove_run_from_stage(
     stage; 423 once the campaign is closed.
     """
     cmd = RemoveRunFromStageCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         stage_id=stage_id,

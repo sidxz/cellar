@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -29,6 +30,8 @@ class RemoveCampaignChannelCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     channel_id: uuid.UUID
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class RemoveCampaignChannel:
@@ -68,6 +71,9 @@ class RemoveCampaignChannel:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
 
             if not any(c.id == input.channel_id for c in campaign.channels):
                 return Failure(NotFoundError("CampaignChannel", str(input.channel_id)))

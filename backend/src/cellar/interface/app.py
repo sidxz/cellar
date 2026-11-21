@@ -223,6 +223,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
         lifespan=lifespan,
     )
+    # The lifespan-managed instance (it fetches Duar's key), for verifying realm m2m tokens.
+    app.state.duar = duar
 
     # Auth middleware — validates IdP + Duar authz tokens
     duar.protect(

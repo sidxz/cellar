@@ -22,6 +22,7 @@ from cellar.application.research_organization.manage_campaign_collections import
     RemoveCampaignCollectionCommand,
 )
 from cellar.interface.dependencies import (
+    ActingServiceDep,
     AddCampaignCollectionDep,
     AuthDep,
     GetCampaignCollectionCoverageDep,
@@ -40,10 +41,12 @@ async def add_campaign_collection(
     collection_id: uuid.UUID,
     auth: AuthDep,
     uc: AddCampaignCollectionDep,
+    acting: ActingServiceDep,
 ) -> Response:
     """Name a library this campaign screened (idempotent)."""
     result = await uc(
         AddCampaignCollectionCommand(
+            acting_service=acting,
             workspace_id=auth.workspace_id,
             campaign_id=campaign_id,
             collection_id=collection_id,
@@ -60,10 +63,12 @@ async def remove_campaign_collection(
     collection_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveCampaignCollectionDep,
+    acting: ActingServiceDep,
 ) -> Response:
     """Unlink a library from this campaign."""
     result = await uc(
         RemoveCampaignCollectionCommand(
+            acting_service=acting,
             workspace_id=auth.workspace_id,
             campaign_id=campaign_id,
             collection_id=collection_id,

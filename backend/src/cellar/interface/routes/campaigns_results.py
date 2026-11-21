@@ -37,6 +37,7 @@ from cellar.application.research_organization.set_result_notes import (
 from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
 from cellar.domain.research_organization.enums import StageOutcome, ValueQualifier
 from cellar.interface.dependencies import (
+    ActingServiceDep,
     AddResultRowDep,
     AuthDep,
     ListCampaignResultsDep,
@@ -219,9 +220,11 @@ async def add_result_row(
     body: AddResultRowRequest,
     auth: AuthDep,
     uc: AddResultRowDep,
+    acting: ActingServiceDep,
 ) -> Response:
     """Add a new compound result row (manual attribution) to a DRAFT campaign."""
     cmd = AddResultRowCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         molecule_id=body.molecule_id,
@@ -236,9 +239,11 @@ async def remove_result_row(
     result_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveResultRowDep,
+    acting: ActingServiceDep,
 ) -> Response:
     """Remove a compound result row and its measurements from a DRAFT campaign."""
     cmd = RemoveResultRowCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         result_ids=[result_id],
@@ -253,6 +258,7 @@ async def bulk_remove_result_rows(
     body: BulkRemoveResultsRequest,
     auth: AuthDep,
     uc: RemoveResultRowDep,
+    acting: ActingServiceDep,
 ) -> Response:
     """Remove N compound result rows from a DRAFT campaign in one save.
 
@@ -260,6 +266,7 @@ async def bulk_remove_result_rows(
     the first unknown result id, with nothing removed.
     """
     cmd = RemoveResultRowCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         result_ids=body.result_ids,

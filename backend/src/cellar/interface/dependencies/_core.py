@@ -10,7 +10,8 @@ import os
 import uuid
 from typing import Annotated, Any
 
-from fastapi import Depends, Request
+from duar_auth import DuarError
+from fastapi import Depends, Header, HTTPException, Request
 from lagom import Container
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -35,6 +36,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 
 __all__ = [
+    "ActingServiceDep",
     "AuditServiceDep",
     "AuthDep",
     "EventDispatcherDep",
@@ -193,8 +195,37 @@ async def get_auth(
     return auth
 
 
+_SERVICE_HEADER_REFUSED = "X-Service-Token is not a valid realm service token"
+
+
+async def get_acting_service(
+    request: Request,
+    token: Annotated[str | None, Header(alias="X-Service-Token")] = None,
+) -> str | None:
+    """The realm app making this call, or None for ChemCellar's own client.
+
+    Another app in the realm (e.g. DAIKON) proves itself with a Duar m2m token beside the
+    user's own tokens; Duar stamps the token's ``caller``, so no user can pass as that app.
+    Verified with the lifespan Duar instance (``app.state.duar``), the one holding Duar's key.
+    A token that fails verification is refused rather than ignored, so a sending app's token
+    bug shows as itself and not as a lock.
+    """
+    if not token:
+        return None
+    duar = getattr(request.app.state, "duar", None)
+    if duar is None:
+        raise HTTPException(status_code=401, detail=_SERVICE_HEADER_REFUSED)
+    try:
+        return duar.verify_m2m_token(token).caller
+    except DuarError as exc:
+        status = exc.status_code if exc.status_code in (403, 503) else 401
+        detail = f"{_SERVICE_HEADER_REFUSED}: {exc}"
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+
 # Convenience type aliases for route handler signatures
 AuthDep = Annotated[Any, Depends(get_auth)]
+ActingServiceDep = Annotated[str | None, Depends(get_acting_service)]
 UoWDep = Annotated[AsyncUnitOfWork, Depends(get_uow)]
 SessionFactoryDep = Annotated[async_sessionmaker, Depends(get_session_factory)]
 SaltMatcherUoWDep = Annotated[tuple[SaltMatcher, AsyncUnitOfWork], Depends(get_salt_matcher_uow)]
