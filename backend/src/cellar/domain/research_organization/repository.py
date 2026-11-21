@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_management import CampaignManagement
 from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.collection_import_template import (
     CollectionImportTemplate,
@@ -264,6 +265,12 @@ class CampaignRepository(Protocol):
     ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...
+
+    async def find_management(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> CampaignManagement | None:
+        """Who manages the campaign, read without loading it; None when unmanaged or missing."""
+        ...
 
     async def find_status(
         self, workspace_id: uuid.UUID, campaign_id: uuid.UUID

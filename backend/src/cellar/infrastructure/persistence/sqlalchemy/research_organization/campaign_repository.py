@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_management import CampaignManagement
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
@@ -70,6 +71,22 @@ def _concentration_dicts(found: list[Concentration] | None) -> list[dict[str, An
     return [asdict(c) for c in found] if found is not None else None
 
 
+def _management(
+    managed_by: str | None, url: str | None, label: str | None
+) -> CampaignManagement | None:
+    if managed_by is None or url is None or label is None:
+        return None
+    return CampaignManagement(managed_by=managed_by, url=url, label=label)
+
+
+def _management_columns(management: CampaignManagement | None) -> dict[str, str | None]:
+    return {
+        "managed_by": management.managed_by if management else None,
+        "managed_url": management.url if management else None,
+        "managed_label": management.label if management else None,
+    }
+
+
 class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]):
     """Aggregate-cascade mapping for Campaign + channels + results + measurements.
 
@@ -110,6 +127,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             stages=stages,
             close_note=model.close_note,
             seed_runs=[SeedRun.from_dict(s) for s in (model.seed_runs or [])],
+            management=_management(model.managed_by, model.managed_url, model.managed_label),
         )
 
     def _to_model(self, aggregate: Campaign) -> CampaignModel:
@@ -132,6 +150,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             stages=[self._stage_to_model(s) for s in aggregate.stages],
             close_note=aggregate.close_note,
             seed_runs=[s.to_dict() for s in aggregate.seed_runs],
+            **_management_columns(aggregate.management),
         )
 
     def _update_model(self, model: CampaignModel, aggregate: Campaign) -> None:
@@ -145,6 +164,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.superseded_by_campaign_id = aggregate.superseded_by_campaign_id
         model.close_note = aggregate.close_note
         model.seed_runs = [s.to_dict() for s in aggregate.seed_runs]
+        for column, value in _management_columns(aggregate.management).items():
+            setattr(model, column, value)
 
         # Reconcile channels by id
         existing_channels = {ch.id: ch for ch in model.channels}
@@ -581,6 +602,18 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             CampaignStatus.CLOSED.value,
             CampaignStatus.SUPERSEDED.value,
         }
+
+    async def find_management(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> CampaignManagement | None:
+        stmt = select(
+            CampaignModel.managed_by, CampaignModel.managed_url, CampaignModel.managed_label
+        ).where(
+            CampaignModel.id == campaign_id,
+            CampaignModel.workspace_id == workspace_id,
+        )
+        row = (await self._session.execute(stmt)).one_or_none()
+        return _management(*row) if row is not None else None
 
     async def find_status(
         self, workspace_id: uuid.UUID, campaign_id: uuid.UUID

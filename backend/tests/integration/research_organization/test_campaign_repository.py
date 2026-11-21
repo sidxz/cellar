@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_management import CampaignManagement
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
@@ -794,3 +795,51 @@ async def test_removing_a_stage_that_owns_columns_persists(
             )
         ).one()
     assert tuple(left) == (0, 0, 0)
+
+
+_DAIKON = CampaignManagement(
+    managed_by="daikon", url="http://localhost:3002/screens/S1?round=R1", label="Daikon"
+)
+
+
+async def test_management_round_trips_and_clears(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign(add_channel=False)
+    c.set_management(_DAIKON, user_id=None)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id_in_workspace(c.workspace_id, c.id)
+        assert loaded is not None and loaded.management == _DAIKON
+        loaded.release_management(reason="round abandoned", user_id=None)
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        released = await SQLAlchemyCampaignRepository(uow).find_by_id_in_workspace(
+            c.workspace_id, c.id
+        )
+    assert released is not None and released.management is None
+
+
+async def test_find_management_is_workspace_scoped(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    managed = _build_campaign(add_channel=False)
+    managed.set_management(_DAIKON, user_id=None)
+    plain = _build_campaign(add_channel=False)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(managed)
+        await repo.save(plain)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        assert await repo.find_management(managed.workspace_id, managed.id) == _DAIKON
+        assert await repo.find_management(plain.workspace_id, plain.id) is None
+        assert await repo.find_management(uuid.uuid4(), managed.id) is None
