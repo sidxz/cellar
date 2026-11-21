@@ -558,6 +558,7 @@ LEFT_ALONE: dict[str, str] = {
     "campaign_channel.test_concentration": _NO_IDS,
     "campaign_measurement.concentrations_found": _NO_IDS,
     "campaign_measurement.qc_verdict_by": _USER,
+    "campaign_result.notes_edited_by": _USER,
     "campaign_channel.qc_filter": _NO_IDS,
     "cdd_molecule_imports.filter_criteria": _NO_IDS,
     "cdd_molecule_imports.report": _NO_IDS,

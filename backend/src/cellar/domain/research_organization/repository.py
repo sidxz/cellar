@@ -10,6 +10,7 @@ from typing import Protocol, runtime_checkable
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_management import CampaignManagement
+from cellar.domain.research_organization.campaign_result import ResultNote
 from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.collection_import_template import (
     CollectionImportTemplate,
@@ -270,6 +271,13 @@ class CampaignRepository(Protocol):
         self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
     ) -> CampaignManagement | None:
         """Who manages the campaign, read without loading it; None when unmanaged or missing."""
+        ...
+
+    async def find_result_note(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, result_id: uuid.UUID
+    ) -> ResultNote | None:
+        """One row's note and stamp, read without loading the campaign; None when the
+        result is not on that campaign in that workspace."""
         ...
 
     async def find_status(

@@ -15,7 +15,7 @@ from cellar.domain.research_organization.campaign_management import CampaignMana
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result import CampaignResult, ResultNote
 from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
@@ -886,3 +886,56 @@ async def test_measurement_qc_verdict_round_trips(
         None,
         None,
     )
+
+
+async def test_result_note_stamp_round_trips(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign(add_measurement=False)
+    r = c.results[0]
+    by, at = uuid.uuid4(), datetime(2026, 11, 21, 14, 3, tzinfo=UTC)
+    r.notes, r.notes_edited_by, r.notes_edited_at = "Watch hERG", by, at
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+
+    by2, at2 = uuid.uuid4(), datetime(2026, 11, 22, 8, 0, tzinfo=UTC)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        lr = loaded.results[0]
+        assert (lr.notes, lr.notes_edited_by, lr.notes_edited_at) == ("Watch hERG", by, at)
+        lr.notes, lr.notes_edited_by, lr.notes_edited_at = None, by2, at2
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        again = await SQLAlchemyCampaignRepository(uow).find_by_id(c.id)
+    assert again is not None
+    ar = again.results[0]
+    assert (ar.notes, ar.notes_edited_by, ar.notes_edited_at) == (None, by2, at2)
+
+
+async def test_find_result_note(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign(add_measurement=False)
+    other = _build_campaign(workspace_id=c.workspace_id, add_measurement=False)
+    noted = c.results[0]
+    by, at = uuid.uuid4(), datetime(2026, 11, 21, 14, 3, tzinfo=UTC)
+    noted.notes, noted.notes_edited_by, noted.notes_edited_at = "Watch hERG", by, at
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await repo.save(other)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        ws = c.workspace_id
+        assert await repo.find_result_note(ws, c.id, noted.id) == ResultNote("Watch hERG", by, at)
+        assert await repo.find_result_note(ws, other.id, noted.id) is None
+        assert await repo.find_result_note(uuid.uuid4(), c.id, noted.id) is None
+        blank = other.results[0]
+        assert await repo.find_result_note(ws, other.id, blank.id) == ResultNote(None, None, None)
