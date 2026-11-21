@@ -119,6 +119,7 @@ from cellar.application.research_organization.search_reference_resolution import
 from cellar.application.research_organization.set_campaign_management import (
     SetCampaignManagement,
 )
+from cellar.application.research_organization.set_cell_qc_verdicts import SetCellQcVerdicts
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
@@ -629,6 +630,15 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _set_cell_qc_verdicts(c: Container) -> SetCellQcVerdicts:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetCellQcVerdicts(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            identity_reader=SQLAlchemyCampaignIdentityReader(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     def _mirror_protocol_channels(c: Container) -> MirrorProtocolChannels:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MirrorProtocolChannels(
@@ -811,6 +821,7 @@ def register_research_organization(container: Container) -> None:
     container.define(RemoveCampaignStage, _remove_stage)
     container.define(RemoveRunFromStage, _remove_run_from_stage)
     container.define(SetStageOverride, _set_stage_override)
+    container.define(SetCellQcVerdicts, _set_cell_qc_verdicts)
     container.define(MirrorProtocolChannels, _mirror_protocol_channels)
     container.define(SetResultNotes, _set_result_notes)
     container.define(OverrideResultCell, _override_cell)

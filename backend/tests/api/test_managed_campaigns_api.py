@@ -264,6 +264,7 @@ async def test_curation_stays_open_on_a_managed_campaign(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
     workspace_id: uuid.UUID,
+    acting_as,
 ) -> None:
     m = await _build(client, session_factory, workspace_id)
     c = f"/api/v1/campaigns/{m.campaign_id}"
@@ -280,6 +281,20 @@ async def test_curation_stays_open_on_a_managed_campaign(
         json={"value": 50.0, "value_qualifier": "=", "unit": "%"},
     )
     assert pick.status_code < 300, pick.text
+
+    # QC verdicts: from ChemCellar, then from the managing app.
+    for service, verdict in ((None, "verified"), ("daikon", "failed")):
+        acting_as(service)
+        qc = await client.put(
+            f"{c}/qc-verdicts",
+            json={
+                "verdict": verdict,
+                "targets": [{"channel_ids": [m.channel_id], "result_ids": [m.result_id]}],
+                "overwrite": True,
+            },
+        )
+        assert qc.status_code == 200, qc.text
+        assert qc.json()["changed"] == 1
 
 
 async def test_create_superseding_a_managed_campaign_is_refused(

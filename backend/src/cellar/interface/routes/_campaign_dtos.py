@@ -12,7 +12,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cellar.application.research_organization.campaign_collection_coverage import (
     LibraryCoverage,
@@ -20,16 +20,19 @@ from cellar.application.research_organization.campaign_collection_coverage impor
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
 )
+from cellar.application.research_organization.set_cell_qc_verdicts import QcVerdictCounts
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
 from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
+    StageOutcome,
 )
 from cellar.domain.research_organization.measurement_facts import (
     ColumnDescription,
@@ -333,6 +336,43 @@ class BulkRemoveResultsRequest(BaseModel):
     result_ids: list[uuid.UUID]
 
     model_config = {"extra": "forbid"}
+
+
+class QcWhereRequest(BaseModel):
+    """The rows ``POST /results/search`` returns for this stage/outcome/filters."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage_id: uuid.UUID | None = None
+    outcome: list[StageOutcome] = Field(default_factory=list)
+    filters: CampaignResultFilters = Field(default_factory=CampaignResultFilters)
+
+
+class QcTargetRequest(BaseModel):
+    """Columns times rows: ``result_ids`` (``null`` = every row) or ``where``, never both."""
+
+    # A misspelt ``result_ids`` must not silently widen to every row.
+    model_config = ConfigDict(extra="forbid")
+
+    channel_ids: list[uuid.UUID] = Field(min_length=1)
+    result_ids: list[uuid.UUID] | None = None
+    where: QcWhereRequest | None = None
+
+    @model_validator(mode="after")
+    def _rows_named_one_way(self) -> QcTargetRequest:
+        if self.result_ids is not None and self.where is not None:
+            raise ValueError("a target takes result_ids or where, not both")
+        return self
+
+
+class SetQcVerdictsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal["verified", "failed", "not_tested"]
+    targets: list[QcTargetRequest] = Field(min_length=1)
+    #: Verified/Failed only: also replace the other verdict.
+    overwrite: bool = False
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class CloseCampaignRequest(BaseModel):
@@ -910,6 +950,21 @@ class CampaignSummaryResponse(_CampaignFieldsResponse):
     ) -> CampaignSummaryResponse:
         shared, _ = cls._shared(c, scientist_by_run_id, targets, descriptions)
         return cls(**shared, result_count=len(c.results))
+
+
+class QcVerdictCountsResponse(BaseModel):
+    """How each targeted cell fared; a cell named by two targets counts once."""
+
+    changed: int
+    unchanged: int
+    #: Already carried the other verdict and ``overwrite`` was false.
+    kept: int
+    #: No value or tested ND to judge (or no cell at all).
+    no_result: int
+
+    @classmethod
+    def from_domain(cls, counts: QcVerdictCounts) -> QcVerdictCountsResponse:
+        return cls(**asdict(counts))
 
 
 class AddResultsOutcomeResponse(BaseModel):
