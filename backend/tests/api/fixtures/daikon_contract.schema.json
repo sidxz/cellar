@@ -297,6 +297,9 @@
             ]
           },
           "notes":           { "type": ["string", "null"] },
+          "notes_edited_by": { "type": ["string", "null"], "format": "uuid" },
+          "notes_edited_at": { "type": ["string", "null"], "format": "date-time" },
+          "notes_version_count": { "type": "integer", "minimum": 0 },
           "measurements": {
             "type": "array",
             "items": {

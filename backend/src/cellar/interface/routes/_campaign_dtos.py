@@ -26,7 +26,7 @@ from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result import CampaignResult, ResultNote
 from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
 from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.enums import (
@@ -321,15 +321,55 @@ class BulkStageOverrideRequest(BaseModel):
 
 
 class SetResultNotesRequest(BaseModel):
-    """Set (or, with ``null``, clear) the free-text notes on one result row.
+    """Save (or, with ``null``, clear) the note on one result row, on any campaign status.
 
-    ``notes`` is a required key: an omitted key is a 422, so an empty PATCH
-    body can never silently clear a note. Explicit ``null`` still clears.
+    Both keys are required: an omitted key is a 422, so an empty body can never
+    clear a note and a body without ``expected_notes`` can never overwrite one
+    blind. ``expected_notes`` is the note as the editor opened it; when someone
+    has changed it since, the save is a 409 ``StaleEditError`` carrying
+    ``current``. Saving the same text as now changes nothing.
     """
 
     notes: str | None
+    expected_notes: str | None
 
     model_config = {"extra": "forbid"}
+
+
+class ResultNoteResponse(BaseModel):
+    """One row's note with who last saved it and when (null when unknown)."""
+
+    notes: str | None
+    notes_edited_by: uuid.UUID | None
+    notes_edited_at: datetime | None
+
+    @classmethod
+    def from_domain(cls, n: ResultNote) -> ResultNoteResponse:
+        return cls(notes=n.notes, notes_edited_by=n.edited_by, notes_edited_at=n.edited_at)
+
+
+class NoteVersionResponse(BaseModel):
+    """One version of a row's note: its text (null = removed), who and when (null when the
+    note predates tracking)."""
+
+    notes: str | None
+    edited_by: uuid.UUID | None
+    edited_at: datetime | None
+
+
+class ResultNoteHistoryResponse(BaseModel):
+    """Every version of a row's note, newest first; ``versions[0]`` is the current note."""
+
+    versions: list[NoteVersionResponse]
+
+    @classmethod
+    def from_domain(cls, versions: list[ResultNote]) -> ResultNoteHistoryResponse:
+        return cls(
+            versions=[
+                NoteVersionResponse(notes=v.notes, edited_by=v.edited_by, edited_at=v.edited_at)
+                for v in versions
+            ]
+        )
 
 
 class OverrideCellRequest(BaseModel):
@@ -566,6 +606,11 @@ class CampaignResultResponse(BaseModel):
     molecule_id: uuid.UUID
     representative_batch_id: uuid.UUID | None = None
     notes: str | None = None
+    #: Who last saved ``notes`` and when; null for a note that predates tracking.
+    notes_edited_by: uuid.UUID | None = None
+    notes_edited_at: datetime | None = None
+    #: How many versions ``GET …/notes/history`` lists for this row (0 = never noted).
+    notes_version_count: int = 0
     measurements: list[CampaignMeasurementResponse]
     stage_outcomes: list[StageOutcomeResponse]
 
@@ -580,6 +625,9 @@ class CampaignResultResponse(BaseModel):
             molecule_id=r.molecule_id,
             representative_batch_id=r.representative_batch_id,
             notes=r.notes,
+            notes_edited_by=r.notes_edited_by,
+            notes_edited_at=r.notes_edited_at,
+            notes_version_count=r.notes_version_count,
             measurements=[CampaignMeasurementResponse.from_domain(m) for m in r.measurements],
             stage_outcomes=[
                 StageOutcomeResponse.from_domain(o) for o in (outcomes or {}).values()

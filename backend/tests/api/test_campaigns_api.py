@@ -18,7 +18,7 @@ Coverage:
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -1372,61 +1372,155 @@ class TestCampaignResults:
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert len(get_resp.json()["results"]) == 1
 
-    async def test_set_result_notes_200(self, client: AsyncClient) -> None:
-        """Notes sent in the PATCH body are persisted on the result."""
+    async def _noted_row(self, client: AsyncClient, name: str) -> tuple[str, str]:
         project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes")
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, name)
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = campaign["id"]
-        result_id = campaign["results"][0]["id"]
+        return campaign["id"], campaign["results"][0]["id"]
+
+    async def test_set_result_notes_200(self, client: AsyncClient, user_id: uuid.UUID) -> None:
+        """A save answers with the note and who saved it when; the row carries the same."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes")
 
         resp = await client.patch(
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"notes": "Watch hERG"},
+            json={"notes": "Watch hERG", "expected_notes": None},
         )
-        # 204: the write answers with nothing rather than the whole matrix.
-        assert resp.status_code == 204, resp.text
-        assert resp.content == b""
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["notes"] == "Watch hERG"
+        assert body["notes_edited_by"] == str(user_id)
+        assert body["notes_edited_at"] is not None
 
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
-        updated_result = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
-        assert updated_result["notes"] == "Watch hERG"
+        row = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
+        assert (row["notes"], row["notes_edited_by"], row["notes_edited_at"]) == (
+            "Watch hERG",
+            str(user_id),
+            body["notes_edited_at"],
+        )
 
     async def test_set_result_notes_null_clears(self, client: AsyncClient) -> None:
-        """``{"notes": null}`` clears a previously set note."""
-        project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes2")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = campaign["id"]
-        result_id = campaign["results"][0]["id"]
+        """``{"notes": null}`` clears the note; the row keeps who cleared it and when."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes2")
+        url = f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
 
-        await client.patch(
-            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"notes": "clear me"},
-        )
-        resp = await client.patch(
-            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"notes": None},
-        )
-        assert resp.status_code == 204, resp.text
+        await client.patch(url, json={"notes": "clear me", "expected_notes": None})
+        resp = await client.patch(url, json={"notes": None, "expected_notes": "clear me"})
+        assert resp.status_code == 200, resp.text
 
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
-        updated_result = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
-        assert updated_result["notes"] is None
+        row = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
+        assert row["notes"] is None
+        assert row["notes_edited_at"] is not None
 
     async def test_set_result_notes_missing_key_422(self, client: AsyncClient) -> None:
-        """An empty PATCH body is rejected — it must never silently clear notes."""
+        """Both keys are required: an empty body never clears a note, and a body without
+        ``expected_notes`` never overwrites one blind."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes3")
+        url = f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+
+        for body in ({}, {"notes": "x"}):
+            resp = await client.patch(url, json=body)
+            assert resp.status_code == 422, resp.text
+
+    async def test_stale_note_409(self, client: AsyncClient, user_id: uuid.UUID) -> None:
+        """Two editors add a first note at once: the second is refused with the first's."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes-stale")
+        url = f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+
+        first = await client.patch(url, json={"notes": "first", "expected_notes": None})
+        assert first.status_code == 200, first.text
+        resp = await client.patch(url, json={"notes": "second", "expected_notes": None})
+        assert resp.status_code == 409, resp.text
+        body = resp.json()
+        assert body["error"] == "StaleEditError"
+        assert body["message"] == (
+            "Someone changed this note since you opened it. Your text was not saved."
+        )
+        current = body["current"]
+        assert (current["notes"], current["notes_edited_by"]) == ("first", str(user_id))
+        # Same instant as the first save's stamp (both ISO 8601; the offset is spelled
+        # "Z" by the 200 and "+00:00" by the error body).
+        assert datetime.fromisoformat(current["notes_edited_at"]) == datetime.fromisoformat(
+            first.json()["notes_edited_at"]
+        )
+
+    async def test_note_on_closed_campaign_200(self, client: AsyncClient) -> None:
+        """A closed campaign still takes notes: scientists annotate it months later."""
         project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes3")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = campaign["id"]
-        result_id = campaign["results"][0]["id"]
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes-closed")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+        result_id = close_resp.json()["results"][0]["id"]
 
         resp = await client.patch(
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={},
+            json={"notes": "Resynthesised batch was cleaner", "expected_notes": None},
         )
-        assert resp.status_code == 422, resp.text
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["notes_edited_at"] is not None
+
+    async def test_note_history(self, client: AsyncClient, user_id: uuid.UUID) -> None:
+        """Every save is a version, the clear included, newest first."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes-history")
+        url = f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+        for notes, expected in (("a", None), ("b", "a"), (None, "b")):
+            resp = await client.patch(url, json={"notes": notes, "expected_notes": expected})
+            assert resp.status_code == 200, resp.text
+
+        resp = await client.get(f"{url}/notes/history")
+        assert resp.status_code == 200, resp.text
+        versions = resp.json()["versions"]
+        assert [v["notes"] for v in versions] == [None, "b", "a"]
+        assert {v["edited_by"] for v in versions} == {str(user_id)}
+        assert all(v["edited_at"] is not None for v in versions)
+
+    async def test_note_version_count_matches_history(self, client: AsyncClient) -> None:
+        """A row says how many versions its history lists, on every read of the row."""
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes-count")
+        url = f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+
+        async def count_and_history() -> tuple[int, int, int]:
+            campaign = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+            row = next(r for r in campaign["results"] if r["id"] == result_id)
+            [page_row] = (await client.get(f"/api/v1/campaigns/{campaign_id}/results")).json()[
+                "items"
+            ]
+            versions = (await client.get(f"{url}/notes/history")).json()["versions"]
+            return row["notes_version_count"], page_row["notes_version_count"], len(versions)
+
+        assert await count_and_history() == (0, 0, 0)
+        for notes, expected in (("a", None), ("b", "a")):
+            await client.patch(url, json={"notes": notes, "expected_notes": expected})
+        assert await count_and_history() == (2, 2, 2)
+        await client.patch(url, json={"notes": None, "expected_notes": "b"})
+        assert await count_and_history() == (3, 3, 3)
+
+    async def test_note_history_unknown_result_404(self, client: AsyncClient) -> None:
+        campaign_id, _ = await self._noted_row(client, "Asp-notes-404")
+        resp = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results/{uuid.uuid4()}/notes/history"
+        )
+        assert resp.status_code == 404, resp.text
+        # The use case's 404, not a missing route's.
+        assert resp.json()["error"] == "NotFoundError"
+
+    async def test_rows_carry_note_stamp_on_results_page(
+        self, client: AsyncClient, user_id: uuid.UUID
+    ) -> None:
+        campaign_id, result_id = await self._noted_row(client, "Asp-notes-page")
+        await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
+            json={"notes": "Watch hERG", "expected_notes": None},
+        )
+
+        resp = await client.get(f"/api/v1/campaigns/{campaign_id}/results")
+        assert resp.status_code == 200, resp.text
+        [row] = resp.json()["items"]
+        assert row["notes_edited_by"] == str(user_id)
+        assert row["notes_edited_at"] is not None
 
 
 # ---------------------------------------------------------------------------
@@ -1698,6 +1792,27 @@ class TestGetPublishedCampaign:
         assert body["campaign"]["status"] == "draft"
         assert "channels" in body
         assert "results" in body
+
+    async def test_published_rows_carry_note_stamp(
+        self, client: AsyncClient, user_id: uuid.UUID
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-pub-note")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id, result_id = campaign["id"], campaign["results"][0]["id"]
+        saved = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
+            json={"notes": "Watch hERG", "expected_notes": None},
+        )
+        assert saved.status_code == 200, saved.text
+
+        resp = await client.get(f"/api/v1/campaigns/{campaign_id}/preview-published")
+        assert resp.status_code == 200, resp.text
+        [row] = resp.json()["results"]
+        assert row["notes"] == "Watch hERG"
+        assert row["notes_edited_by"] == str(user_id)
+        assert row["notes_edited_at"] is not None
+        assert row["notes_version_count"] == 1
 
 
 # ---------------------------------------------------------------------------

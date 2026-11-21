@@ -13,6 +13,7 @@ import type { UseQueryOptions } from "@tanstack/react-query";
 import {
   getCampaignApiV1CampaignsCampaignIdGet,
   getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet,
+  getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet,
 } from "@/shared/lib/api/campaigns/campaigns";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
@@ -33,6 +34,8 @@ export const campaignKeys = {
   byProject: (projectId: string) => ["campaigns", "by-project", projectId] as const,
   detail: (campaignId: string) => ["campaigns", campaignId] as const,
   summary: (campaignId: string) => ["campaigns", campaignId, "summary"] as const,
+  noteHistory: (campaignId: string, resultId: string) =>
+    ["campaigns", campaignId, "results", resultId, "note-history"] as const,
 } as const;
 
 // ─── List hook ───────────────────────────────────────────────────────────────
@@ -141,6 +144,21 @@ export function useCampaignSummary(
     queryFn: () => getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet(campaignId),
     enabled: !!campaignId,
     ...options,
+  });
+}
+
+// ─── Note history ────────────────────────────────────────────────────────────
+
+/** Every version of one row's note, newest first (`versions[0]` is the current note).
+ *  Mount it only when the history is shown: it fetches on mount. */
+export function useResultNoteHistory(campaignId: string, resultId: string) {
+  return useQuery({
+    queryKey: campaignKeys.noteHistory(campaignId, resultId),
+    queryFn: () =>
+      getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet(
+        campaignId,
+        resultId,
+      ),
   });
 }
 

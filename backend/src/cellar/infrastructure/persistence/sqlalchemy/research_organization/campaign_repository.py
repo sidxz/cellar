@@ -15,7 +15,7 @@ from cellar.domain.research_organization.campaign_management import CampaignMana
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result import CampaignResult, ResultNote
 from cellar.domain.research_organization.campaign_stage import (
     CampaignStage,
     StageCriterion,
@@ -352,6 +352,9 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             molecule_id=model.molecule_id,
             representative_batch_id=model.representative_batch_id,
             notes=model.notes,
+            notes_edited_by=model.notes_edited_by,
+            notes_edited_at=model.notes_edited_at,
+            notes_version_count=model.notes_version_count,
             added_from=added_from,
             measurements=[self._measurement_to_domain(mm) for mm in model.measurements],
             stage_overrides={
@@ -366,6 +369,9 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             molecule_id=r.molecule_id,
             representative_batch_id=r.representative_batch_id,
             notes=r.notes,
+            notes_edited_by=r.notes_edited_by,
+            notes_edited_at=r.notes_edited_at,
+            notes_version_count=r.notes_version_count,
             added_from=r.added_from.to_dict() if r.added_from is not None else None,
             measurements=[self._measurement_to_model(m) for m in r.measurements],
             stage_overrides=[self._override_to_model(so) for so in r.stage_overrides.values()],
@@ -375,6 +381,9 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.molecule_id = r.molecule_id
         model.representative_batch_id = r.representative_batch_id
         model.notes = r.notes
+        model.notes_edited_by = r.notes_edited_by
+        model.notes_edited_at = r.notes_edited_at
+        model.notes_version_count = r.notes_version_count
         # added_from is immutable after first write — only set if not already persisted
         if model.added_from is None and r.added_from is not None:
             model.added_from = r.added_from.to_dict()
@@ -624,6 +633,25 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         )
         row = (await self._session.execute(stmt)).one_or_none()
         return _management(*row) if row is not None else None
+
+    async def find_result_note(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, result_id: uuid.UUID
+    ) -> ResultNote | None:
+        stmt = (
+            select(
+                CampaignResultModel.notes,
+                CampaignResultModel.notes_edited_by,
+                CampaignResultModel.notes_edited_at,
+            )
+            .join(CampaignModel, CampaignModel.id == CampaignResultModel.campaign_id)
+            .where(
+                CampaignResultModel.id == result_id,
+                CampaignModel.id == campaign_id,
+                CampaignModel.workspace_id == workspace_id,
+            )
+        )
+        row = (await self._session.execute(stmt)).one_or_none()
+        return ResultNote(*row) if row is not None else None
 
     async def find_status(
         self, workspace_id: uuid.UUID, campaign_id: uuid.UUID

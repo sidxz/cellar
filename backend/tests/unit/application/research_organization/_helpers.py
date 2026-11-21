@@ -80,6 +80,30 @@ class FakeUnitOfWork:
 
 
 # ---------------------------------------------------------------------------
+# AuditSpy
+# ---------------------------------------------------------------------------
+
+
+class AuditSpy:
+    """Stands in for ``AuditRecordingService``: captures the last ``record(...)`` kwargs.
+
+    With ``fail_with`` set, ``record`` raises it after capturing the call.
+    """
+
+    def __init__(self) -> None:
+        self.last_record: dict[str, Any] | None = None
+        self.call_count = 0
+        self.fail_with: Exception | None = None
+
+    async def record(self, **kwargs: Any) -> object:
+        self.call_count += 1
+        self.last_record = kwargs
+        if self.fail_with is not None:
+            raise self.fail_with
+        return object()
+
+
+# ---------------------------------------------------------------------------
 # fake_auth
 # ---------------------------------------------------------------------------
 

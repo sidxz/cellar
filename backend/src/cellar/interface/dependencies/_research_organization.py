@@ -62,6 +62,9 @@ from cellar.application.research_organization.get_project_scope_stats import (
     GetProjectScopeStats,
 )
 from cellar.application.research_organization.get_published_campaign import GetPublishedCampaign
+from cellar.application.research_organization.get_result_note_history import (
+    GetResultNoteHistory,
+)
 from cellar.application.research_organization.get_saved_search import (
     GetSavedSearch,
     ListSavedSearches,
@@ -179,6 +182,7 @@ __all__ = [
     "GetProjectDep",
     "GetProjectScopeStatsDep",
     "GetPublishedCampaignDep",
+    "GetResultNoteHistoryDep",
     "GetSavedSearchDep",
     "GetSavedVisualizationDep",
     "ListCampaignResultsDep",
@@ -373,6 +377,9 @@ RemoveRunFromStageDep = Annotated[RemoveRunFromStage, Depends(_get_use_case(Remo
 SetStageOverrideDep = Annotated[SetStageOverride, Depends(_get_use_case(SetStageOverride))]
 SetCellQcVerdictsDep = Annotated[SetCellQcVerdicts, Depends(_get_use_case(SetCellQcVerdicts))]
 SetResultNotesDep = Annotated[SetResultNotes, Depends(_get_use_case(SetResultNotes))]
+GetResultNoteHistoryDep = Annotated[
+    GetResultNoteHistory, Depends(_get_use_case(GetResultNoteHistory))
+]
 OverrideResultCellDep = Annotated[OverrideResultCell, Depends(_get_use_case(OverrideResultCell))]
 AddResultRowDep = Annotated[AddResultRow, Depends(_get_use_case(AddResultRow))]
 RemoveResultRowDep = Annotated[RemoveResultRow, Depends(_get_use_case(RemoveResultRow))]

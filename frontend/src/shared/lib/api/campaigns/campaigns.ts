@@ -57,6 +57,8 @@ import type {
   QcVerdictCountsResponse,
   ReleaseCampaignRequest,
   ReopenCampaignRequest,
+  ResultNoteHistoryResponse,
+  ResultNoteResponse,
   SearchCampaignResultsRequest,
   SetCampaignManagementRequest,
   SetQcVerdictsRequest,
@@ -2811,7 +2813,11 @@ export const useAddResultRowApiV1CampaignsCampaignIdResultsPost = <TError = HTTP
       return useMutation(getAddResultRowApiV1CampaignsCampaignIdResultsPostMutationOptions(options), queryClient);
     }
     /**
- * Set (or, with ``null``, clear) the free-text notes on one result row.
+ * Save (or, with ``null``, clear) the note on one result row, on any campaign status.
+ *
+ * Answers with the row's note and who saved it when. A save whose
+ * ``expected_notes`` is no longer the current note is a 409 ``StaleEditError``
+ * whose ``current`` is the note as it now stands.
  * @summary Set Result Notes
  */
 export const setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch = (
@@ -2822,7 +2828,7 @@ export const setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch = (
 ) => {
 
 
-      return customInstance<void>(
+      return customInstance<ResultNoteResponse>(
       {url: `/api/v1/campaigns/${campaignId}/results/${resultId}`, method: 'PATCH',
       headers: {'Content-Type': 'application/json', },
       data: setResultNotesRequest, signal
@@ -2868,7 +2874,11 @@ const {mutation: mutationOptions} = options ?
     export type SetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatchMutationVariables = {campaignId: string;resultId: string;data: SetResultNotesRequest}
 
     /**
- * Set (or, with ``null``, clear) the free-text notes on one result row.
+ * Save (or, with ``null``, clear) the note on one result row, on any campaign status.
+ *
+ * Answers with the row's note and who saved it when. A save whose
+ * ``expected_notes`` is no longer the current note is a 409 ``StaleEditError``
+ * whose ``current`` is the note as it now stands.
  * @summary Set Result Notes
  */
 export const useSetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch = <TError = HTTPValidationError,
@@ -2950,6 +2960,133 @@ export const useRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDelete = <
       return useMutation(getRemoveResultRowApiV1CampaignsCampaignIdResultsResultIdDeleteMutationOptions(options), queryClient);
     }
     /**
+ * Every version of one row's note, newest first; ``versions[0]`` is the current note.
+ *
+ * A removed note is a version with ``notes: null``. A note written before saves
+ * were tracked is the oldest version, with ``edited_by`` and ``edited_at`` null.
+ * @summary Get Result Note History
+ */
+export const getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet = (
+    campaignId: string,
+    resultId: string,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<ResultNoteHistoryResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/results/${resultId}/notes/history`, method: 'GET', signal
+    },
+      );
+    }
+
+
+
+
+export const getGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGetQueryKey = (campaignId: string,
+    resultId: string,) => {
+    return [
+    `/api/v1/campaigns/${campaignId}/results/${resultId}/notes/history`
+    ] as const;
+    }
+
+
+export const getGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGetQueryOptions = <TData = Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError = HTTPValidationError>(campaignId: string,
+    resultId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGetQueryKey(campaignId,resultId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>> = ({ signal }) => getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet(campaignId,resultId, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: campaignId !== null && campaignId !== undefined && resultId !== null && resultId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGetQueryResult = NonNullable<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>>
+export type GetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGetQueryError = HTTPValidationError
+
+
+/**
+ * Every version of one row's note, newest first; ``versions[0]`` is the current note.
+ *
+ * A removed note is a version with ``notes: null``. A note written before saves
+ * were tracked is the oldest version, with ``edited_by`` and ``edited_at`` null.
+ * @summary Get Result Note History
+ */
+export function useGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet<TData = Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    resultId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>,
+          TError,
+          Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Every version of one row's note, newest first; ``versions[0]`` is the current note.
+ *
+ * A removed note is a version with ``notes: null``. A note written before saves
+ * were tracked is the oldest version, with ``edited_by`` and ``edited_at`` null.
+ * @summary Get Result Note History
+ */
+export function useGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet<TData = Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    resultId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>,
+          TError,
+          Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Every version of one row's note, newest first; ``versions[0]`` is the current note.
+ *
+ * A removed note is a version with ``notes: null``. A note written before saves
+ * were tracked is the oldest version, with ``edited_by`` and ``edited_at`` null.
+ * @summary Get Result Note History
+ */
+export function useGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet<TData = Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    resultId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Every version of one row's note, newest first; ``versions[0]`` is the current note.
+ *
+ * A removed note is a version with ``notes: null``. A note written before saves
+ * were tracked is the oldest version, with ``edited_by`` and ``edited_at`` null.
+ * @summary Get Result Note History
+ */
+export function useGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet<TData = Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    resultId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetResultNoteHistoryApiV1CampaignsCampaignIdResultsResultIdNotesHistoryGetQueryOptions(campaignId,resultId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
  * Manually override a single (result, channel) measurement cell.
  * @summary Override Result Cell
  */

@@ -8,6 +8,7 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
@@ -67,6 +68,9 @@ from cellar.application.research_organization.get_project_scope_stats import (
     GetProjectScopeStats,
 )
 from cellar.application.research_organization.get_published_campaign import GetPublishedCampaign
+from cellar.application.research_organization.get_result_note_history import (
+    GetResultNoteHistory,
+)
 from cellar.application.research_organization.get_saved_search import (
     GetSavedSearch,
     ListSavedSearches,
@@ -136,6 +140,7 @@ from cellar.application.research_organization.update_saved_search import UpdateS
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.visualization.dataset_reader import VisualizationDatasetReader
+from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.research_organization.repository import (
     CampaignRepository,
     CollectionImportTemplateRepository,
@@ -654,7 +659,16 @@ def register_research_organization(container: Container) -> None:
         return SetResultNotes(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
+            audit=c[AuditRecordingService],
             dispatcher=c[EventDispatcher],
+        )
+
+    def _get_result_note_history(c: Container) -> GetResultNoteHistory:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetResultNoteHistory(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            audit_repository=c[AuditRepository],
         )
 
     def _override_cell(c: Container) -> OverrideResultCell:
@@ -824,6 +838,7 @@ def register_research_organization(container: Container) -> None:
     container.define(SetCellQcVerdicts, _set_cell_qc_verdicts)
     container.define(MirrorProtocolChannels, _mirror_protocol_channels)
     container.define(SetResultNotes, _set_result_notes)
+    container.define(GetResultNoteHistory, _get_result_note_history)
     container.define(OverrideResultCell, _override_cell)
     container.define(AddResultRow, _add_result_row)
     container.define(RemoveResultRow, _remove_result_row)

@@ -1,17 +1,22 @@
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result import (
+    CampaignResult,
+    ResultNote,
+    StaleNoteError,
+)
 from cellar.domain.research_organization.campaign_stage import StageOverride
 from cellar.domain.research_organization.enums import (
     StageOutcome,
     ValueQualifier,
 )
-from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import StaleEditError, ValidationError
 
 
 def _make_measurement(
@@ -120,3 +125,103 @@ def test_clear_stage_override_removes_and_returns_true():
 def test_clear_stage_override_missing_returns_false():
     r = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
     assert r.clear_stage_override(uuid.uuid4()) is False
+
+
+# ---------------------------------------------------------------------------
+# Notes: who saved them, when, and the stale check
+# ---------------------------------------------------------------------------
+
+_T0 = datetime(2026, 11, 1, 9, 0, tzinfo=UTC)
+_T = datetime(2026, 11, 21, 14, 3, tzinfo=UTC)
+
+
+def _row(
+    notes: str | None = None, by: uuid.UUID | None = None, at: datetime | None = None
+) -> CampaignResult:
+    r = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
+    r.notes, r.notes_edited_by, r.notes_edited_at = notes, by, at
+    return r
+
+
+class TestSetNotes:
+    def test_saves_trimmed_text_and_stamps(self) -> None:
+        u, r = uuid.uuid4(), _row()
+        assert r.set_notes("  Watch hERG ", expected_notes=None, by=u, at=_T) is True
+        assert r.note == ResultNote("Watch hERG", u, _T)
+
+    def test_blank_clears_and_keeps_a_stamp(self) -> None:
+        u, r = uuid.uuid4(), _row("old", uuid.uuid4(), _T0)
+        assert r.set_notes("  \n", expected_notes="old", by=u, at=_T) is True
+        assert r.note == ResultNote(None, u, _T)
+
+    def test_same_text_is_no_change(self) -> None:
+        a = uuid.uuid4()
+        r = _row("keep", a, _T0)
+        assert r.set_notes(" keep ", expected_notes="stale text", by=uuid.uuid4(), at=_T) is False
+        assert r.note == ResultNote("keep", a, _T0)
+
+    def test_expected_compares_after_normalizing(self) -> None:
+        r = _row("old", uuid.uuid4(), _T0)
+        assert r.set_notes("new", expected_notes="  old\n", by=uuid.uuid4(), at=_T) is True
+        assert r.notes == "new"
+
+    def test_stale_expected_raises_with_current(self) -> None:
+        a = uuid.uuid4()
+        r = _row("theirs", a, _T0)
+        with pytest.raises(StaleNoteError) as exc:
+            r.set_notes("mine", expected_notes="what I opened", by=uuid.uuid4(), at=_T)
+        assert exc.value.current == ResultNote("theirs", a, _T0)
+        assert r.note == ResultNote("theirs", a, _T0)
+
+    def test_first_note_race(self) -> None:
+        r = _row("first", uuid.uuid4(), _T0)
+        with pytest.raises(StaleNoteError):
+            r.set_notes("second", expected_notes=None, by=uuid.uuid4(), at=_T)
+        assert r.notes == "first"
+
+
+class TestNoteVersionCount:
+    """``notes_version_count`` is the number of versions the note's history lists."""
+
+    def test_each_change_counts_a_version(self) -> None:
+        r, u = _row(), uuid.uuid4()
+        assert r.notes_version_count == 0
+        counts = []
+        for text, expected in (("a", None), ("b", "a"), (None, "b")):
+            r.set_notes(text, expected_notes=expected, by=u, at=_T)
+            counts.append(r.notes_version_count)
+        assert counts == [1, 2, 3]
+
+    def test_no_op_and_stale_saves_do_not_count(self) -> None:
+        r = _row("keep", uuid.uuid4(), _T0)
+        r.notes_version_count = 1
+        r.set_notes(" keep ", expected_notes="keep", by=uuid.uuid4(), at=_T)
+        with pytest.raises(StaleNoteError):
+            r.set_notes("mine", expected_notes="what I opened", by=uuid.uuid4(), at=_T)
+        assert r.notes_version_count == 1
+
+    def test_legacy_note_counts_from_one(self) -> None:
+        r = CampaignResult(
+            campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4(), notes="x", notes_version_count=1
+        )
+        r.set_notes("y", expected_notes="x", by=uuid.uuid4(), at=_T)
+        assert r.notes_version_count == 2
+
+
+def test_stale_note_error_body() -> None:
+    u = uuid.uuid4()
+    assert StaleNoteError(ResultNote("x", u, _T)).body_extras() == {
+        "error": "StaleEditError",
+        "current": {"notes": "x", "notes_edited_by": str(u), "notes_edited_at": _T.isoformat()},
+    }
+    assert StaleNoteError(ResultNote(None, None, None)).body_extras()["current"] == {
+        "notes": None,
+        "notes_edited_by": None,
+        "notes_edited_at": None,
+    }
+
+
+def test_stale_note_error_is_a_stale_edit() -> None:
+    err = StaleNoteError(ResultNote("x", None, None))
+    assert isinstance(err, StaleEditError)
+    assert err.message == "Someone changed this note since you opened it. Your text was not saved."

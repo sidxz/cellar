@@ -343,6 +343,13 @@ class CampaignResultModel(Base, EntityModelMixin):
         Uuid(as_uuid=True), nullable=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_edited_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    notes_edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    notes_version_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     added_from: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     measurements: Mapped[list[CampaignMeasurementModel]] = relationship(
