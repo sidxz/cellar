@@ -3,6 +3,9 @@
 ``campaign_channel.qc_filter`` is JSONB. A filter left with nothing meaningful (an empty
 object, or only ``require_approved: false``) becomes NULL.
 
+Closed and superseded campaigns are left alone: their stored filter records how their
+frozen values were picked, and no compliance trigger is disabled to rewrite them.
+
 Downgrade is a no-op: the removed values cannot be restored.
 """
 
@@ -19,13 +22,17 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "UPDATE campaign_channel SET qc_filter = qc_filter - 'min_z_prime' "
-            "WHERE qc_filter ? 'min_z_prime'"
+            "WHERE qc_filter ? 'min_z_prime' "
+            "AND campaign_id NOT IN (SELECT id FROM campaign "
+            "WHERE status IN ('closed','superseded'))"
         )
     )
     op.execute(
         sa.text(
             "UPDATE campaign_channel SET qc_filter = NULL WHERE qc_filter IS NOT NULL "
-            "AND (qc_filter = '{}'::jsonb OR qc_filter = '{\"require_approved\": false}'::jsonb)"
+            "AND (qc_filter = '{}'::jsonb OR qc_filter = '{\"require_approved\": false}'::jsonb) "
+            "AND campaign_id NOT IN (SELECT id FROM campaign "
+            "WHERE status IN ('closed','superseded'))"
         )
     )
 

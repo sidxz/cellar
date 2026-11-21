@@ -104,7 +104,7 @@ def _channel(cid: uuid.UUID, label: str, protocol: uuid.UUID, order: int) -> Cam
         selection_rule=SelectionRule.MEAN_ACROSS_RUNS,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=order,
-        qc_filter={"z_prime_min": 0.5},
+        qc_filter={"require_approved": True},
         normalization_applied="percent_inhibition",
     )
 

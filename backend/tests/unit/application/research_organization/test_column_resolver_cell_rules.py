@@ -139,7 +139,7 @@ def test_no_candidates_yields_nd():
     assert not m.is_tested_nd
 
 
-def test_stored_min_z_prime_is_ignored_by_old_data():
+def test_old_columns_stored_min_z_prime_is_ignored():
     """A column saved before min-Z' was removed still says min_z_prime: runs
     are not dropped for it."""
     ch = _channel(SelectionRule.LATEST_RUN, qc={"min_z_prime": 0.5})

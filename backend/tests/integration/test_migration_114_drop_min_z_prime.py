@@ -46,6 +46,7 @@ async def test_migration_114_strips_min_z_prime(tx) -> None:  # type: ignore[no-
         {"min_z_prime": 0.5},
         {"require_approved": True, "min_z_prime": 0.5},
         {"require_approved": False},
+        None,
     ]
     channels = [
         CampaignChannel(
@@ -61,6 +62,27 @@ async def test_migration_114_strips_min_z_prime(tx) -> None:  # type: ignore[no-
         )
         for i, f in enumerate(filters)
     ]
+    locked_cid = uuid.uuid4()
+    locked = Campaign(
+        id=locked_cid,
+        workspace_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        name=f"m114-locked-{locked_cid.hex[:6]}",
+        created_by=uuid.uuid4(),
+        channels=[
+            CampaignChannel(
+                campaign_id=locked_cid,
+                label="L0",
+                protocol_id=uuid.uuid4(),
+                readout_definition_id=uuid.uuid4(),
+                source_kind=ChannelSourceKind.READOUT_DATA,
+                selection_rule=SelectionRule.LATEST_RUN,
+                qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+                display_order=0,
+                qc_filter={"min_z_prime": 0.5},
+            )
+        ],
+    )
     campaign = Campaign(
         id=cid,
         workspace_id=uuid.uuid4(),
@@ -71,7 +93,11 @@ async def test_migration_114_strips_min_z_prime(tx) -> None:  # type: ignore[no-
     )
     async with AsyncUnitOfWork(factory) as uow:
         await SQLAlchemyCampaignRepository(uow).save(campaign)
+        await SQLAlchemyCampaignRepository(uow).save(locked)
         await uow.commit()
+    await conn.execute(
+        sa.text("UPDATE campaign SET status = 'closed' WHERE id = :id"), {"id": locked_cid}
+    )
 
     spec = importlib.util.spec_from_file_location(_M114.stem, _M114)
     assert spec is not None and spec.loader is not None
@@ -88,4 +114,8 @@ async def test_migration_114_strips_min_z_prime(tx) -> None:  # type: ignore[no-
         {"c": cid},
     )
     got = {label: qc for label, qc in rows}
-    assert got == {"C0": None, "C1": {"require_approved": True}, "C2": None}
+    assert got == {"C0": None, "C1": {"require_approved": True}, "C2": None, "C3": None}
+    locked_row = await conn.execute(
+        sa.text("SELECT qc_filter FROM campaign_channel WHERE campaign_id = :c"), {"c": locked_cid}
+    )
+    assert locked_row.scalar_one() == {"min_z_prime": 0.5}
