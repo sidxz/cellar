@@ -219,7 +219,8 @@ async def get_acting_service(
         return duar.verify_m2m_token(token).caller
     except DuarError as exc:
         status = exc.status_code if exc.status_code in (403, 503) else 401
-        raise HTTPException(status_code=status, detail=f"{_SERVICE_HEADER_REFUSED}: {exc}") from exc
+        detail = f"{_SERVICE_HEADER_REFUSED}: {exc}"
+        raise HTTPException(status_code=status, detail=detail) from exc
 
 
 # Convenience type aliases for route handler signatures
