@@ -33,6 +33,7 @@ import { CampaignView } from "./campaign-view";
 import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
+import { QcBulkMenu } from "./qc-bulk-menu";
 import { StageBulkMenu } from "./stage-bulk-menu";
 
 import { ChannelsSection } from "./sections/channels-section";
@@ -187,6 +188,12 @@ function CampaignBuilderV2({
         resultCount={campaign.results?.length ?? 0}
       />
       <StageBulkMenu
+        campaign={campaign}
+        filters={filters}
+        selectedStageId={effectiveStageId}
+        readOnly={curationLocked}
+      />
+      <QcBulkMenu
         campaign={campaign}
         filters={filters}
         selectedStageId={effectiveStageId}
