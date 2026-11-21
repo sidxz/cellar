@@ -42,6 +42,9 @@ vi.mock("@/shared/components/data-grid/data-grid", () => ({
 vi.mock("@/features/chemical-registration", () => ({
   useMoleculesByIds: () => ({ data: { items: [] } }),
 }));
+vi.mock("@/shared/hooks/use-workspace-members", () => ({
+  useMemberNames: () => () => "Ada",
+}));
 vi.mock("../../hooks/use-campaign-curves", () => ({
   useCampaignCurves: () => ({ data: new Map() }),
 }));
@@ -652,5 +655,71 @@ describe("ResultsGridV2 on a campaign another app manages", () => {
   it("keeps compound removal on a campaign ChemCellar manages", () => {
     renderGrid(false);
     expect(grid.selectionToolbar).toBeTypeOf("function");
+  });
+});
+
+describe("ResultsGridV2 QC marks", () => {
+  const channel = {
+    id: "ch-q",
+    label: "Inhibition",
+    protocol_id: "proto-1",
+    readout_definition_id: "rd-q",
+    selection_rule: "latest_run",
+    stage_id: null,
+    source_kind: "readout_data",
+    display_order: 0,
+  } as unknown as CampaignChannelResponse;
+
+  function renderValueCell(m: Partial<CampaignMeasurementResponse>) {
+    const campaign = {
+      id: "c-qc",
+      stages: [],
+      channels: [channel],
+      results: [
+        {
+          id: "r1",
+          molecule_id: "mol-1",
+          measurements: [{ id: "m1", channel_id: "ch-q", qc_verdict: "not_tested", ...m }],
+          stage_outcomes: [],
+        },
+      ],
+    } as unknown as CampaignResponse;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ResultsGridV2
+          campaign={campaign}
+          filters={emptyFilters()}
+          selectedStageId={null}
+          readOnly={false}
+        />
+      </QueryClientProvider>,
+    );
+    const col = grid.columnDefs
+      .flatMap((c) => ("children" in c ? c.children : [c]))
+      .find((c) => (c as ColDef).colId === "ch-q_value") as ColDef;
+    const Renderer = col.cellRenderer as ComponentType<unknown>;
+    const params = { data: { result: campaign.results[0] } };
+    return render(
+      <QueryClientProvider client={qc}>
+        <Renderer {...(params as object)} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("marks a verified cell", () => {
+    renderValueCell({ value: 5, value_qualifier: "=", qc_verdict: "verified", holds_result: true });
+    expect(screen.getByLabelText("QC verified")).toBeInTheDocument();
+  });
+
+  it("marks nothing on a not-tested cell", () => {
+    renderValueCell({ value: 5, value_qualifier: "=", holds_result: true });
+    expect(screen.queryByLabelText(/^QC /)).toBeNull();
+  });
+
+  it("opens the QC control from a tested ND", () => {
+    renderValueCell({ value: null, value_qualifier: "nd", holds_result: true });
+    fireEvent.click(screen.getByRole("button", { name: "ND" }));
+    expect(screen.getByRole("button", { name: "Verified" })).toBeInTheDocument();
   });
 });

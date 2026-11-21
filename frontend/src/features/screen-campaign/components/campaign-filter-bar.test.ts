@@ -32,6 +32,8 @@ function makeMeasurement(
     is_manual_override: false,
     protocol_name_snapshot: "NadD-Sumo HTS",
     protocol_version_snapshot: 1,
+    qc_verdict: "not_tested",
+    holds_result: true,
     ...overrides,
   };
 }

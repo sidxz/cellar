@@ -81,6 +81,7 @@ import { OverrideModal } from "../override-modal";
 
 import { CurveExpandDialog, type ExpandedCurve } from "./curve-expand-dialog";
 import { NotesCell } from "./notes-cell";
+import { QcMark, QcVerdictControl } from "./qc-verdict-control";
 import { StageOutcomeCell } from "./stage-outcome-cell";
 
 import type {
@@ -212,6 +213,8 @@ export interface CompoundValueCellProps {
   onEdit: () => void;
   /** The value's facts, opened by clicking the value. */
   facts?: ReactNode;
+  /** The QC verdict mark beside the value. */
+  qcMark?: ReactNode;
 }
 
 export function CompoundValueCell({
@@ -226,6 +229,7 @@ export function CompoundValueCell({
   readOnly,
   onEdit,
   facts,
+  qcMark,
 }: CompoundValueCellProps) {
   const text = `${prefix}${formatMeasurementValue(value)}${unit ? ` ${unit}` : ""}`;
   return (
@@ -251,7 +255,7 @@ export function CompoundValueCell({
         {/* Verdict + override markers sit on their own line so they never
             push past the 120px value column (a "pass" chip inline after
             "13.6 uM" clipped to "pa"). */}
-        {(verdict === "pass" || verdict === "fail" || overridden || reported) && (
+        {(verdict === "pass" || verdict === "fail" || overridden || reported || qcMark) && (
           <div className="mt-0.5 flex items-center gap-1">
             <VerdictChip verdict={verdict} />
             {overridden && (
@@ -264,6 +268,7 @@ export function CompoundValueCell({
               </Badge>
             )}
             {reported && <ReportedEndpointBadge />}
+            {qcMark}
           </div>
         )}
         {replicates != null && replicates > 1 && (
@@ -392,15 +397,39 @@ const UNRESOLVED_REASON_TEXT: Record<string, string> = {
   no_runs_at_stage: "No runs at this stage yet",
 };
 
-/** ND, with the reason it is untested on hover when the column knows it. */
-export function NotDeterminedCell({ unresolvedReason }: { unresolvedReason?: string | null }) {
+/** ND, with the reason it is untested on hover when the column knows it. A tested ND can
+ *  carry a QC verdict, so it opens the same facts card as a value. */
+export function NotDeterminedCell({
+  unresolvedReason,
+  facts,
+  qcMark,
+}: {
+  unresolvedReason?: string | null;
+  facts?: ReactNode;
+  qcMark?: ReactNode;
+}) {
   const reason = unresolvedReason ? UNRESOLVED_REASON_TEXT[unresolvedReason] : undefined;
+  const title = reason ?? "ND = Not Determined. No reportable result is available for this cell.";
+  const cls = `font-mono text-muted-foreground ${reason ? "cursor-help" : ""}`;
   return (
-    <span
-      className={`font-mono text-muted-foreground ${reason ? "cursor-help" : ""}`}
-      title={reason ?? "ND = Not Determined. No reportable result is available for this cell."}
-    >
-      ND
+    <span className="inline-flex items-center gap-1">
+      {facts ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" className={`${cls} hover:underline`} title={title}>
+              ND
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-72 p-3">
+            {facts}
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <span className={cls} title={title}>
+          ND
+        </span>
+      )}
+      {qcMark}
     </span>
   );
 }
@@ -671,6 +700,17 @@ export function ResultsGridV2({
         ? group.channels
         : group.channels.filter((ch) => !empty.includes(ch));
       const groupChildren: ColDef<RowData>[] = [];
+      const factsFor = (r: CampaignResultResponse, m: CampaignMeasurementResponse) => (
+        <>
+          <MeasurementFacts measurement={m} moleculeId={r.molecule_id} campaign={campaign} />
+          <QcVerdictControl
+            campaignId={campaign.id}
+            measurement={m}
+            resultId={r.id}
+            readOnly={readOnly}
+          />
+        </>
+      );
       // Class + Curve columns are emitted only for the FIRST channel of a
       // given (protocol, readout-def) within a stage — sibling intercept
       // channels (e.g. EC50 + EC90 on the same Resazurin curve) share the
@@ -720,7 +760,13 @@ export function ResultsGridV2({
             // (Was lowercase italic "nd" — cosmetic inconsistency that
             // chemists would read as a different qualifier kind.)
             if (q === "nd") {
-              return <NotDeterminedCell unresolvedReason={m.unresolved_reason} />;
+              return (
+                <NotDeterminedCell
+                  unresolvedReason={m.unresolved_reason}
+                  facts={m.holds_result ? factsFor(r, m) : undefined}
+                  qcMark={<QcMark measurement={m} />}
+                />
+              );
             }
             if (q === "excluded") {
               return (
@@ -751,13 +797,8 @@ export function ResultsGridV2({
                 reported={isReportedEndpoint(isDR, m)}
                 readOnly={readOnly}
                 onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
-                facts={
-                  <MeasurementFacts
-                    measurement={m}
-                    moleculeId={r.molecule_id}
-                    campaign={campaign}
-                  />
-                }
+                facts={factsFor(r, m)}
+                qcMark={<QcMark measurement={m} />}
               />
             );
           },

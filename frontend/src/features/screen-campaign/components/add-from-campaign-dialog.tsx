@@ -33,6 +33,8 @@ import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { campaignKeys, useCampaign, useCampaigns } from "../hooks/use-campaigns";
+import { clearedVerdictsNote, qcVerdictsCleared } from "../lib/qc-verdicts";
+import type { CampaignResponse } from "../types";
 
 /** Sentinel for "no stage" — Radix <Select> forbids an empty-string value. */
 const ALL_COMPOUNDS = "__all__";
@@ -71,12 +73,13 @@ export function AddFromCampaignDialog({
   const mutation = useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost({
     mutation: {
       onSuccess: (result) => {
+        const before = qc.getQueryData<CampaignResponse>(campaignKeys.detail(campaignId));
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         const sourceName =
           sourceCampaigns.find((c) => c.id === sourceCampaignId)?.name ?? "campaign";
         showSuccess(
           `Added ${result.added} compound${result.added !== 1 ? "s" : ""} from "${sourceName}". ` +
-            `${result.skipped} were already on this campaign.`,
+            `${result.skipped} were already on this campaign.${clearedVerdictsNote(qcVerdictsCleared(before, result.campaign))}`,
         );
         handleClose();
       },

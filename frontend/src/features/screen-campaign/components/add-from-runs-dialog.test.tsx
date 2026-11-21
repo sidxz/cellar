@@ -252,4 +252,46 @@ describe("AddFromRunsDialog stage", () => {
     expect(await screen.findByText(/The preview failed/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Add/ })).toBeDisabled();
   });
+
+  it("shows no QC badge on a previewed value", async () => {
+    const withCell = {
+      ...PREVIEW,
+      channels: [{ channel_key: "k1", label: "% Inhibition" }],
+      rows: [
+        {
+          molecule: { id: "m1", registration_number: "REG-1", name: null, smiles: null },
+          is_hit: true,
+          already_in_campaign: false,
+          cells: [
+            {
+              channel_key: "k1",
+              value: 42,
+              value_qualifier: "=",
+              unit: "%",
+              test_concentration_value: null,
+              test_concentration_unit: null,
+              replicate_count: 1,
+              hit_call: "hit",
+            },
+          ],
+        },
+      ],
+    };
+    previewMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.(withCell));
+    render(
+      <AddFromRunsDialog
+        campaignId="c1"
+        projectId="p1"
+        stages={[primary]}
+        initialStageId="st-1"
+        open
+        onOpenChange={vi.fn()}
+      />,
+      { wrapper },
+    );
+    chooseProtocolAndRun();
+    fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+    expect((await screen.findAllByText(/^42/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText("QC")).toBeNull();
+  });
 });

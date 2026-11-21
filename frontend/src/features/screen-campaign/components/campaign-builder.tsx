@@ -24,7 +24,9 @@ import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
+import { showSuccess } from "@/shared/lib/toast";
 import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
+import { clearedVerdictsNote, qcVerdictsCleared } from "../lib/qc-verdicts";
 import type { CampaignResponse, StageOutcome } from "../types";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { CampaignView } from "./campaign-view";
@@ -133,8 +135,11 @@ function CampaignBuilderV2({
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        const before = qc.getQueryData<CampaignResponse>(campaignKeys.detail(campaign.id));
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+        const cleared = qcVerdictsCleared(before, data as CampaignResponse);
+        if (cleared > 0) showSuccess(`Refreshed${clearedVerdictsNote(cleared)}`);
       },
     },
   });
