@@ -39,6 +39,17 @@ class QcApplyOutcome(StrEnum):
     NO_RESULT = "no_result"
 
 
+def normalize_qc_note(verdict: QcVerdict | None, note: str | None) -> str | None:
+    """The note as stored: stripped, blank = None. Raises for a note on not tested or one
+    over QC_NOTE_MAX_LENGTH. Depends only on the request, so a bulk call checks it once."""
+    note = (note or "").strip() or None
+    if note is not None and verdict is None:
+        raise ValidationError("a QC note needs a verdict")
+    if note is not None and len(note) > QC_NOTE_MAX_LENGTH:
+        raise ValidationError(f"QC note must be at most {QC_NOTE_MAX_LENGTH} characters")
+    return note
+
+
 def _close(a: float | None, b: float | None) -> bool:
     if a is None or b is None:
         return a is b
@@ -152,11 +163,7 @@ class CampaignMeasurement:
         note: str | None,
         overwrite: bool,
     ) -> QcApplyOutcome:
-        note = (note or "").strip() or None
-        if note is not None and verdict is None:
-            raise ValidationError("a QC note needs a verdict")
-        if note is not None and len(note) > QC_NOTE_MAX_LENGTH:
-            raise ValidationError(f"QC note must be at most {QC_NOTE_MAX_LENGTH} characters")
+        note = normalize_qc_note(verdict, note)
         if not self.holds_result:
             return QcApplyOutcome.NO_RESULT
         if verdict is None:

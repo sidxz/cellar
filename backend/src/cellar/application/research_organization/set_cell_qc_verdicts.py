@@ -5,9 +5,10 @@ rows are listed ids, every row (``result_ids=None``), or the rows the results se
 returns for a stage/outcome/filters (``where``; DAIKON's Hits tab is paged, so it cannot
 list ids for "verify all"). Overlapping targets mark each cell once.
 
-Patterned on ``SetStageOverride``: draft only (423 otherwise), every target validated
-before anything is applied, one aggregate save. There is deliberately no
-``managed_elsewhere`` check: QC is curation, open from ChemCellar and the managing app.
+Patterned on ``SetStageOverride``: draft only (423 otherwise), the note and every target
+validated before anything is applied, one aggregate save (none when nothing changed).
+There is deliberately no ``managed_elsewhere`` check: QC is curation, open from
+ChemCellar and the managing app.
 """
 
 from __future__ import annotations
@@ -31,7 +32,10 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.domain.research_organization.campaign_measurement import QcApplyOutcome
+from cellar.domain.research_organization.campaign_measurement import (
+    QcApplyOutcome,
+    normalize_qc_note,
+)
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import CampaignStatus, QcVerdict
 from cellar.domain.research_organization.repository import CampaignRepository
@@ -98,6 +102,10 @@ class SetCellQcVerdicts:
 
         if not input.targets:
             return Failure(ValidationError("targets must not be empty"))
+        try:
+            note = normalize_qc_note(input.verdict, input.note)
+        except ValidationError as e:
+            return Failure(e)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(
@@ -119,34 +127,26 @@ class SetCellQcVerdicts:
                 if m is None:
                     tally[QcApplyOutcome.NO_RESULT] += 1
                     continue
-                try:
-                    # The note rules depend only on the command, so a bad one raises
-                    # on the first cell, before any cell has changed.
-                    outcome = m.apply_qc_verdict(
-                        input.verdict,
-                        by=input.user_id,
-                        at=at,
-                        note=input.note,
-                        overwrite=input.overwrite,
-                    )
-                except ValidationError as e:
-                    return Failure(e)
+                outcome = m.apply_qc_verdict(
+                    input.verdict, by=input.user_id, at=at, note=note, overwrite=input.overwrite
+                )
                 tally[outcome] += 1
 
-            if tally[QcApplyOutcome.CHANGED]:
-                campaign.updated_at = at
-            await self._campaign_repo.save(campaign)
-            events = await self._uow.commit()
-
-        await self._dispatcher.dispatch_all(events)
-        return Success(
-            QcVerdictCounts(
+            counts = QcVerdictCounts(
                 changed=tally[QcApplyOutcome.CHANGED],
                 unchanged=tally[QcApplyOutcome.UNCHANGED],
                 kept=tally[QcApplyOutcome.KEPT],
                 no_result=tally[QcApplyOutcome.NO_RESULT],
             )
-        )
+            # Nothing changed: no save, so no version bump to conflict with a concurrent writer.
+            if not counts.changed:
+                return Success(counts)
+            campaign.updated_at = at
+            await self._campaign_repo.save(campaign)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(counts)
 
     async def _cells(
         self, campaign: Campaign, targets: tuple[QcTarget, ...]

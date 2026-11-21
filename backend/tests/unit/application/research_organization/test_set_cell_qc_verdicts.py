@@ -425,6 +425,21 @@ async def test_note_with_clear_is_422_nothing_applied() -> None:
     assert isinstance(error, ValidationError)
 
 
+async def test_note_with_clear_reaching_no_cell_is_422() -> None:
+    auth = fake_auth()
+    fx = _fixture(auth.workspace_id)
+    repo = make_campaign_repo(find_in_ws=fx.campaign)
+    nothing = RowSelection(stage_id=fx.stage.id, outcome=(StageOutcome.PENDING,))
+
+    out = await _use_case(fx, repo)(
+        _command(auth, fx, _target([fx.a], where=nothing), verdict=None, note="bad well"),
+        auth=auth,
+    )
+
+    assert isinstance(out.failure(), ValidationError)
+    repo.find_by_id_in_workspace.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Guards and persistence
 # ---------------------------------------------------------------------------
@@ -471,3 +486,21 @@ async def test_save_called_once() -> None:
     repo.save.assert_awaited_once_with(fx.campaign)
     assert fx.campaign.updated_at > EARLIER
     uc._dispatcher.dispatch_all.assert_awaited_once()
+
+
+async def test_nothing_changed_does_not_save() -> None:
+    auth = fake_auth()
+    fx = _fixture(auth.workspace_id)
+    repo = make_campaign_repo(find_in_ws=fx.campaign)
+    uc = _use_case(fx, repo)
+
+    # r3's A cell is already failed; r2's has no result.
+    out = await uc(
+        _command(auth, fx, _target([fx.a], [fx.rows[2], fx.rows[3]]), verdict=QcVerdict.FAILED),
+        auth=auth,
+    )
+
+    assert out == Success(_counts(unchanged=1, no_result=1))
+    repo.save.assert_not_awaited()
+    uc._dispatcher.dispatch_all.assert_not_awaited()
+    assert fx.campaign.updated_at == EARLIER

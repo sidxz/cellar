@@ -99,6 +99,29 @@ async def test_both_result_ids_and_where_is_422(
     assert response.status_code == 422, response.text
 
 
+async def test_note_with_not_tested_is_422_even_when_no_cell_matches(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+) -> None:
+    m = await _build(client, session_factory, workspace_id, managed=False)
+    response = await client.put(
+        f"/api/v1/campaigns/{m.campaign_id}/qc-verdicts",
+        json={
+            "verdict": "not_tested",
+            "targets": [
+                {
+                    "channel_ids": [m.channel_id],
+                    "where": {"stage_id": m.stage_id, "outcome": ["pending"]},
+                }
+            ],
+            "note": "bad well",
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"] == "ValidationError"
+
+
 async def test_closed_campaign_is_423(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
