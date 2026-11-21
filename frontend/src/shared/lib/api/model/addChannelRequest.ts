@@ -4,7 +4,7 @@
  * Cellar
  * OpenAPI spec version: 1.6.0
  */
-import type { AddChannelRequestQcFilter } from './addChannelRequestQcFilter';
+import type { ChannelQcFilter } from './channelQcFilter';
 import type { InterceptKeyDTO } from './interceptKeyDTO';
 
 export interface AddChannelRequest {
@@ -14,7 +14,7 @@ export interface AddChannelRequest {
   source_kind: string;
   selection_rule: string;
   qualifier_handling: string;
-  qc_filter?: AddChannelRequestQcFilter;
+  qc_filter?: ChannelQcFilter | null;
   display_order?: number;
   normalization_applied?: string | null;
   intercept_key?: InterceptKeyDTO | null;

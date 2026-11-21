@@ -57,39 +57,6 @@ def _normalization_clause(normalization_applied: str | None) -> ColumnElement[bo
     return ReadoutDataModel.normalization_applied == normalization_applied
 
 
-def _extract_min_z_prime(qc_metrics: dict[str, Any] | None) -> float | None:
-    """Return the worst-case scalar z' from a Run's qc_metrics JSONB.
-
-    Production shape is nested per-plate:
-        {"z_prime": {"<plate_uuid>": {"z_prime": 0.834, ...}, ...}}
-
-    Test fixtures (and some early data) used the flat shape:
-        {"z_prime": 0.8}
-
-    We support both, returning the minimum (most conservative) across plates
-    when the nested shape is present. Returns None when the value is missing
-    or unparseable.
-    """
-    if not qc_metrics:
-        return None
-    raw = qc_metrics.get("z_prime")
-    if raw is None:
-        return None
-    if isinstance(raw, (int, float)):
-        return float(raw)
-    if isinstance(raw, dict):
-        values: list[float] = []
-        for plate_entry in raw.values():
-            if isinstance(plate_entry, (int, float)):
-                values.append(float(plate_entry))
-            elif isinstance(plate_entry, dict):
-                v = plate_entry.get("z_prime")
-                if isinstance(v, (int, float)):
-                    values.append(float(v))
-        return min(values) if values else None
-    return None
-
-
 def _base_readout_stmt(
     *,
     workspace_id: uuid.UUID,
@@ -112,7 +79,6 @@ def _base_readout_stmt(
             RunModel.run_date,
             RunModel.created_at.label("run_created_at"),
             RunModel.status,
-            RunModel.qc_metrics,
             ProtocolModel.name,
             ProtocolModel.protocol_version,
             ReadoutDefinitionModel.unit,
@@ -176,7 +142,6 @@ def _readout_candidate(row: Any, normalization_applied: str | None) -> ResolvedR
         run_id=row.run_id,
         run_date=row.run_date,
         run_approved=row.status == "approved",
-        z_prime=_extract_min_z_prime(row.qc_metrics),
         protocol_name=row.name,
         protocol_version=row.protocol_version,
         curve_id=None,
@@ -320,7 +285,6 @@ class SQLAlchemyColumnCandidateQuery:
                 RunModel.run_date,
                 RunModel.created_at.label("run_created_at"),
                 RunModel.status,
-                RunModel.qc_metrics,
                 ProtocolModel.name,
                 ProtocolModel.protocol_version,
                 ProtocolModel.dose_unit,
@@ -373,7 +337,6 @@ def _curve_candidate(row: Any, layer: str | None) -> Candidate:
             run_id=row.run_id,
             run_date=row.run_date,
             run_approved=row.status == "approved",
-            z_prime=_extract_min_z_prime(row.qc_metrics),
             protocol_name=row.name,
             protocol_version=row.protocol_version,
             curve_id=row.id,

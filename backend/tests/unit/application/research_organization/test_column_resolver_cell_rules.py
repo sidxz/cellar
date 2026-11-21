@@ -83,7 +83,6 @@ def _candidate(
     *,
     qualifier: ValueQualifier = ValueQualifier.EQ,
     approved: bool = True,
-    z_prime: float | None = 0.7,
     intercept_values: list[dict] | None = None,
 ) -> ResolvedRun:
     return ResolvedRun(
@@ -93,7 +92,6 @@ def _candidate(
         run_id=uuid.uuid4(),
         run_date=run_date,
         run_approved=approved,
-        z_prime=z_prime,
         protocol_name="X",
         protocol_version=1,
         curve_id=uuid.uuid4(),
@@ -141,14 +139,18 @@ def test_no_candidates_yields_nd():
     assert not m.is_tested_nd
 
 
-def test_qc_filter_drops_low_z_prime():
-    ch = _channel(
-        SelectionRule.LATEST_RUN,
-        qc={"min_z_prime": 0.5, "require_approved": True},
-    )
-    candidates = [_candidate(99.0, run_date=date(2026, 5, 1), z_prime=0.3)]
-    m = _resolve(ch, candidates)
-    assert m.value_qualifier == ValueQualifier.ND
+def test_stored_min_z_prime_is_ignored_by_old_data():
+    """A column saved before min-Z' was removed still says min_z_prime: runs
+    are not dropped for it."""
+    ch = _channel(SelectionRule.LATEST_RUN, qc={"min_z_prime": 0.5})
+    candidates = [_candidate(99.0, run_date=date(2026, 5, 1))]
+    assert _resolve(ch, candidates).value == 99.0
+
+
+def test_require_approved_still_drops_unapproved_run():
+    ch = _channel(SelectionRule.LATEST_RUN, qc={"min_z_prime": 0.5, "require_approved": True})
+    candidates = [_candidate(99.0, run_date=date(2026, 5, 1), approved=False)]
+    assert _resolve(ch, candidates).value_qualifier == ValueQualifier.ND
 
 
 def test_intercept_key_resolves_secondary_intercept_value():
@@ -249,7 +251,6 @@ def _dr_candidate(
         run_id=uuid.uuid4(),
         run_date=run_date,
         run_approved=True,
-        z_prime=0.7,
         protocol_name="X",
         protocol_version=1,
         curve_id=uuid.uuid4(),
@@ -633,7 +634,6 @@ class TestBuildAggregateCurveSnapshot:
                 run_id=uuid.uuid4(),
                 run_date=date(2026, 1, 1),
                 run_approved=True,
-                z_prime=0.7,
                 protocol_name="X",
                 protocol_version=1,
                 curve_id=None,
@@ -665,7 +665,6 @@ class TestBuildAggregateCurveSnapshot:
             run_id=uuid.uuid4(),
             run_date=date(2026, 1, 1),
             run_approved=True,
-            z_prime=0.7,
             protocol_name="X",
             protocol_version=1,
             curve_id=None,
@@ -771,7 +770,6 @@ def _endpoint_candidate(
     *,
     qualifier: ValueQualifier = ValueQualifier.EQ,
     approved: bool = True,
-    z_prime: float | None = 0.7,
 ) -> ResolvedRun:
     """A raw readout_data row — the shape a summary-imported reported IC50 takes."""
     return ResolvedRun(
@@ -781,7 +779,6 @@ def _endpoint_candidate(
         run_id=uuid.uuid4(),
         run_date=date(2026, 3, 1),
         run_approved=approved,
-        z_prime=z_prime,
         protocol_name="X",
         protocol_version=1,
         curve_id=None,
@@ -845,6 +842,6 @@ def test_dr_channel_endpoint_fills_only_its_primary_intercept_channel():
 
 
 def test_resolved_cell_is_not_tested():
-    """Resolution never sets a QC verdict, even from an unapproved run with z′ 0.0."""
-    run = replace(_dr_candidate(0.013, run_date=date(2026, 1, 1)), run_approved=False, z_prime=0.0)
+    """Resolution never sets a QC verdict, even from an unapproved run."""
+    run = replace(_dr_candidate(0.013, run_date=date(2026, 1, 1)), run_approved=False)
     assert _resolve(_channel(SelectionRule.LATEST_RUN), [run]).qc_verdict is None

@@ -67,7 +67,6 @@ const channelSchema = z.object({
   selection_rule: z.enum(["latest_run", "mean_across_runs", "geometric_mean", "manual_pick"]),
   qualifier_handling: z.enum(["include_qualified", "exclude_qualified", "treat_as_limit"]),
   require_approved: z.boolean(),
-  min_z_prime: z.number().min(0).max(1),
   /** Stringified `${kind}:${level}` id of the dose-response intercept this
    *  channel surfaces. "" = primary (also covers non-DR / single-intercept
    *  readouts, which have nothing to choose). Create-mode only — intercept
@@ -177,7 +176,6 @@ export function ChannelPopoverForm({
           | "exclude_qualified"
           | "treat_as_limit") ?? "include_qualified",
       require_approved: (existingQc?.require_approved as boolean | undefined) ?? false,
-      min_z_prime: (existingQc?.min_z_prime as number | undefined) ?? 0,
       // Create-mode only (see the Intercept field below) — edit mode never
       // reads or writes this, so there's no existing-channel default to derive.
       intercept_key_id: "",
@@ -220,10 +218,7 @@ export function ChannelPopoverForm({
   }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
   const onSubmit = (values: ChannelFormValues) => {
-    const qcFilter =
-      values.require_approved || values.min_z_prime > 0
-        ? { require_approved: values.require_approved, min_z_prime: values.min_z_prime }
-        : undefined;
+    const qcFilter = values.require_approved ? { require_approved: true } : undefined;
 
     if (isEdit && existing) {
       updateMutation.mutate({
@@ -563,32 +558,8 @@ export function ChannelPopoverForm({
             )}
           />
           <label htmlFor="require-approved" className="text-sm cursor-pointer">
-            Require approved run
+            Require approved runs
           </label>
-        </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs">Min Z&apos; prime</Label>
-            <span className="text-xs font-mono tabular-nums text-muted-foreground">
-              {watch("min_z_prime").toFixed(2)}{" "}
-              {watch("min_z_prime") === 0 && (
-                <span className="text-[10px] italic">(no filter)</span>
-              )}
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            {...register("min_z_prime", { valueAsNumber: true })}
-            className="w-full"
-          />
-          <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
-            <span>0</span>
-            <span>0.5</span>
-            <span>1</span>
-          </div>
         </div>
       </div>
 

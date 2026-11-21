@@ -135,10 +135,7 @@ def _newest_first(values: list[_Value]) -> list[_Value]:
 def _passes_qc(run: ResolvedRun, qc: dict[str, Any] | None) -> bool:
     if not qc:
         return True
-    if qc.get("require_approved", False) and not run.run_approved:
-        return False
-    min_z = qc.get("min_z_prime")
-    return not (min_z is not None and (run.z_prime is None or run.z_prime < min_z))
+    return run.run_approved or not qc.get("require_approved", False)
 
 
 def _nd_measurement(

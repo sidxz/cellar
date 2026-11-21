@@ -208,6 +208,17 @@ class AddFromRunsRequest(PreviewRunImportRequest):
     description: str | None = None
 
 
+class ChannelQcFilter(BaseModel):
+    """A column's run filter. Unknown keys (the retired ``min_z_prime``) are a 422."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    require_approved: bool = False
+
+    def to_domain(self) -> dict[str, bool] | None:
+        return {"require_approved": True} if self.require_approved else None
+
+
 class AddChannelRequest(BaseModel):
     label: str
     protocol_id: uuid.UUID
@@ -215,7 +226,7 @@ class AddChannelRequest(BaseModel):
     source_kind: str
     selection_rule: str
     qualifier_handling: str
-    qc_filter: dict[str, Any] | None = None
+    qc_filter: ChannelQcFilter | None = None
     display_order: int = 0
     #: Normalization layer for ``readout_data`` source. Ignored for dose-response.
     normalization_applied: str | None = None
@@ -240,7 +251,7 @@ class UpdateChannelRequest(BaseModel):
 
     label: str | None = None
     selection_rule: str | None = None
-    qc_filter: dict[str, Any] | None = None
+    qc_filter: ChannelQcFilter | None = None
     #: Column position in the campaign grid. Reorder = PATCH each moved
     #: channel with its new index.
     display_order: int | None = None

@@ -148,6 +148,23 @@ describe("ChannelPopoverForm run scope", () => {
   });
 });
 
+describe("ChannelPopoverForm QC filter", () => {
+  it("has no Z' setting and sends only require_approved", async () => {
+    render(
+      <ChannelPopoverForm campaignId="c1" projectId="p1" existing={existing} onClose={vi.fn()} />,
+      { wrapper },
+    );
+    expect(screen.queryByText(/Z.\s*prime/i)).toBeNull();
+    expect(screen.queryByRole("slider")).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Require approved runs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    expect(updateMutate.mock.calls[0][0].data.qc_filter).toEqual({ require_approved: true });
+  });
+});
+
 describe("ChannelPopoverForm stage", () => {
   const stages = [
     { id: "st-1", name: "Primary", display_order: 0, kind: "criteria", criteria: [] },

@@ -140,7 +140,6 @@ def _resolve_fit(r: CurveRow) -> tuple[float | None, str | None]:
         value=r.fitted_value,
         qualifier=ValueQualifier.EQ,
         unit="",
-        z_prime=None,
         protocol_name="",
         protocol_version=0,
         readout_id=r.readout_definition_id,
