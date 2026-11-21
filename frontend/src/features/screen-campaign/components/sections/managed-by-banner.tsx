@@ -53,7 +53,7 @@ export function ManagedByBanner({ campaign }: { campaign: CampaignResponse }) {
             size="sm"
             className="bg-lime-400 font-semibold text-black shadow-[0_0_12px_rgba(163,230,53,0.6)] hover:bg-lime-300"
           >
-            <a href={target.url}>
+            <a href={target.url} target="_blank" rel="noopener noreferrer">
               Open in {label} <ExternalLink className="size-4" />
             </a>
           </Button>

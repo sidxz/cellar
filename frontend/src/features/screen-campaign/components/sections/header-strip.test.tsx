@@ -59,6 +59,11 @@ describe("HeaderStrip", () => {
     expect(screen.getByText("Locked by Daikon")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Close$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Refresh/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Preview DAIKON export/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps Preview DAIKON export on a campaign ChemCellar manages", () => {
+    renderHeader(base);
     expect(screen.getByRole("button", { name: /Preview DAIKON export/ })).toBeInTheDocument();
   });
 });

@@ -47,7 +47,10 @@ describe("ManagedByBanner", () => {
 
   it("links to the round when its address is trusted", () => {
     renderBanner(campaign());
-    expect(screen.getByRole("link", { name: /Open in Daikon/ })).toHaveAttribute("href", ROUND);
+    const open = screen.getByRole("link", { name: /Open in Daikon/ });
+    expect(open).toHaveAttribute("href", ROUND);
+    expect(open).toHaveAttribute("target", "_blank");
+    expect(open.getAttribute("rel")).toContain("noopener");
   });
 
   it("offers no link to an address it does not trust", () => {

@@ -133,10 +133,12 @@ export function HeaderStrip({
                   Refresh
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={onPreview}>
-                <FileText className="h-4 w-4" />
-                Preview DAIKON export
-              </Button>
+              {!managed && (
+                <Button variant="outline" size="sm" onClick={onPreview}>
+                  <FileText className="h-4 w-4" />
+                  Preview DAIKON export
+                </Button>
+              )}
               {!managed && (
                 <Button size="sm" onClick={onClose}>
                   <Lock className="h-4 w-4" />
