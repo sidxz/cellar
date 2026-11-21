@@ -151,6 +151,8 @@ function CampaignBuilderV2({
   // (sources, columns, stages, compound rows) is also locked when another app manages it.
   const curationLocked = campaign.status !== "draft";
   const structureLocked = curationLocked || Boolean(campaign.managed_by);
+  // QC is an editor's call: a viewer sees verdicts, never the actions.
+  const qcReadOnly = curationLocked || !canEditTags;
 
   return (
     <div className="flex flex-col">
@@ -187,23 +189,27 @@ function CampaignBuilderV2({
         selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
       />
-      <StageBulkMenu
-        campaign={campaign}
-        filters={filters}
-        selectedStageId={effectiveStageId}
-        readOnly={curationLocked}
-      />
-      <QcBulkMenu
-        campaign={campaign}
-        filters={filters}
-        selectedStageId={effectiveStageId}
-        readOnly={curationLocked}
-      />
+      {/* One bulk bar for both menus; hidden when neither renders anything. */}
+      <div className="flex items-center gap-1.5 border-b bg-muted/10 px-3 py-1.5 empty:hidden">
+        <StageBulkMenu
+          campaign={campaign}
+          filters={filters}
+          selectedStageId={effectiveStageId}
+          readOnly={curationLocked}
+        />
+        <QcBulkMenu
+          campaign={campaign}
+          filters={filters}
+          selectedStageId={effectiveStageId}
+          readOnly={qcReadOnly}
+        />
+      </div>
       <ResultsGridV2
         campaign={campaign}
         filters={filters}
         selectedStageId={effectiveStageId}
         readOnly={curationLocked}
+        qcReadOnly={qcReadOnly}
         rowsLocked={structureLocked}
       />
 

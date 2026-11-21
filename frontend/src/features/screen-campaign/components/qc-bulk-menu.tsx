@@ -4,6 +4,7 @@
  * QcBulkMenu — marks (or clears) the QC verdict on many campaign cells in one save.
  * Cells = the visible rows (`rowPassesFilters`, same predicate as StageBulkMenu) x the
  * ticked columns. Nothing applies until Apply; the count beside it is the forecast.
+ * Renders only its controls: the builder's bulk bar holds it beside StageBulkMenu.
  */
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,9 +34,10 @@ import type { QcVerdictCountsResponse, SetQcVerdictsRequest } from "@/shared/lib
 import { showError, showSuccess } from "@/shared/lib/toast";
 
 import { campaignKeys } from "../hooks/use-campaigns";
-import { qcForecast } from "../lib/qc-verdicts";
+import { QC_LABEL, qcForecast } from "../lib/qc-verdicts";
+import { groupColumnsByStage } from "../lib/stage-column-groups";
 import type { CampaignMeasurementResponse, CampaignResponse } from "../types";
-import { type CampaignFilters, rowPassesFilters } from "./campaign-filter-bar";
+import { type CampaignFilters, filtersActive, rowPassesFilters } from "./campaign-filter-bar";
 
 type Verdict = CampaignMeasurementResponse["qc_verdict"];
 
@@ -44,16 +46,17 @@ const TITLE: Record<Verdict, string> = {
   failed: "Mark failed",
   not_tested: "Clear QC",
 };
-const DONE: Record<Verdict, string> = {
-  verified: "Verified",
-  failed: "Marked failed",
-  not_tested: "Cleared",
-};
-
 const cells = (n: number) => `${n} ${n === 1 ? "cell" : "cells"}`;
 
+const DONE: Record<Verdict, (n: number) => string> = {
+  verified: (n) => `Verified ${cells(n)}`,
+  failed: (n) => `Marked ${cells(n)} Failed`,
+  not_tested: (n) => `Cleared QC on ${cells(n)}`,
+};
+
 function toast(verdict: Verdict, r: QcVerdictCountsResponse) {
-  const parts = [`${DONE[verdict]} ${cells(r.changed)}`];
+  const parts = [DONE[verdict](r.changed)];
+  if (r.unchanged) parts.push(`${r.unchanged} already ${QC_LABEL[verdict]}`);
   if (r.kept) parts.push(`${r.kept} kept (already marked)`);
   if (r.no_result) parts.push(`${r.no_result} had no result`);
   showSuccess(parts.join(" · "));
@@ -72,13 +75,26 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
   const [columns, setColumns] = useState<Set<string>>(new Set());
   const [overwrite, setOverwrite] = useState(false);
   const [note, setNote] = useState("");
-  const mutation = useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut();
+  // On the hook, not per call, so the refresh and toast never depend on what is mounted.
+  const mutation = useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut({
+    mutation: {
+      onSuccess: (res, { data }) => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+        toast(data.verdict, res);
+      },
+      onError: (err) =>
+        showError(`QC update failed: ${err instanceof Error ? err.message : String(err)}`),
+    },
+  });
 
   const channels = campaign.channels ?? [];
+  const groups = groupColumnsByStage(channels, campaign.stages ?? []);
   const rows = useMemo(
     () => (campaign.results ?? []).filter((r) => rowPassesFilters(r, filters, selectedStageId)),
     [campaign.results, filters, selectedStageId],
   );
+  // A blank note names none, so cells already holding the verdict keep theirs.
+  const sentNote = verdict !== "not_tested" && note.trim() ? note.trim() : undefined;
   const forecast = useMemo(
     () =>
       verdict
@@ -86,16 +102,20 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
             rows.flatMap((r) => (r.measurements ?? []).filter((m) => columns.has(m.channel_id))),
             verdict,
             overwrite,
+            sentNote,
           )
         : 0,
-    [rows, columns, verdict, overwrite],
+    [rows, columns, verdict, overwrite, sentNote],
   );
 
   if (readOnly) return null;
 
   function open(v: Verdict) {
-    const own = channels.filter((c) => c.stage_id === selectedStageId);
-    setColumns(new Set((selectedStageId && own.length ? own : channels).map((c) => c.id)));
+    // A stage means exactly its own columns, even none; "All" means every column.
+    const picked = selectedStageId
+      ? channels.filter((c) => c.stage_id === selectedStageId)
+      : channels;
+    setColumns(new Set(picked.map((c) => c.id)));
     setOverwrite(false);
     setNote("");
     setVerdict(v);
@@ -103,29 +123,19 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
 
   function apply() {
     if (!verdict) return;
-    const text = note.trim();
     const data: SetQcVerdictsRequest = {
       verdict,
       targets: [
         {
           channel_ids: channels.filter((c) => columns.has(c.id)).map((c) => c.id),
-          result_ids: rows.map((r) => r.id),
+          // No filter on: every row, without listing thousands of ids.
+          result_ids: filtersActive(filters, selectedStageId) ? rows.map((r) => r.id) : null,
         },
       ],
       overwrite,
-      ...(verdict !== "not_tested" && text ? { note: text } : {}),
+      ...(sentNote ? { note: sentNote } : {}),
     };
-    mutation.mutate(
-      { campaignId: campaign.id, data },
-      {
-        onSuccess: (res) => {
-          void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
-          toast(verdict, res);
-        },
-        onError: (err) =>
-          showError(`QC update failed: ${err instanceof Error ? err.message : String(err)}`),
-      },
-    );
+    mutation.mutate({ campaignId: campaign.id, data });
     setVerdict(null);
   }
 
@@ -137,7 +147,7 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
   }
 
   return (
-    <div className="flex items-center gap-1.5 border-b bg-muted/10 px-3 py-1.5">
+    <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
@@ -159,18 +169,27 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
 
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">Columns</span>
-            {channels.map((c) => (
-              <div key={c.id} className="flex items-center gap-2">
-                <Checkbox
-                  id={`qc-col-${c.id}`}
-                  checked={columns.has(c.id)}
-                  onCheckedChange={(on) => toggle(c.id, on === true)}
-                />
-                <Label htmlFor={`qc-col-${c.id}`} className="text-sm">
-                  {c.label}
-                </Label>
-              </div>
-            ))}
+            <div className="max-h-64 space-y-2 overflow-y-auto">
+              {groups.map((g) => (
+                <div key={g.stageId ?? "campaign"} className="space-y-1">
+                  <div className="text-xs font-medium">
+                    {g.stageId ? g.title : "Whole campaign"}
+                  </div>
+                  {g.channels.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2 pl-2">
+                      <Checkbox
+                        id={`qc-col-${c.id}`}
+                        checked={columns.has(c.id)}
+                        onCheckedChange={(on) => toggle(c.id, on === true)}
+                      />
+                      <Label htmlFor={`qc-col-${c.id}`} className="text-sm">
+                        {c.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
 
           {verdict !== "not_tested" && (
@@ -206,6 +225,6 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

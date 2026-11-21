@@ -3024,11 +3024,13 @@ export const useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsCh
     /**
  * Put a person's QC verdict on many cells of a DRAFT campaign in one save.
  *
- * Each target is its ``channel_ids`` times its rows: ``result_ids`` (``null`` = every
- * row) or ``where``, the rows ``POST /results/search`` returns for that stage, outcome
- * and filters. A cell named twice counts once. ``not_tested`` clears a verdict whatever
- * ``overwrite`` says; Verified/Failed over the other verdict needs ``overwrite`` (else
- * ``kept``). A note goes with Verified/Failed only.
+ * Each target is its ``channel_ids`` times its rows, named exactly one way: the
+ * ``result_ids`` key (``null`` = every row) or ``where``, the rows ``POST /results/search``
+ * returns for that stage, outcome and filters. A cell named twice counts once.
+ * ``not_tested`` clears a verdict whatever ``overwrite`` says; Verified/Failed over the
+ * other verdict needs ``overwrite`` (else ``kept``). A note goes with Verified/Failed
+ * only. A cell already holding the verdict is re-stamped only with ``overwrite`` and a
+ * ``note`` key whose note differs (``null`` = no note); omit ``note`` to leave it alone.
  *
  * 404 on the first unknown result, column, stage or filter column, with nothing
  * applied. 423 when the campaign is not a draft. Open to the managing app and to
@@ -3090,11 +3092,13 @@ const {mutation: mutationOptions} = options ?
     /**
  * Put a person's QC verdict on many cells of a DRAFT campaign in one save.
  *
- * Each target is its ``channel_ids`` times its rows: ``result_ids`` (``null`` = every
- * row) or ``where``, the rows ``POST /results/search`` returns for that stage, outcome
- * and filters. A cell named twice counts once. ``not_tested`` clears a verdict whatever
- * ``overwrite`` says; Verified/Failed over the other verdict needs ``overwrite`` (else
- * ``kept``). A note goes with Verified/Failed only.
+ * Each target is its ``channel_ids`` times its rows, named exactly one way: the
+ * ``result_ids`` key (``null`` = every row) or ``where``, the rows ``POST /results/search``
+ * returns for that stage, outcome and filters. A cell named twice counts once.
+ * ``not_tested`` clears a verdict whatever ``overwrite`` says; Verified/Failed over the
+ * other verdict needs ``overwrite`` (else ``kept``). A note goes with Verified/Failed
+ * only. A cell already holding the verdict is re-stamped only with ``overwrite`` and a
+ * ``note`` key whose note differs (``null`` = no note); omit ``note`` to leave it alone.
  *
  * 404 on the first unknown result, column, stage or filter column, with nothing
  * applied. 423 when the campaign is not a draft. Open to the managing app and to

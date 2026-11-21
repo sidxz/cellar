@@ -5,8 +5,8 @@ import { QC_LABEL, clearedVerdictsNote, qcForecast, qcVerdictsCleared } from "./
 
 type Verdict = CampaignMeasurementResponse["qc_verdict"];
 
-const cell = (qc_verdict: Verdict, holds_result = true) =>
-  ({ qc_verdict, holds_result }) as CampaignMeasurementResponse;
+const cell = (qc_verdict: Verdict, holds_result = true, qc_verdict_note: string | null = null) =>
+  ({ qc_verdict, holds_result, qc_verdict_note }) as CampaignMeasurementResponse;
 
 const campaign = (verdicts: Record<string, Verdict>) =>
   ({
@@ -36,7 +36,7 @@ describe("clearedVerdictsNote", () => {
   it("is empty for none, singular for one, plural otherwise", () => {
     expect(clearedVerdictsNote(0)).toBe("");
     expect(clearedVerdictsNote(1)).toBe(
-      " · 1 QC verdict went back to Not tested because their values changed",
+      " · 1 QC verdict went back to Not tested because its value changed",
     );
     expect(clearedVerdictsNote(12)).toBe(
       " · 12 QC verdicts went back to Not tested because their values changed",
@@ -68,7 +68,17 @@ describe("qcForecast", () => {
     expect(qcForecast(cells, "failed", true)).toBe(2);
   });
 
-  it("clearing counts every marked cell that holds a result", () => {
-    expect(qcForecast(cells, "not_tested", false)).toBe(2);
+  it("clearing counts every marked cell, even one that no longer holds a result", () => {
+    expect(qcForecast(cells, "not_tested", false)).toBe(3);
+  });
+
+  it("with overwrite and a note named, also counts same-verdict cells whose note differs", () => {
+    const noted = [cell("verified", true, "clean"), cell("verified"), cell("verified", false)];
+    expect(qcForecast(noted, "verified", true)).toBe(0);
+    expect(qcForecast(noted, "verified", false, "other")).toBe(0);
+    expect(qcForecast(noted, "verified", true, "other")).toBe(2);
+    expect(qcForecast(noted, "verified", true, " clean ")).toBe(1);
+    expect(qcForecast(noted, "verified", true, null)).toBe(1);
+    expect(qcForecast(noted, "verified", true, "")).toBe(1);
   });
 });

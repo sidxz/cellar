@@ -7,10 +7,14 @@
 import type { QcWhereRequest } from './qcWhereRequest';
 
 /**
- * Columns times rows: ``result_ids`` (``null`` = every row) or ``where``, never both.
+ * Columns times rows, the rows named exactly one way: the ``result_ids`` key (a list,
+ * or ``null`` for every row) or a non-null ``where``.
  */
 export interface QcTargetRequest {
-  /** @minItems 1 */
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
   channel_ids: string[];
   result_ids?: string[] | null;
   where?: QcWhereRequest | null;

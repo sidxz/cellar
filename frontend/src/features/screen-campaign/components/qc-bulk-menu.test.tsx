@@ -3,14 +3,24 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { QcVerdictCountsResponse, SetQcVerdictsRequest } from "@/shared/lib/api/model";
+
 import type { CampaignResponse } from "../types";
-import { emptyFilters } from "./campaign-filter-bar";
+import { type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { QcBulkMenu } from "./qc-bulk-menu";
 
-const { mutate, showSuccess } = vi.hoisted(() => ({ mutate: vi.fn(), showSuccess: vi.fn() }));
+type OnSuccess = (res: QcVerdictCountsResponse, vars: { data: SetQcVerdictsRequest }) => void;
+const { mutate, showSuccess, hook } = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  showSuccess: vi.fn(),
+  hook: { options: undefined as { mutation?: { onSuccess?: OnSuccess } } | undefined },
+}));
 
 vi.mock("@/shared/lib/api/campaigns/campaigns", () => ({
-  useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut: () => ({ mutate, isPending: false }),
+  useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut: (options: typeof hook.options) => {
+    hook.options = options;
+    return { mutate, isPending: false };
+  },
 }));
 vi.mock("@/shared/lib/toast", () => ({ showSuccess, showError: vi.fn() }));
 vi.mock("../hooks/use-campaigns", () => ({
@@ -50,11 +60,13 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
-function renderMenu(opts: { stage?: string | null; readOnly?: boolean } = {}) {
+function renderMenu(
+  opts: { stage?: string | null; readOnly?: boolean; filters?: CampaignFilters } = {},
+) {
   return render(
     <QcBulkMenu
       campaign={campaign}
-      filters={emptyFilters()}
+      filters={opts.filters ?? emptyFilters()}
       selectedStageId={opts.stage === undefined ? "s1" : opts.stage}
       readOnly={opts.readOnly ?? false}
     />,
@@ -85,18 +97,63 @@ describe("QcBulkMenu", () => {
     expect(screen.getByText("3 cells")).toBeInTheDocument();
   });
 
-  it("applies to the stage's columns and the visible rows", () => {
+  it("applies to the stage's columns and every row when no filter is on", () => {
     renderMenu();
     pick("Mark verified…");
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(mutate.mock.calls[0][0]).toEqual({
-      campaignId: "c1",
-      data: {
-        verdict: "verified",
-        targets: [{ channel_ids: ["ca", "cb"], result_ids: ["r1", "r2", "r3"] }],
-        overwrite: false,
+    expect(mutate.mock.calls[0]).toEqual([
+      {
+        campaignId: "c1",
+        data: {
+          verdict: "verified",
+          targets: [{ channel_ids: ["ca", "cb"], result_ids: null }],
+          overwrite: false,
+        },
       },
+    ]);
+  });
+
+  it("names the visible rows when a filter is on", () => {
+    renderMenu({ filters: { ...emptyFilters(), stageOutcomes: new Set(["not_in_stage"]) } });
+    pick("Mark verified…");
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(mutate.mock.calls[0][0].data.targets[0].result_ids).toEqual(["r1", "r2", "r3"]);
+  });
+
+  it("a stage with no columns of its own ticks none, so Apply is off", () => {
+    renderMenu({ stage: "s-empty" });
+    pick("Mark verified…");
+    expect(screen.getByText("0 cells")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+    for (const box of screen.getAllByRole("checkbox").slice(0, 3)) {
+      expect(box).toHaveAttribute("aria-checked", "false");
+    }
+  });
+
+  it("groups the columns under their stage, campaign columns under Whole campaign", () => {
+    renderMenu();
+    pick("Mark verified…");
+    expect(screen.getByText("Primary")).toBeInTheDocument();
+    expect(screen.getByText("Whole campaign")).toBeInTheDocument();
+  });
+
+  it("sends the note only when one is typed, and the forecast counts its re-stamps", () => {
+    renderMenu();
+    pick("Mark failed…");
+    fireEvent.click(screen.getByLabelText("Also change cells someone already marked"));
+    expect(screen.getByText("2 cells")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(mutate.mock.calls[0][0].data).not.toHaveProperty("note");
+
+    pick("Mark failed…");
+    fireEvent.click(screen.getByLabelText("Also change cells someone already marked"));
+    fireEvent.change(screen.getByPlaceholderText("Note (optional)"), {
+      target: { value: " edge well " },
     });
+    // r1's B is already Failed with no note: the named note re-stamps it.
+    expect(screen.getByText("3 cells")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(mutate.mock.calls[1][0].data.note).toBe("edge well");
   });
 
   it("defaults to every channel with no stage selected", () => {
@@ -113,17 +170,27 @@ describe("QcBulkMenu", () => {
     expect(screen.queryByPlaceholderText("Note (optional)")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(mutate.mock.calls[0][0].data.verdict).toBe("not_tested");
-    mutate.mock.calls[0][1].onSuccess({ changed: 3, unchanged: 0, kept: 0, no_result: 0 });
-    expect(showSuccess).toHaveBeenCalledWith("Cleared 3 cells");
   });
 
-  it("toasts the counts, omitting zero parts", () => {
+  const done = (verdict: SetQcVerdictsRequest["verdict"], res: QcVerdictCountsResponse) => {
     renderMenu();
-    pick("Mark verified…");
-    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    mutate.mock.calls[0][1].onSuccess({ changed: 2, unchanged: 0, kept: 1, no_result: 1 });
-    expect(showSuccess).toHaveBeenCalledWith(
-      "Verified 2 cells · 1 kept (already marked) · 1 had no result",
+    hook.options?.mutation?.onSuccess?.(res, { data: { verdict, targets: [] } });
+    return showSuccess.mock.calls[0][0];
+  };
+
+  it("toasts from the hook, count first, omitting zero parts", () => {
+    expect(done("verified", { changed: 2, unchanged: 3, kept: 1, no_result: 1 })).toBe(
+      "Verified 2 cells · 3 already Verified · 1 kept (already marked) · 1 had no result",
+    );
+  });
+
+  it("toasts failed and cleared in bench words, singular for one cell", () => {
+    expect(done("failed", { changed: 1, unchanged: 1, kept: 0, no_result: 0 })).toBe(
+      "Marked 1 cell Failed · 1 already Failed",
+    );
+    showSuccess.mockClear();
+    expect(done("not_tested", { changed: 3, unchanged: 2, kept: 0, no_result: 0 })).toBe(
+      "Cleared QC on 3 cells · 2 already Not tested",
     );
   });
 });

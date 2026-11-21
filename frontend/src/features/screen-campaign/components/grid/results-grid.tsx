@@ -521,6 +521,8 @@ interface ResultsGridV2Props {
    *  chips, the Stage column and the stage half of the chip filters. */
   selectedStageId: string | null;
   readOnly: boolean;
+  /** QC verdicts are an editor's call; defaults to ``readOnly``. */
+  qcReadOnly?: boolean;
   /** Compound rows are the managing app's to add and remove (curation stays on readOnly). */
   rowsLocked?: boolean;
 }
@@ -535,6 +537,7 @@ export function ResultsGridV2({
   filters,
   selectedStageId,
   readOnly,
+  qcReadOnly = readOnly,
   rowsLocked = false,
 }: ResultsGridV2Props) {
   const [overrideTarget, setOverrideTarget] = useState<{
@@ -707,7 +710,7 @@ export function ResultsGridV2({
             campaignId={campaign.id}
             measurement={m}
             resultId={r.id}
-            readOnly={readOnly}
+            readOnly={qcReadOnly}
           />
         </>
       );
@@ -755,6 +758,8 @@ export function ResultsGridV2({
               return <span className="text-muted-foreground">--</span>;
             }
             const q = m.value_qualifier;
+            // Only a marked cell gets a mark, so a not-tested cell grows no empty marker row.
+            const qcMark = m.qc_verdict !== "not_tested" ? <QcMark measurement={m} /> : undefined;
             // Match the ND treatment on every other DR grid surface:
             // "ND" uppercase font-mono with a "Not Determined" tooltip.
             // (Was lowercase italic "nd" — cosmetic inconsistency that
@@ -764,7 +769,7 @@ export function ResultsGridV2({
                 <NotDeterminedCell
                   unresolvedReason={m.unresolved_reason}
                   facts={m.holds_result ? factsFor(r, m) : undefined}
-                  qcMark={<QcMark measurement={m} />}
+                  qcMark={qcMark}
                 />
               );
             }
@@ -798,7 +803,7 @@ export function ResultsGridV2({
                 readOnly={readOnly}
                 onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
                 facts={factsFor(r, m)}
-                qcMark={<QcMark measurement={m} />}
+                qcMark={qcMark}
               />
             );
           },
@@ -957,6 +962,7 @@ export function ResultsGridV2({
     moleculesById,
     curveFrames,
     readOnly,
+    qcReadOnly,
     // Every input the cell renderers read has to be here or the memoised
     // column defs keep rendering the previous stage's verdicts/chips.
     selectedStage,

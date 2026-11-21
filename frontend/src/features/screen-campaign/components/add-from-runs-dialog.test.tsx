@@ -272,6 +272,8 @@ describe("AddFromRunsDialog stage", () => {
               test_concentration_unit: null,
               replicate_count: 1,
               hit_call: "hit",
+              // A server still sending the old flag must not bring the badge back.
+              qc_pass: false,
             },
           ],
         },

@@ -19,11 +19,17 @@ import type { CampaignMeasurementResponse } from "../../types";
 type Verdict = CampaignMeasurementResponse["qc_verdict"];
 const VERDICTS: Verdict[] = ["not_tested", "verified", "failed"];
 
-export function QcMark({ measurement: m }: { measurement: CampaignMeasurementResponse }) {
+/** "by <name> · <date>" for a marked cell. */
+function useQcStamp(m: CampaignMeasurementResponse): string {
   const nameOf = useMemberNames();
-  if (m.qc_verdict === "not_tested") return null;
   const when = m.qc_verdict_at ? new Date(m.qc_verdict_at).toLocaleDateString() : "";
-  const title = `${QC_LABEL[m.qc_verdict]} by ${nameOf(m.qc_verdict_by)} · ${when}${
+  return `by ${nameOf(m.qc_verdict_by)} · ${when}`;
+}
+
+export function QcMark({ measurement: m }: { measurement: CampaignMeasurementResponse }) {
+  const stamp = useQcStamp(m);
+  if (m.qc_verdict === "not_tested") return null;
+  const title = `${QC_LABEL[m.qc_verdict]} ${stamp}${
     m.qc_verdict_note ? ` · ${m.qc_verdict_note}` : ""
   }`;
   return (
@@ -52,40 +58,52 @@ export function QcVerdictControl({
   readOnly,
 }: QcVerdictControlProps) {
   const qc = useQueryClient();
-  const [note, setNote] = useState(m.qc_verdict_note ?? "");
-  const mutation = useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut();
+  const stored = m.qc_verdict_note ?? "";
+  const [note, setNote] = useState(stored);
+  // A saved verdict or note replaces what was typed: the box shows what is stored.
+  const [shown, setShown] = useState(`${m.qc_verdict}|${stored}`);
+  if (shown !== `${m.qc_verdict}|${stored}`) {
+    setShown(`${m.qc_verdict}|${stored}`);
+    setNote(stored);
+  }
+  const stamp = useQcStamp(m);
+  // On the hook, not per call: the card may close before the save lands.
+  const mutation = useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut({
+    mutation: {
+      onSuccess: () => void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) }),
+      onError: () => showError("Could not save the QC verdict."),
+    },
+  });
 
   if (!m.holds_result) return null;
+  const stampEl = m.qc_verdict !== "not_tested" && (
+    <span className="text-muted-foreground">{stamp}</span>
+  );
   if (readOnly) {
     return (
       <div className="mt-2 flex gap-3 border-t pt-2 text-xs">
         <span className="text-muted-foreground">QC</span>
         <span>{QC_LABEL[m.qc_verdict]}</span>
+        {stampEl}
       </div>
     );
   }
 
-  // A person changing one cell means it, hence overwrite.
-  const send = (verdict: Verdict) => {
-    const text = note.trim();
+  // A person changing one cell means it, hence overwrite. A verdict button names no note
+  // (a changed verdict starts without one); Save names the box's note, blank = none.
+  const send = (verdict: Verdict, withNote: boolean) => {
     const data: SetQcVerdictsRequest = {
       verdict,
       targets: [{ channel_ids: [m.channel_id], result_ids: [resultId] }],
       overwrite: true,
-      ...(verdict !== "not_tested" && text ? { note: text } : {}),
+      ...(withNote ? { note: note.trim() || null } : {}),
     };
-    mutation.mutate(
-      { campaignId, data },
-      {
-        onSuccess: () => void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) }),
-        onError: () => showError("Could not save the QC verdict."),
-      },
-    );
+    mutation.mutate({ campaignId, data });
   };
 
   return (
     <div className="mt-2 space-y-1.5 border-t pt-2 text-xs">
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <span className="mr-1 text-muted-foreground">QC</span>
         {VERDICTS.map((v) => (
           <Button
@@ -95,11 +113,12 @@ export function QcVerdictControl({
             variant={m.qc_verdict === v ? "default" : "outline"}
             className="h-6 px-2 text-[11px]"
             disabled={mutation.isPending}
-            onClick={() => send(v)}
+            onClick={() => send(v, false)}
           >
             {QC_LABEL[v]}
           </Button>
         ))}
+        {stampEl}
       </div>
       {m.qc_verdict !== "not_tested" && (
         <>
@@ -116,7 +135,7 @@ export function QcVerdictControl({
             size="sm"
             className="h-6 px-2 text-[11px]"
             disabled={mutation.isPending}
-            onClick={() => send(m.qc_verdict)}
+            onClick={() => send(m.qc_verdict, true)}
           >
             Save
           </Button>

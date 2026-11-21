@@ -9,7 +9,10 @@ import type { SetQcVerdictsRequestVerdict } from './setQcVerdictsRequestVerdict'
 
 export interface SetQcVerdictsRequest {
   verdict: SetQcVerdictsRequestVerdict;
-  /** @minItems 1 */
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
   targets: QcTargetRequest[];
   overwrite?: boolean;
   note?: string | null;

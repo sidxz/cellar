@@ -32,20 +32,28 @@ export function qcVerdictsCleared(
 }
 
 export function clearedVerdictsNote(n: number): string {
-  return n === 0
-    ? ""
-    : ` · ${n} QC verdict${n === 1 ? "" : "s"} went back to Not tested because their values changed`;
+  if (n === 0) return "";
+  return n === 1
+    ? " · 1 QC verdict went back to Not tested because its value changed"
+    : ` · ${n} QC verdicts went back to Not tested because their values changed`;
 }
 
-/** How many cells the call would change (the note re-stamp case is ignored). */
+/** How many cells the call would change: the server's per-cell rule. `note` undefined is a
+ *  call that names no note; null or blank names "no note". */
 export function qcForecast(
   cells: CampaignMeasurementResponse[],
   verdict: Verdict,
   overwrite: boolean,
+  note?: string | null,
 ): number {
+  const named = note === undefined ? undefined : note?.trim() || null;
   return cells.filter((m) => {
-    if (!m.holds_result || m.qc_verdict === verdict) return false;
-    if (verdict === "not_tested") return true;
+    // A clear also removes a verdict from a cell that no longer holds a result.
+    if (verdict === "not_tested") return m.qc_verdict !== "not_tested";
+    if (!m.holds_result) return false;
+    if (m.qc_verdict === verdict) {
+      return overwrite && named !== undefined && named !== (m.qc_verdict_note ?? null);
+    }
     return m.qc_verdict === "not_tested" || overwrite;
   }).length;
 }

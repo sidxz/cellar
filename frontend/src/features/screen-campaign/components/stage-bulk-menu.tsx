@@ -2,8 +2,8 @@
 
 /**
  * StageBulkMenu — forces (or clears) one hit stage's verdict for every
- * currently-visible campaign result in a single save. Sits in the campaign
- * toolbar above the grid, next to the filter chips it reads from.
+ * currently-visible campaign result in a single save. Renders only its controls:
+ * the builder's bulk bar above the grid holds it beside the QC menu.
  *
  * "Visible" is whatever `rowPassesFilters` lets through for the selected
  * stage — the same predicate the grid's external filter uses, so what the
@@ -126,7 +126,7 @@ export function StageBulkMenu({
   }
 
   return (
-    <div className="flex items-center gap-1.5 border-b bg-muted/10 px-3 py-1.5">
+    <>
       <span className="text-xs text-muted-foreground">
         Bulk ({count} visible {count === 1 ? "row" : "rows"}):
       </span>
@@ -185,6 +185,6 @@ export function StageBulkMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

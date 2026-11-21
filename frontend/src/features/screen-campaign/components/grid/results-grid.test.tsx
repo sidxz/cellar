@@ -670,7 +670,7 @@ describe("ResultsGridV2 QC marks", () => {
     display_order: 0,
   } as unknown as CampaignChannelResponse;
 
-  function renderValueCell(m: Partial<CampaignMeasurementResponse>) {
+  function renderValueCell(m: Partial<CampaignMeasurementResponse>, qcReadOnly = false) {
     const campaign = {
       id: "c-qc",
       stages: [],
@@ -692,6 +692,7 @@ describe("ResultsGridV2 QC marks", () => {
           filters={emptyFilters()}
           selectedStageId={null}
           readOnly={false}
+          qcReadOnly={qcReadOnly}
         />
       </QueryClientProvider>,
     );
@@ -712,9 +713,17 @@ describe("ResultsGridV2 QC marks", () => {
     expect(screen.getByLabelText("QC verified")).toBeInTheDocument();
   });
 
-  it("marks nothing on a not-tested cell", () => {
-    renderValueCell({ value: 5, value_qualifier: "=", holds_result: true });
+  it("marks nothing on a not-tested cell, and adds no empty marker row", () => {
+    const { container } = renderValueCell({ value: 5, value_qualifier: "=", holds_result: true });
     expect(screen.queryByLabelText(/^QC /)).toBeNull();
+    expect(container.querySelector(".mt-0\\.5")).toBeNull();
+  });
+
+  it("gives a viewer the verdict but no QC buttons", () => {
+    renderValueCell({ value: null, value_qualifier: "nd", holds_result: true }, true);
+    fireEvent.click(screen.getByRole("button", { name: "ND" }));
+    expect(screen.getByText("Not tested")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Verified" })).toBeNull();
   });
 
   it("opens the QC control from a tested ND", () => {
