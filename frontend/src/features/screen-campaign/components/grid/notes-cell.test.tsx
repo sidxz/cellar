@@ -49,6 +49,15 @@ describe("NotesCell", () => {
     expect(screen.queryByRole("button", { name: "Edit notes" })).toBeNull();
   });
 
+  it("a read-only cell whose note was removed says so, and opens its history", () => {
+    renderCell(
+      { ...makeResult(null), notes_edited_by: "u-1", notes_edited_at: "2026-11-21T14:03:00Z" },
+      true,
+    );
+    const button = screen.getByRole("button", { name: "Note history" });
+    expect(button).toHaveTextContent("Note removed");
+  });
+
   it("a read-only empty row with no stamp renders nothing", () => {
     const { container } = renderCell(makeResult(null), true);
     expect(container.textContent).toBe("");

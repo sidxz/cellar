@@ -79,6 +79,60 @@ describe("NotesPopover", () => {
     });
   });
 
+  it("sends the stored note itself as expected, whatever the browser would trim", () => {
+    // JS trim() strips a U+FEFF that the server keeps: comparing a trimmed copy
+    // would refuse every save of this note.
+    open("﻿abc");
+    type("new");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.calls[0][0].data.expected_notes).toBe("﻿abc");
+
+    act(() =>
+      hook.options?.mutation?.onError?.(
+        new ApiError("API error: 409", 409, {
+          error: "StaleEditError",
+          current: {
+            notes: "﻿theirs",
+            notes_edited_by: "u-2",
+            notes_edited_at: "2026-11-21T10:00:00Z",
+          },
+        }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.calls[1][0].data.expected_notes).toBe("﻿theirs");
+  });
+
+  it("a saved note is on the row at once, so reopening it is not a stale edit", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(["campaigns", "c-1"], {
+      id: "c-1",
+      results: [row("old"), { ...row("other"), id: "r-2" }],
+    });
+    render(
+      <QueryClientProvider client={qc}>
+        <NotesPopover campaignId="c-1" result={row("old")} onClose={() => {}} />
+      </QueryClientProvider>,
+    );
+    type("new");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    act(() =>
+      (hook.options?.mutation?.onSuccess as unknown as (data: unknown) => void)?.({
+        notes: "new",
+        notes_edited_by: "u-1",
+        notes_edited_at: "2026-11-21T14:03:00Z",
+      }),
+    );
+
+    const cached = qc.getQueryData<{ results: CampaignResultResponse[] }>(["campaigns", "c-1"]);
+    expect(cached?.results[0]).toMatchObject({
+      notes: "new",
+      notes_edited_by: "u-1",
+      notes_edited_at: "2026-11-21T14:03:00Z",
+    });
+    expect(cached?.results[1].notes).toBe("other");
+  });
+
   it("a first note is saved as based on no note", () => {
     open(null);
     type("  Watch hERG ");

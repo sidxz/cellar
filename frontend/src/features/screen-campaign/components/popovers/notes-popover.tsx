@@ -23,7 +23,7 @@ import type { ResultNoteResponse } from "@/shared/lib/api/model";
 import { showError } from "@/shared/lib/toast";
 
 import { campaignKeys, useResultNoteHistory } from "../../hooks/use-campaigns";
-import type { CampaignResultResponse } from "../../types";
+import type { CampaignResponse, CampaignResultResponse } from "../../types";
 
 export interface NotesPopoverProps {
   campaignId: string;
@@ -73,16 +73,28 @@ function NoteHistory({ campaignId, resultId }: { campaignId: string; resultId: s
 export function NotesPopover({ campaignId, result, onClose, readOnly = false }: NotesPopoverProps) {
   const nameOf = useMemberNames();
   const [notes, setNotes] = useState(result.notes ?? "");
-  // The note this edit is based on; a 409 moves it to the colleague's note.
-  const [base, setBase] = useState(normalize(result.notes));
+  // The note this edit is based on, exactly as the server holds it (the server
+  // normalizes both sides; a browser-trimmed copy can differ). A 409 moves it to
+  // the colleague's note.
+  const [base, setBase] = useState<string | null>(result.notes ?? null);
   const [stale, setStale] = useState<ResultNoteResponse | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
   const qc = useQueryClient();
   const mutation = useSetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch({
     mutation: {
-      onSuccess: () => {
-        // The detail key prefixes the history key, so both refetch.
+      onSuccess: (saved) => {
+        // Put the saved note on the row now: reopening it before the refetch lands
+        // must not look like a colleague's change. The detail key prefixes the
+        // history key, so both refetch.
+        qc.setQueryData<CampaignResponse>(campaignKeys.detail(campaignId), (old) =>
+          old
+            ? {
+                ...old,
+                results: old.results.map((r) => (r.id === result.id ? { ...r, ...saved } : r)),
+              }
+            : old,
+        );
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         onClose();
       },
@@ -90,7 +102,7 @@ export function NotesPopover({ campaignId, result, onClose, readOnly = false }: 
         if (isStaleEdit(err) && err instanceof ApiError) {
           const current = (err.body as { current?: ResultNoteResponse }).current ?? null;
           setStale(current);
-          setBase(normalize(current?.notes));
+          setBase(current?.notes ?? null);
           void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
           return;
         }
@@ -100,7 +112,7 @@ export function NotesPopover({ campaignId, result, onClose, readOnly = false }: 
     },
   });
 
-  const dirty = normalize(notes) !== base;
+  const dirty = normalize(notes) !== normalize(base);
 
   function onSave() {
     if (!dirty) {

@@ -35,12 +35,16 @@ export function NotesCell({ campaignId, result, readOnly }: NotesCellProps) {
         </p>
       )}
     </>
-  ) : readOnly ? null : (
+  ) : readOnly ? (
+    // Only reached for a removed note (it has a stamp): say so, so the history
+    // button is visible rather than a blank, focusable cell.
+    <span className="text-[11px] italic text-muted-foreground/70">Note removed</span>
+  ) : (
     <span className="text-[11px] italic text-muted-foreground/70">Add note</span>
   );
 
   if (readOnly && !notes && !result.notes_edited_at) {
-    return <div className="max-w-[200px] py-1 text-left">{body}</div>;
+    return <div className="max-w-[200px] py-1 text-left" />;
   }
 
   return (
