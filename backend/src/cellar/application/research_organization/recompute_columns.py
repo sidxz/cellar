@@ -76,6 +76,7 @@ async def recompute_columns(
             old = row.find_measurement(channel.id)
             if old is not None:
                 cell.id = old.id
+                cell.carry_qc_verdict_from(old)
                 row.remove_measurement_for_channel(channel.id)
             row.add_measurement(cell)
         written += len(targets)

@@ -420,7 +420,7 @@ class TestOverrideResultCell:
         assert new_m.test_concentration_value == 10.0
         assert new_m.test_concentration_unit == "uM"
         assert new_m.replicate_count == 3
-        # An override is a new value: the old value's QC verdict does not carry over.
+        # A different value is a different reading: the verdict does not carry over.
         assert new_m.qc_verdict is None
         assert new_m.contributing_run_ids == run_ids
         assert new_m.batch_ids == batch_ids
@@ -481,3 +481,40 @@ class TestOverrideResultCell:
         typed = await override(4.2, ValueQualifier.EQ)
         assert typed.unresolved_reason is None
         assert typed.concentrations_found == found
+
+    async def _override_verified(self, value: float):
+        auth = fake_auth()
+        campaign, result, m, channel_id = _make_campaign_with_measurement(auth.workspace_id)
+        m.qc_verdict = QcVerdict.VERIFIED
+        m.qc_verdict_by = uuid.UUID(int=7)
+        uc = OverrideResultCell(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            dispatcher=AsyncMock(),
+        )
+        out = await uc(
+            OverrideResultCellCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                result_id=result.id,
+                channel_id=channel_id,
+                value=value,
+                value_qualifier=ValueQualifier.EQ,
+                unit="uM",
+            ),
+            auth=auth,
+        )
+        assert isinstance(out, Success)
+        return out.unwrap().results[0].find_measurement(channel_id)
+
+    @pytest.mark.asyncio
+    async def test_override_same_value_keeps_verdict(self) -> None:
+        new_m = await self._override_verified(5.0)
+        assert new_m.qc_verdict is QcVerdict.VERIFIED
+        assert new_m.qc_verdict_by == uuid.UUID(int=7)
+
+    @pytest.mark.asyncio
+    async def test_override_new_value_clears_verdict(self) -> None:
+        new_m = await self._override_verified(6.0)
+        assert new_m.qc_verdict is None
+        assert new_m.qc_verdict_by is None

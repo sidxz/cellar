@@ -8,6 +8,7 @@ untested without querying (spec §6.3).
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -29,6 +30,7 @@ from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import CampaignStage
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
+    QcVerdict,
     QualifierHandling,
     SelectionRule,
     UnresolvedReason,
@@ -40,6 +42,7 @@ from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
+    reading,
 )
 
 PROTO = uuid.uuid4()
@@ -234,3 +237,123 @@ async def test_close_uses_stage_scope():
     assert isinstance(out, Success)
     assert query.run_ids_seen == [[at_stage]]
     assert c.results[0].find_measurement(ch.id).value == 99.0
+
+
+class _SeqQuery:
+    """Returns the next prepared candidate map on each fetch."""
+
+    def __init__(self, *fetches):
+        self._fetches = list(fetches)
+
+    async def fetch(self, *, workspace_id, channel, run_ids, molecule_ids):
+        return self._fetches.pop(0)
+
+
+def _verified(m: CampaignMeasurement) -> None:
+    m.qc_verdict = QcVerdict.VERIFIED
+    m.qc_verdict_by = uuid.UUID(int=7)
+    m.qc_verdict_at = datetime(2026, 1, 2, tzinfo=UTC)
+    m.qc_verdict_note = "checked"
+
+
+def _one_row(rule: SelectionRule = SelectionRule.LATEST_RUN):
+    c = _campaign(1)
+    ch = _column(c)
+    ch.selection_rule = rule
+    return c, ch, c.results[0]
+
+
+async def _recompute(c, ch, query):
+    await recompute_columns(query=query, campaign=c, channels=[ch])
+
+
+@pytest.mark.asyncio
+async def test_recompute_keeps_verdict_when_value_and_runs_unchanged():
+    c, ch, row = _one_row()
+    run = uuid.uuid4()
+    cand = lambda: {row.molecule_id: [reading(row.molecule_id, 5.0, run)]}  # noqa: E731
+    await _recompute(c, ch, _SeqQuery(cand()))
+    first = row.find_measurement(ch.id)
+    _verified(first)
+    by, at = first.qc_verdict_by, first.qc_verdict_at
+
+    await _recompute(c, ch, _SeqQuery(cand()))
+
+    m = row.find_measurement(ch.id)
+    assert m is not first
+    assert (m.qc_verdict, m.qc_verdict_by, m.qc_verdict_at, m.qc_verdict_note) == (
+        QcVerdict.VERIFIED,
+        by,
+        at,
+        "checked",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule", [SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN])
+async def test_recompute_keeps_verdict_on_mean_cell(rule):
+    c, ch, row = _one_row(rule)
+    runs = [uuid.uuid4() for _ in range(3)]
+    mid = row.molecule_id
+    readings = [reading(mid, v, r) for v, r in zip((0.1, 0.2, 0.3), runs, strict=True)]
+    # Float sums depend on order, so a carry that compared exact values would break.
+    await _recompute(c, ch, _SeqQuery({mid: list(readings)}))
+    _verified(row.find_measurement(ch.id))
+
+    await _recompute(c, ch, _SeqQuery({mid: list(reversed(readings))}))
+
+    assert row.find_measurement(ch.id).qc_verdict is QcVerdict.VERIFIED
+
+
+@pytest.mark.asyncio
+async def test_recompute_keeps_verdict_on_tested_nd():
+    c, ch, row = _one_row()
+    mid = row.molecule_id
+    run = uuid.uuid4()
+    nd_cands = {mid: [reading(mid, None, run, qualifier=ValueQualifier.ND, curve_class="4")]}
+    await _recompute(c, ch, _SeqQuery(nd_cands))
+    first = row.find_measurement(ch.id)
+    assert first.value_qualifier == ValueQualifier.ND and first.holds_result
+    _verified(first)
+
+    await _recompute(c, ch, _SeqQuery(nd_cands))
+
+    assert row.find_measurement(ch.id).qc_verdict is QcVerdict.VERIFIED
+
+
+@pytest.mark.asyncio
+async def test_recompute_clears_verdict_when_value_changes():
+    c, ch, row = _one_row()
+    run, mid = uuid.uuid4(), row.molecule_id
+    await _recompute(c, ch, _SeqQuery({mid: [reading(mid, 5.0, run)]}))
+    _verified(row.find_measurement(ch.id))
+
+    await _recompute(c, ch, _SeqQuery({mid: [reading(mid, 6.0, run)]}))
+
+    m = row.find_measurement(ch.id)
+    assert m.qc_verdict is None and m.qc_verdict_by is None and m.qc_verdict_note is None
+
+
+@pytest.mark.asyncio
+async def test_recompute_clears_verdict_when_run_set_changes():
+    c, ch, row = _one_row(SelectionRule.MEAN_ACROSS_RUNS)
+    mid, r1, r2 = row.molecule_id, uuid.uuid4(), uuid.uuid4()
+    await _recompute(c, ch, _SeqQuery({mid: [reading(mid, 5.0, r1)]}))
+    _verified(row.find_measurement(ch.id))
+
+    # A second run joins at the same value, so the mean is unchanged.
+    await _recompute(c, ch, _SeqQuery({mid: [reading(mid, 5.0, r1), reading(mid, 5.0, r2)]}))
+
+    assert row.find_measurement(ch.id).qc_verdict is None
+
+
+@pytest.mark.asyncio
+async def test_recompute_never_touches_override_verdict():
+    c, ch, row = _one_row()
+    override = _cell(row, ch, override=True)
+    _verified(override)
+
+    await _recompute(c, ch, FakeColumnQuery(99.0))
+
+    m = row.find_measurement(ch.id)
+    assert m is override and m.qc_verdict is QcVerdict.VERIFIED

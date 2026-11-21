@@ -139,6 +139,7 @@ class OverrideResultCell:
             except ValidationError as e:
                 return Failure(e)
 
+            new_m.carry_qc_verdict_from(existing)
             result.remove_measurement_for_channel(input.channel_id)
             result.add_measurement(new_m)
 
