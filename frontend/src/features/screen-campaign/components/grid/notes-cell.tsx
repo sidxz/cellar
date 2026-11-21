@@ -23,6 +23,7 @@ export function NotesCell({ campaignId, result, readOnly }: NotesCellProps) {
   const [open, setOpen] = useState(false);
   const nameOf = useMemberNames();
   const notes = result.notes?.trim() ?? "";
+  const versions = result.notes_version_count ?? 0;
 
   const body = notes ? (
     <>
@@ -32,6 +33,7 @@ export function NotesCell({ campaignId, result, readOnly }: NotesCellProps) {
       {result.notes_edited_at && (
         <p className="text-[10px] leading-tight text-muted-foreground/70">
           {noteStamp(nameOf(result.notes_edited_by), result.notes_edited_at)}
+          {versions > 1 && ` · ${versions} versions`}
         </p>
       )}
     </>

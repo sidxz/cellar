@@ -14,6 +14,7 @@ export interface CampaignResultResponse {
   notes?: string | null;
   notes_edited_by?: string | null;
   notes_edited_at?: string | null;
+  notes_version_count?: number;
   measurements: CampaignMeasurementResponse[];
   stage_outcomes: StageOutcomeResponse[];
 }

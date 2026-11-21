@@ -37,6 +37,21 @@ describe("NotesCell", () => {
     expect(screen.getByText(/^by Ada · /)).toBeInTheDocument();
   });
 
+  it("counts the versions of a note that has changed", () => {
+    renderCell({ ...makeResult("Third take"), notes_version_count: 3 }, false);
+    expect(screen.getByText(/^by Ada · .+ · 3 versions$/)).toBeInTheDocument();
+  });
+
+  it("says nothing about versions for a note saved once", () => {
+    renderCell({ ...makeResult("First take"), notes_version_count: 1 }, false);
+    expect(screen.queryByText(/versions/)).toBeNull();
+  });
+
+  it("a row without a count shows none", () => {
+    renderCell(makeResult("First take"), false);
+    expect(screen.queryByText(/versions/)).toBeNull();
+  });
+
   it("shows no stamp under a note that predates tracking", () => {
     renderCell(makeResult("Old note", false), false);
     expect(screen.queryByText(/^by /)).toBeNull();
