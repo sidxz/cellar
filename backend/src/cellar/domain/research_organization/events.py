@@ -138,6 +138,26 @@ class CampaignSuperseded(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CampaignManagementSet(DomainEvent):
+    """Another app (e.g. DAIKON) took over the campaign's lifecycle and structure."""
+
+    managed_by: str
+    url: str
+    label: str
+    set_by: uuid.UUID | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignReleased(DomainEvent):
+    """An admin released a managed campaign back to ChemCellar."""
+
+    previous_managed_by: str
+    previous_label: str
+    reason: str
+    released_by: uuid.UUID | None
+
+
+@dataclass(frozen=True, kw_only=True)
 class CampaignCollectionAdded(DomainEvent):
     """A library was linked to a campaign. Use-case-constructed, emitted only
     when a link row was actually inserted (idempotent re-adds stay silent)."""
