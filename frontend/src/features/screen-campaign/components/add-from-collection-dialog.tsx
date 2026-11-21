@@ -31,6 +31,8 @@ import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { campaignKeys } from "../hooks/use-campaigns";
+import { clearedVerdictsNote, qcVerdictsCleared } from "../lib/qc-verdicts";
+import type { CampaignResponse } from "../types";
 
 interface AddFromCollectionDialogProps {
   campaignId: string;
@@ -54,12 +56,13 @@ export function AddFromCollectionDialog({
   const mutation = useAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost({
     mutation: {
       onSuccess: (result) => {
+        const before = qc.getQueryData<CampaignResponse>(campaignKeys.detail(campaignId));
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         const collectionName =
           collections?.find((c) => c.id === collectionId)?.name ?? "collection";
         showSuccess(
           `Added ${result.added} compound${result.added !== 1 ? "s" : ""} from "${collectionName}". ` +
-            `${result.skipped} were already on this campaign.`,
+            `${result.skipped} were already on this campaign.${clearedVerdictsNote(qcVerdictsCleared(before, result.campaign))}`,
         );
         handleClose();
       },

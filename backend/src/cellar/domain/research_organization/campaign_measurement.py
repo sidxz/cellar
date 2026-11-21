@@ -10,18 +10,62 @@ per-cell hit call is stored here (see the campaign-hit-stages spec §5).
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
+from enum import StrEnum
 from typing import Any
 
+from cellar.domain.research_organization.campaign_stage import UNSET
 from cellar.domain.research_organization.enums import (
     MeasurementBasis,
+    QcVerdict,
     UnresolvedReason,
     ValueQualifier,
 )
 from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.units import canonical_unit
+
+QC_NOTE_MAX_LENGTH = 2000
+
+#: The domain forbids an empty unit, even on an ND cell; this stands in when no reading
+#: contributes one, without inventing a unit we don't know. Close swaps it for the
+#: readout's unit (``Campaign.repair_placeholder_units``).
+ND_UNIT_PLACEHOLDER = "-"
+
+#: Qualifiers that hold no value: the cell was not measured (ND may still be a tested ND).
+UNTESTED_QUALIFIERS = frozenset({ValueQualifier.ND, ValueQualifier.EXCLUDED})
+
+
+class QcApplyOutcome(StrEnum):
+    CHANGED = "changed"
+    UNCHANGED = "unchanged"
+    KEPT = "kept"
+    NO_RESULT = "no_result"
+
+
+def normalize_qc_note(verdict: QcVerdict | None, note: str | None) -> str | None:
+    """The note as stored: stripped, blank = None. Raises for a note on not tested or one
+    over QC_NOTE_MAX_LENGTH. Depends only on the request, so a bulk call checks it once."""
+    note = (note or "").strip() or None
+    if note is not None and verdict is None:
+        raise ValidationError("a QC note needs a verdict")
+    if note is not None and len(note) > QC_NOTE_MAX_LENGTH:
+        raise ValidationError(f"QC note must be at most {QC_NOTE_MAX_LENGTH} characters")
+    return note
+
+
+def _close(a: float | None, b: float | None) -> bool:
+    if a is None or b is None:
+        return a is b
+    return math.isclose(a, b, rel_tol=1e-9)
+
+
+def _same_unit(a: str, b: str) -> bool:
+    """The placeholder is "unit unknown": it matches any unit."""
+    return ND_UNIT_PLACEHOLDER in (a, b) or canonical_unit(a) == canonical_unit(b)
 
 
 @dataclass
@@ -44,7 +88,6 @@ class CampaignMeasurement:
     test_concentration_value: float | None = None
     test_concentration_unit: str | None = None
     replicate_count: int | None = None
-    qc_pass: bool | None = None
     contributing_run_ids: list[uuid.UUID] | None = None
     # Migration 031 — frozen copy of the underlying dose-response curve so the
     # campaign's drawing is reproducible from the row alone (no live FK lookup
@@ -59,6 +102,11 @@ class CampaignMeasurement:
     basis: MeasurementBasis | None = None
     concentration_series: bool = False
     unresolved_reason: UnresolvedReason | None = None
+    #: A person's QC call on this value; None = not tested. Nothing automatic sets it.
+    qc_verdict: QcVerdict | None = None
+    qc_verdict_by: uuid.UUID | None = None
+    qc_verdict_at: datetime | None = None
+    qc_verdict_note: str | None = None
     #: Single-concentration columns: the distinct known doses this compound was measured
     #: at (series runs and not-recorded excluded), whatever the cell resolved to.
     concentrations_found: list[Concentration] | None = None
@@ -88,3 +136,85 @@ class CampaignMeasurement:
         self.is_manual_override = True
         if reason is not None:
             self.override_reason = reason
+
+    @property
+    def is_tested_nd(self) -> bool:
+        """True for an ND cell that came off a curve the assay actually produced.
+
+        The compound WAS tested; the fit simply yielded no readable value (an
+        Inactive classification, or no intercept of the channel's kind). That is a
+        real negative result, not a gap in the data — owner's rule, 2026-09-13:
+        *"'ND' is not untested, it is miss because we have raw values but IC50
+        cannot be determined from curve."*
+
+        An ND with no curve behind it (nothing resolved for the cell at all) and
+        EXCLUDED stay untested.
+
+        ponytail: direction-blind. Right for a potency cut (`IC50 lt 10`), wrong
+        for a "no response is good" cut (a cytotoxicity `CC50 gte 50`), where an
+        inactive compound ought to pass. No such stage exists yet; give
+        StageCriterion a per-criterion knob when one does.
+        """
+        return self.value_qualifier == ValueQualifier.ND and (
+            self.source_curve_id is not None or self.curve_snapshot is not None
+        )
+
+    @property
+    def holds_result(self) -> bool:
+        """A value or a tested ND: the cells a person can put a QC verdict on."""
+        return self.is_tested_nd or (
+            self.value is not None and self.value_qualifier not in UNTESTED_QUALIFIERS
+        )
+
+    def apply_qc_verdict(
+        self,
+        verdict: QcVerdict | None,
+        *,
+        by: uuid.UUID,
+        at: datetime,
+        note: str | object | None = UNSET,
+        overwrite: bool,
+    ) -> QcApplyOutcome:
+        """``note`` UNSET (not named) never re-stamps a cell already holding ``verdict``;
+        None or blank names "no note". A clear also removes a stale verdict from a cell
+        that no longer holds a result."""
+        named = note is not UNSET
+        note = normalize_qc_note(verdict, note if isinstance(note, str) else None)
+        if verdict is None:
+            if self.qc_verdict is None:
+                return QcApplyOutcome.UNCHANGED if self.holds_result else QcApplyOutcome.NO_RESULT
+        elif not self.holds_result:
+            return QcApplyOutcome.NO_RESULT
+        elif self.qc_verdict == verdict:
+            if not (overwrite and named and note != self.qc_verdict_note):
+                return QcApplyOutcome.UNCHANGED
+        elif self.qc_verdict is not None and not overwrite:
+            return QcApplyOutcome.KEPT
+        self.qc_verdict = verdict
+        self.qc_verdict_by = by if verdict else None
+        self.qc_verdict_at = at if verdict else None
+        self.qc_verdict_note = note
+        return QcApplyOutcome.CHANGED
+
+    def carry_qc_verdict_from(self, old: CampaignMeasurement) -> bool:
+        """Take ``old``'s verdict when this cell is the same reading; else stay not tested."""
+        if old.qc_verdict is None or not self.holds_result or not self._same_reading_as(old):
+            return False
+        self.qc_verdict = old.qc_verdict
+        self.qc_verdict_by = old.qc_verdict_by
+        self.qc_verdict_at = old.qc_verdict_at
+        self.qc_verdict_note = old.qc_verdict_note
+        return True
+
+    def _same_reading_as(self, old: CampaignMeasurement) -> bool:
+        if self.value_qualifier != old.value_qualifier or not _close(self.value, old.value):
+            return False
+        if self.value_qualifier not in UNTESTED_QUALIFIERS and not _same_unit(self.unit, old.unit):
+            return False
+        return (
+            _close(self.test_concentration_value, old.test_concentration_value)
+            and canonical_unit(self.test_concentration_unit)
+            == canonical_unit(old.test_concentration_unit)
+            and self.concentration_series == old.concentration_series
+            and set(self.contributing_run_ids or []) == set(old.contributing_run_ids or [])
+        )

@@ -52,11 +52,14 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
-_M104 = Path(__file__).parents[2] / "alembic" / "versions" / "104_stage_owned_campaign_values.py"
+_VERSIONS = Path(__file__).parents[2] / "alembic" / "versions"
+_M104 = _VERSIONS / "104_stage_owned_campaign_values.py"
+# 113 dropped campaign_measurement.qc_pass, which 104's SQL names: step back through it.
+_M113 = _VERSIONS / "113_campaign_cell_qc_verdict.py"
 
 
-def _load():  # type: ignore[no-untyped-def]
-    spec = importlib.util.spec_from_file_location("m104", _M104)
+def _load(path: Path = _M104):  # type: ignore[no-untyped-def]
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -101,7 +104,7 @@ def _channel(cid: uuid.UUID, label: str, protocol: uuid.UUID, order: int) -> Cam
         selection_rule=SelectionRule.MEAN_ACROSS_RUNS,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=order,
-        qc_filter={"z_prime_min": 0.5},
+        qc_filter={"require_approved": True},
         normalization_applied="percent_inhibition",
     )
 
@@ -185,13 +188,15 @@ async def _seed_legacy(conn: AsyncConnection, factory: async_sessionmaker) -> Le
 
 
 async def _migrate(conn: AsyncConnection) -> None:
-    m104 = _load()
+    m104, m113 = _load(), _load(_M113)
 
     def run(sync_conn):  # type: ignore[no-untyped-def]
         # The test schema is built at head; step back to the pre-104 shape first.
         with Operations.context(MigrationContext.configure(sync_conn)):
+            m113.downgrade()
             m104.downgrade()
             m104.upgrade()
+            m113.upgrade()
 
     await conn.run_sync(run)
 
@@ -321,6 +326,7 @@ async def test_migration_104_downgrade_strips_stage_ids(tx) -> None:  # type: ig
 
     def down(sync_conn):  # type: ignore[no-untyped-def]
         with Operations.context(MigrationContext.configure(sync_conn)):
+            _load(_M113).downgrade()
             _load().downgrade()
         seed_runs = sync_conn.execute(
             sa.text("SELECT seed_runs FROM campaign WHERE id = :id"), {"id": legacy.campaign_id}

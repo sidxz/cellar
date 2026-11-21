@@ -126,7 +126,6 @@ class OverrideResultCell:
                     test_concentration_value=existing.test_concentration_value,
                     test_concentration_unit=existing.test_concentration_unit,
                     replicate_count=existing.replicate_count,
-                    qc_pass=existing.qc_pass,
                     contributing_run_ids=existing.contributing_run_ids,
                     batch_ids=existing.batch_ids,
                     basis=existing.basis,
@@ -140,6 +139,7 @@ class OverrideResultCell:
             except ValidationError as e:
                 return Failure(e)
 
+            new_m.carry_qc_verdict_from(existing)
             result.remove_measurement_for_channel(input.channel_id)
             result.add_measurement(new_m)
 

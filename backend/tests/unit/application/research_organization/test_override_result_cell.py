@@ -21,6 +21,7 @@ from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     MeasurementBasis,
+    QcVerdict,
     UnresolvedReason,
     ValueQualifier,
 )
@@ -365,7 +366,7 @@ class TestOverrideResultCell:
 
     @pytest.mark.asyncio
     async def test_override_carries_forward_snapshot_fields(self) -> None:
-        """B6: override preserves test_concentration, replicate_count, qc_pass,
+        """B6: override preserves test_concentration, replicate_count,
         contributing_run_ids and the per-value facts (batches, basis, series,
         unresolved reason) from the existing measurement."""
         auth = fake_auth()
@@ -385,7 +386,9 @@ class TestOverrideResultCell:
             test_concentration_value=10.0,
             test_concentration_unit="uM",
             replicate_count=3,
-            qc_pass=True,
+            qc_verdict=QcVerdict.VERIFIED,
+            qc_verdict_by=uuid.UUID(int=7),
+            qc_verdict_note="checked",
             contributing_run_ids=run_ids,
             batch_ids=batch_ids,
             basis=MeasurementBasis.MIXED,
@@ -417,7 +420,8 @@ class TestOverrideResultCell:
         assert new_m.test_concentration_value == 10.0
         assert new_m.test_concentration_unit == "uM"
         assert new_m.replicate_count == 3
-        assert new_m.qc_pass is True
+        # A different value is a different reading: the verdict does not carry over.
+        assert new_m.qc_verdict is None
         assert new_m.contributing_run_ids == run_ids
         assert new_m.batch_ids == batch_ids
         assert new_m.basis is MeasurementBasis.MIXED
@@ -477,3 +481,87 @@ class TestOverrideResultCell:
         typed = await override(4.2, ValueQualifier.EQ)
         assert typed.unresolved_reason is None
         assert typed.concentrations_found == found
+
+    async def _override_verified(self, value: float):
+        auth = fake_auth()
+        campaign, result, m, channel_id = _make_campaign_with_measurement(auth.workspace_id)
+        m.qc_verdict = QcVerdict.VERIFIED
+        m.qc_verdict_by = uuid.UUID(int=7)
+        uc = OverrideResultCell(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            dispatcher=AsyncMock(),
+        )
+        out = await uc(
+            OverrideResultCellCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                result_id=result.id,
+                channel_id=channel_id,
+                value=value,
+                value_qualifier=ValueQualifier.EQ,
+                unit="uM",
+            ),
+            auth=auth,
+        )
+        assert isinstance(out, Success)
+        return out.unwrap().results[0].find_measurement(channel_id)
+
+    @pytest.mark.asyncio
+    async def test_override_same_value_keeps_verdict(self) -> None:
+        new_m = await self._override_verified(5.0)
+        assert new_m.qc_verdict is QcVerdict.VERIFIED
+        assert new_m.qc_verdict_by == uuid.UUID(int=7)
+
+    @pytest.mark.asyncio
+    async def test_override_new_value_clears_verdict(self) -> None:
+        new_m = await self._override_verified(6.0)
+        assert new_m.qc_verdict is None
+        assert new_m.qc_verdict_by is None
+
+    @pytest.mark.asyncio
+    async def test_nd_over_a_verified_aggregate_nd_is_not_tested(self) -> None:
+        """An aggregate tested ND is marked only by its snapshot, which the override does
+        not copy: the typed ND holds no result, so it takes no verdict."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        channel_id = uuid.uuid4()
+        result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        aggregate_nd = CampaignMeasurement(
+            result_id=result.id,
+            channel_id=channel_id,
+            value=None,
+            value_qualifier=ValueQualifier.ND,
+            unit="",
+            protocol_name_snapshot="Proto A",
+            protocol_version_snapshot=2,
+            curve_snapshot={"aggregate_label": "mean"},
+            qc_verdict=QcVerdict.VERIFIED,
+            qc_verdict_by=uuid.UUID(int=7),
+        )
+        assert aggregate_nd.holds_result
+        result.add_measurement(aggregate_nd)
+        campaign.add_result(result)
+        uc = OverrideResultCell(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            dispatcher=AsyncMock(),
+        )
+
+        out = await uc(
+            OverrideResultCellCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                result_id=result.id,
+                channel_id=channel_id,
+                value=None,
+                value_qualifier=ValueQualifier.ND,
+                unit="",
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(out, Success)
+        new_m = out.unwrap().results[0].find_measurement(channel_id)
+        assert not new_m.holds_result
+        assert new_m.qc_verdict is None and new_m.qc_verdict_by is None

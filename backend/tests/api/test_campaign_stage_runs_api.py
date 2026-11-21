@@ -144,8 +144,6 @@ async def test_add_from_runs_with_stage_id_reads_back_stage_ids(
     assert cell["concentration_series"] is False
     assert cell["unresolved_reason"] is None
     assert cell["concentrations_found"] == [{"value": 10.0, "unit": "µM"}]
-    # Approved runs, no z′ recorded: the default QC heuristic passes.
-    assert cell["qc_pass"] is True
 
 
 async def test_preview_with_stage_id_shows_the_stage_wide_value(
@@ -176,8 +174,6 @@ async def test_preview_with_stage_id_shows_the_stage_wide_value(
     # Exactly what the commit would write: the mean over the stage's runs.
     cell = await preview_cell(primary)
     assert cell["value"] == 50.0
-    assert cell["qc_pass"] is True
-    assert "qc_reason" not in cell
     assert (await preview_cell(retest))["value"] == 60.0
 
 

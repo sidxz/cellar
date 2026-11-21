@@ -64,7 +64,7 @@ async def add_campaign_channel(
         source_kind=ChannelSourceKind(body.source_kind),
         selection_rule=SelectionRule(body.selection_rule),
         qualifier_handling=QualifierHandling(body.qualifier_handling),
-        qc_filter=body.qc_filter,
+        qc_filter=body.qc_filter.to_domain() if body.qc_filter is not None else None,
         display_order=body.display_order,
         normalization_applied=body.normalization_applied,
         intercept_key=body.intercept_key.to_domain() if body.intercept_key is not None else None,
@@ -98,7 +98,11 @@ async def update_campaign_channel(
         if "selection_rule" in provided and body.selection_rule is not None
         else UNSET
     )
-    qc_filter: dict | object | None = body.qc_filter if "qc_filter" in provided else UNSET
+    qc_filter: dict | object | None = (
+        (body.qc_filter.to_domain() if body.qc_filter is not None else None)
+        if "qc_filter" in provided
+        else UNSET
+    )
     display_order: int | object = (
         body.display_order
         if "display_order" in provided and body.display_order is not None

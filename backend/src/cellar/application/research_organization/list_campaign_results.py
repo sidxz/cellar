@@ -27,6 +27,10 @@ from cellar.application.auth import AuthContext, require_same_workspace, require
 from cellar.application.research_organization.campaign_identity_reader import (
     CampaignIdentityReader,
 )
+from cellar.application.research_organization.campaign_row_selection import (
+    RowSelection,
+    select_campaign_rows,
+)
 from cellar.application.shared.pagination import DEFAULT_PAGE_SIZE, PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -107,45 +111,24 @@ class ListCampaignResults:
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
 
-            if input.stage_id is not None and campaign.find_stage(input.stage_id) is None:
-                return Failure(NotFoundError("CampaignStage", str(input.stage_id)))
-
             if input.order_by_channel_id is not None and not any(
                 ch.id == input.order_by_channel_id for ch in campaign.channels
             ):
                 return Failure(NotFoundError("CampaignChannel", str(input.order_by_channel_id)))
 
             outcomes = evaluate_stages(campaign)
-            known_channels = {ch.id for ch in campaign.channels}
-            for condition in input.filters.measurements:
-                if condition.channel_id not in known_channels:
-                    return Failure(NotFoundError("CampaignChannel", str(condition.channel_id)))
-
-            rows = list(campaign.results)
-            if input.stage_id is not None and input.outcome:
-                stage_id = input.stage_id
-                wanted = set(input.outcome)
-                rows = [
-                    r
-                    for r in rows
-                    if (o := outcomes.get(r.id, {}).get(stage_id)) is not None
-                    and o.outcome in wanted
-                ]
-            if input.filters.overridden is not None:
-                assert input.stage_id is not None
-                rows = [
-                    r
-                    for r in rows
-                    if (o := outcomes.get(r.id, {}).get(input.stage_id)) is not None
-                    and o.overridden == input.filters.overridden
-                ]
-            for condition in input.filters.measurements:
-                rows = [r for r in rows if condition.matches(r)]
-            if input.filters.search and rows:
-                matches = await self._identity_reader.matching_ids(
-                    input.workspace_id, list({r.molecule_id for r in rows}), input.filters.search
-                )
-                rows = [r for r in rows if r.molecule_id in matches]
+            selection = RowSelection(
+                stage_id=input.stage_id, outcome=input.outcome, filters=input.filters
+            )
+            selected = await select_campaign_rows(
+                campaign,
+                selection,
+                outcomes=outcomes,
+                identity_reader=self._identity_reader,
+            )
+            if isinstance(selected, Failure):
+                return selected
+            rows = selected.unwrap()
             total = len(rows)
 
             if input.order_by_channel_id is not None:

@@ -153,7 +153,6 @@ class _FakeColumnQuery:
             value=99.0,
             qualifier=ValueQualifier.EQ,
             unit="uM",
-            z_prime=None,
             protocol_name="Test Protocol",
             protocol_version=1,
             readout_id=uuid.uuid4(),

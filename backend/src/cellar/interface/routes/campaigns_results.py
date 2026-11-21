@@ -1,7 +1,7 @@
 """Campaign result-row endpoints.
 
 Covers the paged row read, per-row CRUD (add / remove), bulk row removal,
-per-row notes edits, and per-cell manual overrides.
+per-row notes edits, per-cell manual overrides, and QC verdicts on many cells.
 
 Every write here answers 204. They used to return the whole
 ``CampaignResponse``, so editing one cell on a 16,900-row campaign serialised
@@ -9,6 +9,7 @@ the entire result matrix back to say so. No caller wanted it — cellar's own
 grid invalidates and refetches, and daikon's client ignores the body — and a
 write that reports "here is everything" hides which thing it actually changed.
 Read the new state with ``GET /campaigns/{id}`` or the paged read above.
+The QC write is the exception: it answers with its counts, which only it knows.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from cellar.application.research_organization.add_result_row import (
     AddResultRowCommand,
 )
+from cellar.application.research_organization.campaign_row_selection import RowSelection
 from cellar.application.research_organization.list_campaign_results import (
     ListCampaignResultsQuery,
 )
@@ -31,11 +33,16 @@ from cellar.application.research_organization.override_result_cell import (
 from cellar.application.research_organization.remove_result_row import (
     RemoveResultRowCommand,
 )
+from cellar.application.research_organization.set_cell_qc_verdicts import (
+    QcTarget,
+    SetCellQcVerdictsCommand,
+)
 from cellar.application.research_organization.set_result_notes import (
     SetResultNotesCommand,
 )
 from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
-from cellar.domain.research_organization.enums import StageOutcome, ValueQualifier
+from cellar.domain.research_organization.campaign_stage import UNSET
+from cellar.domain.research_organization.enums import QcVerdict, StageOutcome, ValueQualifier
 from cellar.interface.dependencies import (
     ActingServiceDep,
     AddResultRowDep,
@@ -43,6 +50,7 @@ from cellar.interface.dependencies import (
     ListCampaignResultsDep,
     OverrideResultCellDep,
     RemoveResultRowDep,
+    SetCellQcVerdictsDep,
     SetResultNotesDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -58,6 +66,8 @@ from cellar.interface.routes._campaign_dtos import (
     BulkRemoveResultsRequest,
     CampaignResultResponse,
     OverrideCellRequest,
+    QcVerdictCountsResponse,
+    SetQcVerdictsRequest,
     SetResultNotesRequest,
 )
 
@@ -89,8 +99,8 @@ async def search_campaign_results(
 
     Identity search is literal, case-insensitive substring matching on registration number or
     name. All measurement filters are ANDed. Bounds are inclusive, use the exact stored unit,
-    and match only unqualified numeric values; QC unknown means an existing cell without a QC
-    flag. ``overridden`` refers to the selected stage's outcome override.
+    and match only unqualified numeric values. QC ``not_tested`` means a cell holding a value (or a
+    tested ND) with no verdict yet. ``overridden`` refers to the selected stage's outcome override.
     """
     out = result_to_response(
         await uc(
@@ -212,6 +222,52 @@ async def override_result_cell(
     )
     result_to_response(await uc(cmd, auth=auth))
     return Response(status_code=204)
+
+
+@router.put("/{campaign_id}/qc-verdicts", response_model=QcVerdictCountsResponse)
+async def set_qc_verdicts(
+    campaign_id: uuid.UUID,
+    body: SetQcVerdictsRequest,
+    auth: AuthDep,
+    uc: SetCellQcVerdictsDep,
+) -> QcVerdictCountsResponse:
+    """Put a person's QC verdict on many cells of a DRAFT campaign in one save.
+
+    Each target is its ``channel_ids`` times its rows, named exactly one way: the
+    ``result_ids`` key (``null`` = every row) or ``where``, the rows ``POST /results/search``
+    returns for that stage, outcome and filters. A cell named twice counts once.
+    ``not_tested`` clears a verdict whatever ``overwrite`` says; Verified/Failed over the
+    other verdict needs ``overwrite`` (else ``kept``). A note goes with Verified/Failed
+    only. A cell already holding the verdict is re-stamped only with ``overwrite`` and a
+    ``note`` key whose note differs (``null`` = no note); omit ``note`` to leave it alone.
+
+    404 on the first unknown result, column, stage or filter column, with nothing
+    applied. 423 when the campaign is not a draft. Open to the managing app and to
+    ChemCellar alike.
+    """
+    cmd = SetCellQcVerdictsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        user_id=auth.user_id,
+        verdict=None if body.verdict == "not_tested" else QcVerdict(body.verdict),
+        targets=tuple(
+            QcTarget(
+                channel_ids=tuple(t.channel_ids),
+                result_ids=None if t.result_ids is None else tuple(t.result_ids),
+                where=None
+                if t.where is None
+                else RowSelection(
+                    stage_id=t.where.stage_id,
+                    outcome=tuple(t.where.outcome),
+                    filters=t.where.filters,
+                ),
+            )
+            for t in body.targets
+        ),
+        overwrite=body.overwrite,
+        note=body.note if "note" in body.model_fields_set else UNSET,
+    )
+    return QcVerdictCountsResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
 
 
 @router.post("/{campaign_id}/results", status_code=204)

@@ -24,13 +24,16 @@ import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
+import { showSuccess } from "@/shared/lib/toast";
 import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
+import { clearedVerdictsNote, qcVerdictsCleared } from "../lib/qc-verdicts";
 import type { CampaignResponse, StageOutcome } from "../types";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { CampaignView } from "./campaign-view";
 import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
+import { QcBulkMenu } from "./qc-bulk-menu";
 import { StageBulkMenu } from "./stage-bulk-menu";
 
 import { ChannelsSection } from "./sections/channels-section";
@@ -133,8 +136,11 @@ function CampaignBuilderV2({
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        const before = qc.getQueryData<CampaignResponse>(campaignKeys.detail(campaign.id));
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+        const cleared = qcVerdictsCleared(before, data as CampaignResponse);
+        if (cleared > 0) showSuccess(`Refreshed${clearedVerdictsNote(cleared)}`);
       },
     },
   });
@@ -145,6 +151,8 @@ function CampaignBuilderV2({
   // (sources, columns, stages, compound rows) is also locked when another app manages it.
   const curationLocked = campaign.status !== "draft";
   const structureLocked = curationLocked || Boolean(campaign.managed_by);
+  // QC is an editor's call: a viewer sees verdicts, never the actions.
+  const qcReadOnly = curationLocked || !canEditTags;
 
   return (
     <div className="flex flex-col">
@@ -181,17 +189,27 @@ function CampaignBuilderV2({
         selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
       />
-      <StageBulkMenu
-        campaign={campaign}
-        filters={filters}
-        selectedStageId={effectiveStageId}
-        readOnly={curationLocked}
-      />
+      {/* One bulk bar for both menus; hidden when neither renders anything. */}
+      <div className="flex items-center gap-1.5 border-b bg-muted/10 px-3 py-1.5 empty:hidden">
+        <StageBulkMenu
+          campaign={campaign}
+          filters={filters}
+          selectedStageId={effectiveStageId}
+          readOnly={curationLocked}
+        />
+        <QcBulkMenu
+          campaign={campaign}
+          filters={filters}
+          selectedStageId={effectiveStageId}
+          readOnly={qcReadOnly}
+        />
+      </div>
       <ResultsGridV2
         campaign={campaign}
         filters={filters}
         selectedStageId={effectiveStageId}
         readOnly={curationLocked}
+        qcReadOnly={qcReadOnly}
         rowsLocked={structureLocked}
       />
 

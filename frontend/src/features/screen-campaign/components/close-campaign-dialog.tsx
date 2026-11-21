@@ -26,7 +26,9 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 
 import { useCloseCampaignApiV1CampaignsCampaignIdClosePost } from "@/shared/lib/api/campaigns/campaigns";
+import { showSuccess } from "@/shared/lib/toast";
 import { campaignKeys } from "../hooks/use-campaigns";
+import { clearedVerdictsNote, qcVerdictsCleared } from "../lib/qc-verdicts";
 import type { CampaignResponse } from "../types";
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -45,8 +47,11 @@ export function CloseCampaignDialog({ campaign, open, onOpenChange }: CloseCampa
 
   const closeMutation = useCloseCampaignApiV1CampaignsCampaignIdClosePost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        const before = qc.getQueryData<CampaignResponse>(campaignKeys.detail(campaign.id));
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+        const cleared = qcVerdictsCleared(before, data as CampaignResponse);
+        if (cleared > 0) showSuccess(`Closed${clearedVerdictsNote(cleared)}`);
         onOpenChange(false);
         // Navigate to same route — campaign.status will be "closed", rendering CampaignView
         router.refresh();

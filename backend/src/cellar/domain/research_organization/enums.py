@@ -117,3 +117,10 @@ __all__ = [
     "StageOutcome",
     "ValueQualifier",
 ]
+
+
+class QcVerdict(StrEnum):
+    """A person's call on a campaign cell. No verdict (None) means not tested."""
+
+    VERIFIED = "verified"
+    FAILED = "failed"

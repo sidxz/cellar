@@ -51,7 +51,6 @@ class ResolvedRun:
     value: float | None
     qualifier: ValueQualifier
     unit: str
-    z_prime: float | None
     protocol_name: str
     protocol_version: int
     readout_id: uuid.UUID | None

@@ -25,6 +25,7 @@ from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     MeasurementBasis,
+    QcVerdict,
     QualifierHandling,
     SelectionRule,
     StageKind,
@@ -428,7 +429,10 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             test_concentration_value=model.test_concentration_value,
             test_concentration_unit=model.test_concentration_unit,
             replicate_count=model.replicate_count,
-            qc_pass=model.qc_pass,
+            qc_verdict=QcVerdict(model.qc_verdict) if model.qc_verdict else None,
+            qc_verdict_by=model.qc_verdict_by,
+            qc_verdict_at=model.qc_verdict_at,
+            qc_verdict_note=model.qc_verdict_note,
             contributing_run_ids=model.contributing_run_ids,
             curve_snapshot=model.curve_snapshot,
             batch_ids=model.batch_ids,
@@ -464,7 +468,10 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             test_concentration_value=m.test_concentration_value,
             test_concentration_unit=m.test_concentration_unit,
             replicate_count=m.replicate_count,
-            qc_pass=m.qc_pass,
+            qc_verdict=m.qc_verdict.value if m.qc_verdict else None,
+            qc_verdict_by=m.qc_verdict_by,
+            qc_verdict_at=m.qc_verdict_at,
+            qc_verdict_note=m.qc_verdict_note,
             contributing_run_ids=m.contributing_run_ids,
             curve_snapshot=m.curve_snapshot,
             batch_ids=m.batch_ids,
@@ -493,7 +500,10 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.test_concentration_value = m.test_concentration_value
         model.test_concentration_unit = m.test_concentration_unit
         model.replicate_count = m.replicate_count
-        model.qc_pass = m.qc_pass
+        model.qc_verdict = m.qc_verdict.value if m.qc_verdict else None
+        model.qc_verdict_by = m.qc_verdict_by
+        model.qc_verdict_at = m.qc_verdict_at
+        model.qc_verdict_note = m.qc_verdict_note
         model.contributing_run_ids = m.contributing_run_ids
         model.curve_snapshot = m.curve_snapshot
         model.batch_ids = m.batch_ids

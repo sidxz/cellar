@@ -836,7 +836,6 @@ class MoleculeActivityService:
                     # intercept's stored one (`report_intercept`), not from here.
                     qualifier=ValueQualifier.EQ,
                     unit="",  # filled in by the caller from protocol.dose_unit
-                    z_prime=None,
                     protocol_name="",
                     protocol_version=0,
                     readout_id=None,
@@ -1169,7 +1168,6 @@ def _single_point_cell(
                 value=value,
                 qualifier=qualifier,
                 unit=unit or "",
-                z_prime=None,
                 protocol_name="",
                 protocol_version=0,
                 readout_id=row.readout_definition_id,

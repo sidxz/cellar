@@ -110,7 +110,6 @@ class _FakeColumnQuery:
             value=42.0,
             qualifier=ValueQualifier.EQ,
             unit="uM",
-            z_prime=None,
             protocol_name="Test Protocol",
             protocol_version=1,
             readout_id=_MEASUREMENT_READOUT_ID,

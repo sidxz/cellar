@@ -32,7 +32,6 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.source_ref import SeedRun
-from cellar.domain.research_organization.stage_evaluation import _is_tested_nd
 
 MOL = uuid.uuid4()
 UM10 = Concentration(10.0, "µM")
@@ -81,7 +80,6 @@ def _reading(
             value=value,
             qualifier=ValueQualifier.EQ,
             unit="%",
-            z_prime=0.7,
             protocol_name="P",
             protocol_version=1,
             readout_id=uuid.uuid4(),
@@ -114,7 +112,6 @@ def _curve(
             value=value,
             qualifier=ValueQualifier.EQ,
             unit="µM",
-            z_prime=0.7,
             protocol_name="P",
             protocol_version=1,
             readout_id=None,
@@ -154,7 +151,7 @@ def _assert_bare(m: CampaignMeasurement) -> None:
     assert m.value_qualifier == ValueQualifier.ND
     assert m.source_run_id is None
     assert m.curve_snapshot is None
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 # --- readout columns -----------------------------------------------------------
@@ -485,7 +482,7 @@ def test_tested_nd_still_miss():
     assert m.source_curve_id == c.run.curve_id
     assert m.source_run_id == c.run.run_id
     assert m.curve_snapshot is not None
-    assert _is_tested_nd(m)
+    assert m.is_tested_nd
     assert m.concentration_series is True
 
 
@@ -495,7 +492,7 @@ def test_manual_pick_stays_untested():
     assert m.value_qualifier == ValueQualifier.ND
     assert m.source_curve_id is None
     assert m.curve_snapshot is None
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 # --- resolution scope (§6.3) -------------------------------------------------------
@@ -534,25 +531,6 @@ def test_resolution_run_ids_scope():
     assert resolution_run_ids(campaign, ch) == [r1, r2, r3]
     ch.protocol_id = uuid.uuid4()  # ... or protocol-wide when there are none
     assert resolution_run_ids(campaign, ch) is None
-
-
-def test_qc_pass_every_contributor_approved_with_z_prime_at_least_half():
-    """The default QC heuristic (run approved, z′ ≥ 0.5 when present) over the readings
-    behind the value only; a cell with no readings has no QC flag."""
-    a, b = uuid.uuid4(), uuid.uuid4()
-    old, new = _reading(10, a, D1), _reading(20, b, D2)
-
-    def with_run(c: Candidate, **kw: object) -> Candidate:
-        return replace(c, run=replace(c.run, **kw))
-
-    mean = _channel(SelectionRule.MEAN_ACROSS_RUNS)
-    assert _resolve(mean, [old, new]).qc_pass is True
-    assert _resolve(mean, [with_run(old, z_prime=0.49), new]).qc_pass is False
-    assert _resolve(mean, [with_run(old, run_approved=False), new]).qc_pass is False
-    assert _resolve(mean, [with_run(old, z_prime=None), new]).qc_pass is True
-    # Latest run: the older, failing run does not contribute.
-    assert _resolve(_channel(), [with_run(old, z_prime=0.1), new]).qc_pass is True
-    assert _resolve(_channel(), []).qc_pass is None
 
 
 def test_exclude_qualified_split_and_list_read_the_same_doses():

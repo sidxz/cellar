@@ -25,6 +25,7 @@ from cellar.domain.research_organization.campaign_stage import CampaignStage, St
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
+    QcVerdict,
     StageKind,
     StageOutcome,
 )
@@ -471,7 +472,7 @@ async def test_measurement_range_qc_and_stage_override_filters_intersect():
 
     auth = fake_auth(role="viewer")
     campaign, channel, stage = _campaign(auth.workspace_id)
-    campaign.results[0].measurements[0].qc_pass = False
+    campaign.results[0].measurements[0].qc_verdict = QcVerdict.FAILED
     campaign.results[0].set_stage_override(
         stage_id=stage.id,
         forced_outcome=StageOutcome.MISS,
@@ -511,7 +512,7 @@ async def test_unknown_filter_channel_and_override_without_stage_are_refused():
         campaign,
         auth,
         filters=CampaignResultFilters(
-            measurements=(MeasurementFilter(channel_id=uuid.uuid4(), qc="unknown"),)
+            measurements=(MeasurementFilter(channel_id=uuid.uuid4(), qc="not_tested"),)
         ),
     )
     assert isinstance(bad.failure(), NotFoundError)
@@ -537,7 +538,7 @@ def test_ranges_respect_qualifiers_and_units(qualifier, value, unit, qc, expecte
     row = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
     channel = uuid.uuid4()
     cell = _measurement(row.id, channel, value, qualifier)
-    cell.unit, cell.qc_pass = unit, qc
+    cell.unit, cell.qc_verdict = unit, qc
     row.add_measurement(cell)
     assert (
         MeasurementFilter(channel_id=channel, minimum=1, maximum=3, unit="uM").matches(row)
@@ -545,16 +546,16 @@ def test_ranges_respect_qualifiers_and_units(qualifier, value, unit, qc, expecte
     )
 
 
-def test_qc_unknown_requires_existing_measurement_and_bounds_are_validated():
+def test_qc_not_tested_requires_existing_measurement_and_bounds_are_validated():
     from pydantic import ValidationError as PydanticError
 
     from cellar.domain.research_organization.campaign_result_filters import MeasurementFilter
 
     row = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
     channel = uuid.uuid4()
-    condition = MeasurementFilter(channel_id=channel, qc="unknown")
+    condition = MeasurementFilter(channel_id=channel, qc="not_tested")
     assert not condition.matches(row)
-    row.add_measurement(_measurement(row.id, channel, None, ValueQualifier.ND))
+    row.add_measurement(_measurement(row.id, channel, 2.0))
     assert condition.matches(row)
     for bad in [
         dict(minimum=10, maximum=2),

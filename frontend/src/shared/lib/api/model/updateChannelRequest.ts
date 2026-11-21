@@ -4,8 +4,8 @@
  * Cellar
  * OpenAPI spec version: 1.6.0
  */
+import type { ChannelQcFilter } from './channelQcFilter';
 import type { ConcentrationDTO } from './concentrationDTO';
-import type { UpdateChannelRequestQcFilter } from './updateChannelRequestQcFilter';
 
 /**
  * Partial update — omitted fields are not changed; null clears the value.
@@ -16,7 +16,7 @@ import type { UpdateChannelRequestQcFilter } from './updateChannelRequestQcFilte
 export interface UpdateChannelRequest {
   label?: string | null;
   selection_rule?: string | null;
-  qc_filter?: UpdateChannelRequestQcFilter;
+  qc_filter?: ChannelQcFilter | null;
   display_order?: number | null;
   resolve_from_all_runs?: boolean | null;
   test_concentration?: ConcentrationDTO | null;

@@ -12,7 +12,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cellar.application.research_organization.campaign_collection_coverage import (
     LibraryCoverage,
@@ -20,16 +20,19 @@ from cellar.application.research_organization.campaign_collection_coverage impor
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
 )
+from cellar.application.research_organization.set_cell_qc_verdicts import QcVerdictCounts
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
 from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
+    StageOutcome,
 )
 from cellar.domain.research_organization.measurement_facts import (
     ColumnDescription,
@@ -205,6 +208,17 @@ class AddFromRunsRequest(PreviewRunImportRequest):
     description: str | None = None
 
 
+class ChannelQcFilter(BaseModel):
+    """A column's run filter. Unknown keys (the retired ``min_z_prime``) are a 422."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    require_approved: bool = False
+
+    def to_domain(self) -> dict[str, bool] | None:
+        return {"require_approved": True} if self.require_approved else None
+
+
 class AddChannelRequest(BaseModel):
     label: str
     protocol_id: uuid.UUID
@@ -212,7 +226,7 @@ class AddChannelRequest(BaseModel):
     source_kind: str
     selection_rule: str
     qualifier_handling: str
-    qc_filter: dict[str, Any] | None = None
+    qc_filter: ChannelQcFilter | None = None
     display_order: int = 0
     #: Normalization layer for ``readout_data`` source. Ignored for dose-response.
     normalization_applied: str | None = None
@@ -237,7 +251,7 @@ class UpdateChannelRequest(BaseModel):
 
     label: str | None = None
     selection_rule: str | None = None
-    qc_filter: dict[str, Any] | None = None
+    qc_filter: ChannelQcFilter | None = None
     #: Column position in the campaign grid. Reorder = PATCH each moved
     #: channel with its new index.
     display_order: int | None = None
@@ -335,6 +349,49 @@ class BulkRemoveResultsRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class QcWhereRequest(BaseModel):
+    """The rows ``POST /results/search`` returns for this stage/outcome/filters."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage_id: uuid.UUID | None = None
+    outcome: list[StageOutcome] = Field(default_factory=list)
+    filters: CampaignResultFilters = Field(default_factory=CampaignResultFilters)
+
+
+class QcTargetRequest(BaseModel):
+    """Columns times rows, the rows named exactly one way: the ``result_ids`` key (a list,
+    or ``null`` for every row) or a non-null ``where``."""
+
+    # A misspelt ``result_ids`` must not silently widen to every row.
+    model_config = ConfigDict(extra="forbid")
+
+    channel_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    result_ids: list[uuid.UUID] | None = None
+    where: QcWhereRequest | None = None
+
+    @model_validator(mode="after")
+    def _rows_named_one_way(self) -> QcTargetRequest:
+        # Presence, not value: an omitted result_ids is not "every row".
+        if ("result_ids" in self.model_fields_set) == (self.where is not None):
+            raise ValueError(
+                "a target names its rows by result_ids (null = every row) or where, exactly one"
+            )
+        return self
+
+
+class SetQcVerdictsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal["verified", "failed", "not_tested"]
+    targets: list[QcTargetRequest] = Field(min_length=1, max_length=100)
+    #: Verified/Failed only: also replace the other verdict.
+    overwrite: bool = False
+    #: Omitted: a cell already holding the verdict keeps its note and who/when. Named
+    #: (``null``/blank = no note), with ``overwrite``, it re-stamps such a cell.
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class CloseCampaignRequest(BaseModel):
     note: str | None = None
 
@@ -408,7 +465,11 @@ class CampaignMeasurementResponse(BaseModel):
     test_concentration_value: float | None = None
     test_concentration_unit: str | None = None
     replicate_count: int | None = None
-    qc_pass: bool | None = None
+    qc_verdict: Literal["not_tested", "verified", "failed"]
+    qc_verdict_by: uuid.UUID | None = None
+    qc_verdict_at: datetime | None = None
+    qc_verdict_note: str | None = None
+    holds_result: bool
     contributing_run_ids: list[uuid.UUID] | None = None
     # Migration 031 — frozen copy of the upstream dose-response curve.
     # Populated for source_kind=dose_response_curve cells; ReadoutData
@@ -449,7 +510,11 @@ class CampaignMeasurementResponse(BaseModel):
             test_concentration_value=m.test_concentration_value,
             test_concentration_unit=m.test_concentration_unit,
             replicate_count=m.replicate_count,
-            qc_pass=m.qc_pass,
+            qc_verdict=m.qc_verdict.value if m.qc_verdict else "not_tested",
+            qc_verdict_by=m.qc_verdict_by,
+            qc_verdict_at=m.qc_verdict_at,
+            qc_verdict_note=m.qc_verdict_note,
+            holds_result=m.holds_result,
             contributing_run_ids=m.contributing_run_ids,
             curve_snapshot=m.curve_snapshot,
             batch_ids=m.batch_ids,
@@ -902,6 +967,21 @@ class CampaignSummaryResponse(_CampaignFieldsResponse):
     ) -> CampaignSummaryResponse:
         shared, _ = cls._shared(c, scientist_by_run_id, targets, descriptions)
         return cls(**shared, result_count=len(c.results))
+
+
+class QcVerdictCountsResponse(BaseModel):
+    """How each targeted cell fared; a cell named by two targets counts once."""
+
+    changed: int
+    unchanged: int
+    #: Already carried the other verdict and ``overwrite`` was false.
+    kept: int
+    #: No value or tested ND to judge (or no cell at all).
+    no_result: int
+
+    @classmethod
+    def from_domain(cls, counts: QcVerdictCounts) -> QcVerdictCountsResponse:
+        return cls(**asdict(counts))
 
 
 class AddResultsOutcomeResponse(BaseModel):

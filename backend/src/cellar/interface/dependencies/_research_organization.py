@@ -110,6 +110,7 @@ from cellar.application.research_organization.saved_visualizations import (
 from cellar.application.research_organization.set_campaign_management import (
     SetCampaignManagement,
 )
+from cellar.application.research_organization.set_cell_qc_verdicts import SetCellQcVerdicts
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
@@ -207,6 +208,7 @@ __all__ = [
     "RemoveRunFromStageDep",
     "ReopenCampaignDep",
     "SetCampaignManagementDep",
+    "SetCellQcVerdictsDep",
     "SetResultNotesDep",
     "SetStageOverrideDep",
     "SupersedeCampaignDep",
@@ -369,6 +371,7 @@ RemoveCampaignStageDep = Annotated[
 ]
 RemoveRunFromStageDep = Annotated[RemoveRunFromStage, Depends(_get_use_case(RemoveRunFromStage))]
 SetStageOverrideDep = Annotated[SetStageOverride, Depends(_get_use_case(SetStageOverride))]
+SetCellQcVerdictsDep = Annotated[SetCellQcVerdicts, Depends(_get_use_case(SetCellQcVerdicts))]
 SetResultNotesDep = Annotated[SetResultNotes, Depends(_get_use_case(SetResultNotes))]
 OverrideResultCellDep = Annotated[OverrideResultCell, Depends(_get_use_case(OverrideResultCell))]
 AddResultRowDep = Annotated[AddResultRow, Depends(_get_use_case(AddResultRow))]

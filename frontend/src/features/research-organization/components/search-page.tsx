@@ -1,13 +1,19 @@
 "use client";
 
+import { useMolecule } from "@/features/chemical-registration/hooks/use-molecules";
 import type { Molecule } from "@/features/chemical-registration/types";
 import { consumeScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
+import {
+  parseStructureSearchLink,
+  structureLinkCriterion,
+} from "@/features/research-organization/lib/structure-search-link";
 import { CompoundCurvesProvider } from "@/features/screening-assay/components/compound-curves-dialog";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { useTags } from "@/features/tagging/hooks/use-tags";
 import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
 import { Button } from "@/shared/components/ui/button";
+import { showError } from "@/shared/lib/toast";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -219,6 +225,16 @@ function decodeStoredSearch(
 function SearchPageInner() {
   const searchParams = useSearchParams();
   const savedSearchId = searchParams.get("saved");
+  // A link naming one molecule and "similar" / "substructure" (another app's structure
+  // menu). The molecule comes by id under the viewer's own access, so no structure is ever
+  // in the URL. `?saved=` wins when both are present.
+  const structureLink = useMemo(
+    () => (savedSearchId ? null : parseStructureSearchLink(searchParams)),
+    [savedSearchId, searchParams],
+  );
+  const linkedMolecule = useMolecule(
+    structureLink && structureLink !== "invalid" ? structureLink.moleculeId : undefined,
+  );
 
   // ── Project scoping (independent of search state) ──────────────────────
   const [projectIds, setProjectIds] = useState<string[]>([]);
@@ -282,6 +298,11 @@ function SearchPageInner() {
   const requestVersion = useRef(0);
   const retrySearch = useRef<(() => void) | null>(null);
   const draftQuery = useRef<SearchQuery | null>(null);
+  /** The query a structure link ran. It, and its re-runs (sort, rule), stay out of recent
+   *  searches (owner, 2026-11-21); a search the person runs from the form records as usual. */
+  const linkQuery = useRef<SearchQuery | null>(null);
+  /** Key of the link already handled (`id|mode|threshold`, or "invalid"). */
+  const handledLinkKey = useRef<string | null>(null);
   const onDraftChange = useCallback((query: SearchQuery) => {
     draftQuery.current = query;
   }, []);
@@ -408,7 +429,7 @@ function SearchPageInner() {
             // Into the user's recent searches, in the shape a saved search
             // stores (so either reloads the same way). Running it again —
             // re-sorted, re-summarised — moves it to the top, not a new row.
-            if (query.criteria.length > 0)
+            if (query.criteria.length > 0 && query !== linkQuery.current)
               recordRecentSearch({
                 query: {
                   ...(query as unknown as Record<string, unknown>),
@@ -606,6 +627,54 @@ function SearchPageInner() {
     setFormSeed(query);
     handleSearch(query, []);
   }, [pendingScaffoldQuery, handleSearch]);
+
+  // PREPARE: structure link — once the molecule has loaded (or failed), build the query once.
+  const [pendingLinkQuery, setPendingLinkQuery] = useState<SearchQuery | null>(null);
+  useEffect(() => {
+    if (!structureLink) return;
+    const key =
+      structureLink === "invalid"
+        ? "invalid"
+        : `${structureLink.moleculeId}|${structureLink.mode}|${structureLink.threshold}`;
+    if (handledLinkKey.current === key) return;
+    if (structureLink === "invalid") {
+      handledLinkKey.current = key;
+      showError("This search link isn't valid.");
+      return;
+    }
+    if (linkedMolecule.isError) {
+      handledLinkKey.current = key;
+      const status = (linkedMolecule.error as { response?: { status?: number } } | null)?.response
+        ?.status;
+      showError(
+        status === 404 || status === 403
+          ? "That compound wasn't found, or you don't have access to it."
+          : "Couldn't load that compound. Try again.",
+      );
+      return;
+    }
+    if (!linkedMolecule.data) return;
+    handledLinkKey.current = key;
+    const smiles = linkedMolecule.data.structure?.smiles;
+    if (!smiles) {
+      showError("This compound has no structure to search with.");
+      return;
+    }
+    setPendingLinkQuery({
+      logic: "and",
+      criteria: [structureLinkCriterion(structureLink, smiles)],
+    });
+  }, [structureLink, linkedMolecule.data, linkedMolecule.isError, linkedMolecule.error]);
+
+  // FIRE: structure link — through handleSearch, like the scaffold handoff.
+  useEffect(() => {
+    if (!pendingLinkQuery) return;
+    const query = pendingLinkQuery;
+    setPendingLinkQuery(null);
+    linkQuery.current = query;
+    setFormSeed(query);
+    handleSearch(query, []);
+  }, [pendingLinkQuery, handleSearch]);
 
   // ── Export request builder ─────────────────────────────────────────────
   // Produces a fully-parameterised ExportRequest closure for the shared

@@ -582,6 +582,38 @@ class TestCampaignChannels:
         reread = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert reread.json()["channels"][0]["resolve_from_all_runs"] is False
 
+    async def test_channel_qc_filter_accepts_require_approved_and_refuses_min_z_prime(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        campaign_id = (await _create_empty_campaign(client, project_id))["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+        base = {
+            "label": "IC50",
+            "protocol_id": protocol_id,
+            "readout_definition_id": rd_id,
+            "source_kind": "readout_data",
+            "selection_rule": "latest_run",
+            "qualifier_handling": "include_qualified",
+        }
+        url = f"/api/v1/campaigns/{campaign_id}/channels"
+
+        bad = await client.post(url, json={**base, "qc_filter": {"min_z_prime": 0.5}})
+        assert bad.status_code == 422, bad.text
+
+        ok = await client.post(url, json={**base, "qc_filter": {"require_approved": True}})
+        assert ok.status_code == 200, ok.text
+        channel = ok.json()["channels"][0]
+        assert channel["qc_filter"] == {"require_approved": True}
+
+        bad = await client.patch(
+            f"{url}/{channel['id']}", json={"qc_filter": {"min_z_prime": 0.5}}
+        )
+        assert bad.status_code == 422, bad.text
+        cleared = await client.patch(f"{url}/{channel['id']}", json={"qc_filter": None})
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["channels"][0]["qc_filter"] is None
+
     async def test_channel_defaults_to_run_scoped(self, client: AsyncClient) -> None:
         """Omitting the flag leaves the channel bound to the campaign's runs."""
         project_id = await _create_project(client)

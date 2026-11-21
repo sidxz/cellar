@@ -46,12 +46,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/components/ui/tooltip";
+import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { formatDate } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
@@ -78,8 +73,9 @@ import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/l
 
 import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { campaignKeys } from "../hooks/use-campaigns";
+import { clearedVerdictsNote, qcVerdictsCleared } from "../lib/qc-verdicts";
 import { stageNameNotice } from "../lib/stage-name-notice";
-import type { CampaignStageResponse } from "../types";
+import type { CampaignResponse, CampaignStageResponse } from "../types";
 import { ROOT_SENTINEL } from "./stage-popover";
 import { NEW_STAGE, StageTargetSelect, stageIdOf } from "./stage-target-select";
 
@@ -317,11 +313,14 @@ export function AddFromRunsDialog({
   const addMutation = useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost({
     mutation: {
       onSuccess: (data) => {
+        const before = qc.getQueryData<CampaignResponse>(campaignKeys.detail(campaignId));
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         // From the backend's outcome: a "new" stage whose name matches an
         // existing one reuses it.
         const stageNote = data.stage_created ? ` and created stage "${stageName.trim()}"` : "";
-        showSuccess(`Added ${data.added} compound${data.added === 1 ? "" : "s"}${stageNote}`);
+        showSuccess(
+          `Added ${data.added} compound${data.added === 1 ? "" : "s"}${stageNote}${clearedVerdictsNote(qcVerdictsCleared(before, data.campaign))}`,
+        );
         handleClose();
       },
     },
@@ -1019,7 +1018,6 @@ interface PreviewCell {
   test_concentration_value: number | null;
   test_concentration_unit: string | null;
   replicate_count: number | null;
-  qc_pass: boolean | null;
   hit_call: string | null;
 }
 
@@ -1159,19 +1157,6 @@ function PreviewStep({ data, failed }: { data: PreviewData | null; failed: boole
                             <span className="text-[9px] text-muted-foreground">
                               N={cell.replicate_count}
                             </span>
-                          )}
-                          {cell.qc_pass === false && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] px-1 py-0 cursor-help">
-                                  QC
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                One or more runs behind this value are not approved, or their Z′ is
-                                below 0.5.
-                              </TooltipContent>
-                            </Tooltip>
                           )}
                         </div>
                       </td>

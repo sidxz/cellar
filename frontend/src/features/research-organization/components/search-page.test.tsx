@@ -11,8 +11,23 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   record: vi.fn(),
   recent: null as unknown,
+  params: new URLSearchParams(),
+  molecule: { data: undefined, isError: false } as {
+    data: unknown;
+    isError: boolean;
+    error?: unknown;
+  },
+  moleculeId: vi.fn(),
+  showError: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.params }));
+vi.mock("@/features/chemical-registration/hooks/use-molecules", () => ({
+  useMolecule: (id: string | undefined) => {
+    mocks.moleculeId(id);
+    return mocks.molecule;
+  },
+}));
+vi.mock("@/shared/lib/toast", () => ({ showError: mocks.showError, showSuccess: vi.fn() }));
 vi.mock("../hooks/use-search", () => ({
   useExecuteSearch: () => ({ mutateAsync: mocks.mutateAsync }),
 }));
@@ -164,6 +179,8 @@ const response = (name: string) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.mode = "latest";
+  mocks.params = new URLSearchParams();
+  mocks.molecule = { data: undefined, isError: false };
 });
 
 describe("search result provenance", () => {
@@ -391,5 +408,145 @@ describe("recent searches", () => {
     expect(input.protocol_columns).toEqual(["drc:abc"]);
     expect(mocks.load).toHaveBeenCalledWith(columns);
     expect(mocks.setMode).toHaveBeenCalledWith("gmean");
+  });
+});
+
+describe("a structure search link", () => {
+  const ID = "3f2b8c1e-9d4a-4b7e-8f61-2a5c9e0d7b13";
+
+  it("runs Similar for the linked molecule, fetched by id, and keeps it and its re-runs out of recent searches", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=similar&threshold=0.6`);
+    mocks.molecule = { data: { id: ID, structure: { smiles: "c1ccccc1O" } }, isError: false };
+    mocks.mutateAsync.mockResolvedValueOnce(response("Phenol-like"));
+    mocks.mutateAsync.mockResolvedValueOnce(response("Phenol-like sorted"));
+    mocks.mutateAsync.mockResolvedValueOnce(response("Compound A"));
+    render(<SearchPage />);
+
+    await screen.findByText("Phenol-like");
+    expect(mocks.moleculeId).toHaveBeenCalledWith(ID);
+    expect(mocks.mutateAsync.mock.calls[0][0].input.query).toEqual({
+      logic: "and",
+      criteria: [
+        {
+          type: "structure",
+          search_type: "similarity",
+          kind: "similarity",
+          mode: "similar",
+          smiles: "c1ccccc1O",
+          threshold: 0.6,
+        },
+      ],
+    });
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText("Sort IC50"));
+    await screen.findByText("Phenol-like sorted");
+    expect(mocks.record).not.toHaveBeenCalled();
+
+    // A search the person runs from the form records as usual.
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    expect(mocks.record).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs substructure with the molecule's structure as the query", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=substructure`);
+    mocks.molecule = { data: { id: ID, structure: { smiles: "c1ccccc1O" } }, isError: false };
+    mocks.mutateAsync.mockResolvedValueOnce(response("Contains phenol"));
+    render(<SearchPage />);
+    await screen.findByText("Contains phenol");
+    expect(mocks.mutateAsync.mock.calls[0][0].input.query.criteria[0]).toEqual({
+      type: "structure",
+      search_type: "substructure",
+      kind: "substructure",
+      smiles_or_smarts: "c1ccccc1O",
+      query_kind: "smiles",
+    });
+  });
+
+  it("says so and runs nothing when the molecule can't be opened", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=similar`);
+    mocks.molecule = { data: undefined, isError: true, error: { response: { status: 404 } } };
+    render(<SearchPage />);
+    await waitFor(() =>
+      expect(mocks.showError).toHaveBeenCalledWith(
+        "That compound wasn't found, or you don't have access to it.",
+      ),
+    );
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("says it could not load, not 'not found', when the fetch fails for another reason", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=similar`);
+    mocks.molecule = { data: undefined, isError: true, error: { response: { status: 500 } } };
+    render(<SearchPage />);
+    await waitFor(() =>
+      expect(mocks.showError).toHaveBeenCalledWith("Couldn't load that compound. Try again."),
+    );
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps the not-found message for a 403", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=similar`);
+    mocks.molecule = { data: undefined, isError: true, error: { response: { status: 403 } } };
+    render(<SearchPage />);
+    await waitFor(() =>
+      expect(mocks.showError).toHaveBeenCalledWith(
+        "That compound wasn't found, or you don't have access to it.",
+      ),
+    );
+  });
+
+  it("runs a second link while mounted, and an aggregation change keeps it out of recent searches", async () => {
+    const ID2 = "11111111-2222-4333-8444-555555555555";
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=similar`);
+    mocks.molecule = { data: { id: ID, structure: { smiles: "c1ccccc1O" } }, isError: false };
+    mocks.mutateAsync.mockResolvedValueOnce(response("First hit"));
+    const view = render(<SearchPage />);
+    await screen.findByText("First hit");
+
+    mocks.params = new URLSearchParams(`molecule_id=${ID2}&mode=substructure`);
+    mocks.molecule = { data: { id: ID2, structure: { smiles: "CCO" } }, isError: false };
+    mocks.mutateAsync.mockResolvedValueOnce(response("Second hit"));
+    view.rerender(<SearchPage />);
+    await screen.findByText("Second hit");
+    expect(mocks.mutateAsync.mock.calls[1][0].input.query.criteria[0].smiles_or_smarts).toBe("CCO");
+
+    mocks.mutateAsync.mockResolvedValueOnce(response("Second hit regrouped"));
+    mocks.mode = "gmean";
+    view.rerender(<SearchPage />);
+    await screen.findByText("Second hit regrouped");
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it("says so and runs nothing for a compound with no structure", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=similar`);
+    mocks.molecule = { data: { id: ID, structure: null }, isError: false };
+    render(<SearchPage />);
+    await waitFor(() =>
+      expect(mocks.showError).toHaveBeenCalledWith(
+        "This compound has no structure to search with.",
+      ),
+    );
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("says so and fetches nothing for an invalid link", async () => {
+    mocks.params = new URLSearchParams(`molecule_id=${ID}&mode=exact`);
+    render(<SearchPage />);
+    await waitFor(() =>
+      expect(mocks.showError).toHaveBeenCalledWith("This search link isn't valid."),
+    );
+    expect(mocks.moleculeId).not.toHaveBeenCalledWith(ID);
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("leaves a saved search in charge when both are in the URL", async () => {
+    mocks.params = new URLSearchParams(`saved=s1&molecule_id=${ID}&mode=similar`);
+    mocks.molecule = { data: { id: ID, structure: { smiles: "c1ccccc1O" } }, isError: false };
+    render(<SearchPage />);
+    await act(async () => {});
+    expect(mocks.moleculeId).not.toHaveBeenCalledWith(ID);
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
   });
 });

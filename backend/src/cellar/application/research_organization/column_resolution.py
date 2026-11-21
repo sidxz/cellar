@@ -43,7 +43,10 @@ from cellar.application.screening.run_aggregation import (
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import CampaignMeasurement
+from cellar.domain.research_organization.campaign_measurement import (
+    ND_UNIT_PLACEHOLDER,
+    CampaignMeasurement,
+)
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     MeasurementBasis,
@@ -58,13 +61,6 @@ from cellar.domain.shared.units import comparable_magnitude
 
 _CENSORED = {ValueQualifier.GT, ValueQualifier.LT}
 _AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN}
-
-# The domain forbids an empty unit, even on an ND cell; this stands in when no
-# reading contributes one, without inventing a unit we don't know.
-_ND_UNIT_PLACEHOLDER = "-"
-
-#: The default QC heuristic's z′ floor (a run's z′ is checked only when recorded).
-_QC_MIN_Z_PRIME = 0.5
 
 
 @dataclass(frozen=True)
@@ -139,10 +135,7 @@ def _newest_first(values: list[_Value]) -> list[_Value]:
 def _passes_qc(run: ResolvedRun, qc: dict[str, Any] | None) -> bool:
     if not qc:
         return True
-    if qc.get("require_approved", False) and not run.run_approved:
-        return False
-    min_z = qc.get("min_z_prime")
-    return not (min_z is not None and (run.z_prime is None or run.z_prime < min_z))
+    return run.run_approved or not qc.get("require_approved", False)
 
 
 def _nd_measurement(
@@ -159,7 +152,7 @@ def _nd_measurement(
     inactive curve, or a fit with no readable intercept.
 
     Its snapshot (and, with ``pin_source``, its run/curve ids) is what tells "tested,
-    no value" from "nothing to resolve": ``stage_evaluation._is_tested_nd`` reads
+    no value" from "nothing to resolve": ``CampaignMeasurement.is_tested_nd`` reads
     exactly these fields to call the first a miss and the second untested. The
     aggregate rules pass ``pin_source=False``: they have no single run to point at.
     """
@@ -168,7 +161,7 @@ def _nd_measurement(
         channel_id=channel_id,
         value=None,
         value_qualifier=ValueQualifier.ND,
-        unit=unit or _ND_UNIT_PLACEHOLDER,
+        unit=unit or ND_UNIT_PLACEHOLDER,
         protocol_name_snapshot=protocol_name or "-",
         protocol_version_snapshot=protocol_version,
         source_run_id=source.run_id if source and pin_source else None,
@@ -211,7 +204,7 @@ def _resolve(
     found = _concentrations_found(recorded)
     groups = _at_one_concentration(recorded, channel.test_concentration)
     if groups is None:
-        m = _nd_measurement(result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER)
+        m = _nd_measurement(result_id=result_id, channel_id=channel.id, unit=ND_UNIT_PLACEHOLDER)
         m.unresolved_reason = UnresolvedReason.SEVERAL_CONCENTRATIONS
     else:
         values = [_combine(g) for g in groups]
@@ -328,7 +321,7 @@ def _measure(
     """The column's rule over ``values``, building the cell (snapshot, source pin, ND)."""
     if not values:
         return _nd_measurement(
-            result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER
+            result_id=result_id, channel_id=channel.id, unit=ND_UNIT_PLACEHOLDER
         )
     values = _newest_first(values)
     runs = [v.run for v in values]
@@ -343,14 +336,14 @@ def _measure(
             return _nd_measurement(
                 result_id=result_id,
                 channel_id=channel.id,
-                unit=rep.unit or _ND_UNIT_PLACEHOLDER,
+                unit=rep.unit or ND_UNIT_PLACEHOLDER,
                 protocol_name=rep.protocol_name,
                 protocol_version=rep.protocol_version,
             )
         m = _nd_measurement(
             result_id=result_id,
             channel_id=channel.id,
-            unit=rep.unit or _ND_UNIT_PLACEHOLDER,
+            unit=rep.unit or ND_UNIT_PLACEHOLDER,
             protocol_name=rep.protocol_name,
             protocol_version=rep.protocol_version,
             source=rep,
@@ -375,7 +368,7 @@ def _measure(
         channel_id=channel.id,
         value=result.value,
         value_qualifier=result.qualifier,
-        unit=pick.unit or _ND_UNIT_PLACEHOLDER,
+        unit=pick.unit or ND_UNIT_PLACEHOLDER,
         source_run_id=None if is_aggregate else pick.run_id,
         source_curve_id=None if is_aggregate else pick.curve_id,
         source_readout_id=None if is_aggregate else pick.readout_id,
@@ -408,15 +401,6 @@ def _with_facts(m: CampaignMeasurement, used: list[_Value], series: bool) -> Cam
     m.replicate_count = None if None in counts else sum(c for c in counts if c is not None)
     m.basis = bases.pop() if len(bases) == 1 else MeasurementBasis.MIXED
     m.concentration_series = series
-    # Default QC heuristic over the readings behind the value, whatever the column's filter.
-    m.qc_pass = (
-        all(
-            c.run.run_approved and (c.run.z_prime is None or c.run.z_prime >= _QC_MIN_Z_PRIME)
-            for c in readings
-        )
-        if readings
-        else None
-    )
     dose = readings[0].dose if readings and not series else None
     if dose is not None:
         m.test_concentration_value, m.test_concentration_unit = dose.value, dose.unit

@@ -31,7 +31,6 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.stage_evaluation import _is_tested_nd
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
@@ -84,7 +83,6 @@ def _candidate(
     *,
     qualifier: ValueQualifier = ValueQualifier.EQ,
     approved: bool = True,
-    z_prime: float | None = 0.7,
     intercept_values: list[dict] | None = None,
 ) -> ResolvedRun:
     return ResolvedRun(
@@ -94,7 +92,6 @@ def _candidate(
         run_id=uuid.uuid4(),
         run_date=run_date,
         run_approved=approved,
-        z_prime=z_prime,
         protocol_name="X",
         protocol_version=1,
         curve_id=uuid.uuid4(),
@@ -139,17 +136,21 @@ def test_no_candidates_yields_nd():
     assert m.value_qualifier == ValueQualifier.ND
     # Nothing was resolved, so the cell carries no provenance and the funnel
     # keeps reading it as untested rather than as a miss.
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
-def test_qc_filter_drops_low_z_prime():
-    ch = _channel(
-        SelectionRule.LATEST_RUN,
-        qc={"min_z_prime": 0.5, "require_approved": True},
-    )
-    candidates = [_candidate(99.0, run_date=date(2026, 5, 1), z_prime=0.3)]
-    m = _resolve(ch, candidates)
-    assert m.value_qualifier == ValueQualifier.ND
+def test_old_columns_stored_min_z_prime_is_ignored():
+    """A column saved before min-Z' was removed still says min_z_prime: runs
+    are not dropped for it."""
+    ch = _channel(SelectionRule.LATEST_RUN, qc={"min_z_prime": 0.5})
+    candidates = [_candidate(99.0, run_date=date(2026, 5, 1))]
+    assert _resolve(ch, candidates).value == 99.0
+
+
+def test_require_approved_still_drops_unapproved_run():
+    ch = _channel(SelectionRule.LATEST_RUN, qc={"min_z_prime": 0.5, "require_approved": True})
+    candidates = [_candidate(99.0, run_date=date(2026, 5, 1), approved=False)]
+    assert _resolve(ch, candidates).value_qualifier == ValueQualifier.ND
 
 
 def test_intercept_key_resolves_secondary_intercept_value():
@@ -250,7 +251,6 @@ def _dr_candidate(
         run_id=uuid.uuid4(),
         run_date=run_date,
         run_approved=True,
-        z_prime=0.7,
         protocol_name="X",
         protocol_version=1,
         curve_id=uuid.uuid4(),
@@ -413,11 +413,11 @@ def test_latest_run_inactive_pick_emits_nd():
     assert m.value_qualifier == ValueQualifier.ND
     # The curve WAS fitted; it just yielded no readable value. Refresh/recompute
     # must keep that provenance or the stage funnel demotes the row back to
-    # untested — see stage_evaluation._is_tested_nd.
+    # untested — see CampaignMeasurement.is_tested_nd.
     assert m.source_curve_id == candidates[0].curve_id
     assert m.source_run_id == candidates[0].run_id
     assert m.curve_snapshot is not None
-    assert _is_tested_nd(m)
+    assert m.is_tested_nd
 
 
 def test_manual_pick_nd_carries_no_provenance():
@@ -428,7 +428,7 @@ def test_manual_pick_nd_carries_no_provenance():
     assert m.value_qualifier == ValueQualifier.ND
     assert m.source_curve_id is None
     assert m.curve_snapshot is None
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 def test_latest_run_at_bound_pick_emits_gt_max_dose():
@@ -554,7 +554,7 @@ def test_mean_across_runs_all_inactive_emits_nd():
     assert m.source_curve_id is None
     assert m.source_run_id is None
     assert m.curve_snapshot is not None
-    assert _is_tested_nd(m)
+    assert m.is_tested_nd
 
 
 # ---------------------------------------------------------------------------
@@ -634,7 +634,6 @@ class TestBuildAggregateCurveSnapshot:
                 run_id=uuid.uuid4(),
                 run_date=date(2026, 1, 1),
                 run_approved=True,
-                z_prime=0.7,
                 protocol_name="X",
                 protocol_version=1,
                 curve_id=None,
@@ -666,7 +665,6 @@ class TestBuildAggregateCurveSnapshot:
             run_id=uuid.uuid4(),
             run_date=date(2026, 1, 1),
             run_approved=True,
-            z_prime=0.7,
             protocol_name="X",
             protocol_version=1,
             curve_id=None,
@@ -772,7 +770,6 @@ def _endpoint_candidate(
     *,
     qualifier: ValueQualifier = ValueQualifier.EQ,
     approved: bool = True,
-    z_prime: float | None = 0.7,
 ) -> ResolvedRun:
     """A raw readout_data row — the shape a summary-imported reported IC50 takes."""
     return ResolvedRun(
@@ -782,7 +779,6 @@ def _endpoint_candidate(
         run_id=uuid.uuid4(),
         run_date=date(2026, 3, 1),
         run_approved=approved,
-        z_prime=z_prime,
         protocol_name="X",
         protocol_version=1,
         curve_id=None,
@@ -808,7 +804,7 @@ def test_dr_channel_endpoint_wins_when_the_only_curve_fails_qc():
     assert m.source_readout_id == endpoint.readout_id
 
 
-def test_dr_channel_qc_passing_inactive_curve_beats_an_endpoint():
+def test_dr_channel_qc_surviving_inactive_curve_beats_an_endpoint():
     """A curve of any class that survives QC wins — an inactive one still
     resolves ND rather than letting the reported endpoint through."""
     ch = _channel(SelectionRule.LATEST_RUN)
@@ -843,3 +839,9 @@ def test_dr_channel_endpoint_fills_only_its_primary_intercept_channel():
     assert ic90.value_qualifier is ValueQualifier.ND
     assert ic90.source_curve_id is None
     assert ic90.curve_snapshot is None
+
+
+def test_resolved_cell_is_not_tested():
+    """Resolution never sets a QC verdict, even from an unapproved run."""
+    run = replace(_dr_candidate(0.013, run_date=date(2026, 1, 1)), run_approved=False)
+    assert _resolve(_channel(SelectionRule.LATEST_RUN), [run]).qc_verdict is None
