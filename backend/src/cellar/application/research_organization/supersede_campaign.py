@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -42,6 +43,8 @@ class SupersedeCampaignCommand(Command):
     workspace_id: uuid.UUID
     old_campaign_id: uuid.UUID
     new_campaign_id: uuid.UUID
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class SupersedeCampaign:
@@ -78,11 +81,17 @@ class SupersedeCampaign:
             if old is None:
                 return Failure(NotFoundError("Campaign", str(input.old_campaign_id)))
 
+            if refused := managed_elsewhere(old.management, input.acting_service):
+                return refused
+
             new = await self._campaign_repo.find_by_id_in_workspace(
                 input.workspace_id, input.new_campaign_id
             )
             if new is None:
                 return Failure(NotFoundError("Campaign", str(input.new_campaign_id)))
+
+            if refused := managed_elsewhere(new.management, input.acting_service):
+                return refused
 
             if new.supersedes_campaign_id != old.id:
                 return Failure(

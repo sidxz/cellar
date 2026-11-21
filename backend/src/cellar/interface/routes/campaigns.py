@@ -50,6 +50,7 @@ from cellar.application.research_organization.update_campaign_metadata import (
 )
 from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.interface.dependencies import (
+    ActingServiceDep,
     AddResultsFromCampaignDep,
     AddResultsFromCollectionDep,
     AddResultsFromRunsDep,
@@ -89,9 +90,11 @@ async def create_campaign(
     body: CreateCampaignRequest,
     auth: AuthDep,
     uc: CreateCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Create an empty draft Campaign. Compounds are added via add-from-* endpoints."""
     cmd = CreateCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         project_id=body.project_id,
         name=body.name,
@@ -177,6 +180,7 @@ async def update_campaign(
     body: UpdateCampaignRequest,
     auth: AuthDep,
     uc: UpdateCampaignMetadataDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Update campaign name/description."""
     provided = body.model_fields_set
@@ -188,7 +192,7 @@ async def update_campaign(
         cmd_kwargs["name"] = body.name
     if "description" in provided:
         cmd_kwargs["description"] = body.description
-    cmd = UpdateCampaignMetadataCommand(**cmd_kwargs)
+    cmd = UpdateCampaignMetadataCommand(acting_service=acting, **cmd_kwargs)
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
 
@@ -199,9 +203,11 @@ async def add_results_from_collection(
     body: AddFromCollectionRequest,
     auth: AuthDep,
     uc: AddResultsFromCollectionDep,
+    acting: ActingServiceDep,
 ) -> AddResultsOutcomeResponse:
     """Add compound results from a Collection to a DRAFT campaign (idempotent)."""
     cmd = AddResultsFromCollectionCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         collection_id=body.collection_id,
@@ -217,9 +223,11 @@ async def add_results_from_campaign(
     body: AddFromCampaignRequest,
     auth: AuthDep,
     uc: AddResultsFromCampaignDep,
+    acting: ActingServiceDep,
 ) -> AddResultsOutcomeResponse:
     """Add compound results from another Campaign's filtered result set (idempotent)."""
     cmd = AddResultsFromCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         source_campaign_id=body.source_campaign_id,
@@ -260,6 +268,7 @@ async def add_results_from_runs(
     body: AddFromRunsRequest,
     auth: AuthDep,
     uc: AddResultsFromRunsDep,
+    acting: ActingServiceDep,
 ) -> AddResultsOutcomeResponse:
     """Add compound results from one or more protocol Runs (B6).
 
@@ -269,6 +278,7 @@ async def add_results_from_runs(
     when scope=hits_only.
     """
     cmd = AddResultsFromRunsCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         run_ids=body.run_ids,
@@ -289,9 +299,11 @@ async def refresh_campaign(
     campaign_id: uuid.UUID,
     auth: AuthDep,
     uc: RefreshFromSourcesDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Re-resolve all non-override measurements in a DRAFT campaign."""
     cmd = RefreshFromSourcesCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
     )
@@ -305,9 +317,11 @@ async def close_campaign(
     body: CloseCampaignRequest,
     auth: AuthDep,
     uc: CloseCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Lock a DRAFT campaign. No signature, no published Collection."""
     cmd = CloseCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         user_id=auth.user_id,
@@ -323,9 +337,11 @@ async def reopen_campaign(
     body: ReopenCampaignRequest,
     auth: AuthDep,
     uc: ReopenCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Move a CLOSED campaign back to DRAFT. Superseded campaigns refuse this."""
     cmd = ReopenCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         user_id=auth.user_id,
@@ -341,6 +357,7 @@ async def supersede_campaign(
     body: SupersedeRequest,
     auth: AuthDep,
     uc: SupersedeCampaignDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Mark a closed campaign as superseded by a newer one.
 
@@ -349,6 +366,7 @@ async def supersede_campaign(
     Returns the old campaign (now SUPERSEDED).
     """
     cmd = SupersedeCampaignCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         old_campaign_id=campaign_id,
         new_campaign_id=body.new_campaign_id,

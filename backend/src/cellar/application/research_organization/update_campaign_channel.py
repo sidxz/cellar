@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
@@ -69,6 +70,8 @@ class UpdateCampaignChannelCommand(Command):
     resolve_from_all_runs: bool | object = UNSET
     #: The one concentration the column reads (spec §6.4); None clears it — gating.
     test_concentration: Concentration | object | None = UNSET
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class UpdateCampaignChannel:
@@ -114,6 +117,9 @@ class UpdateCampaignChannel:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
 
             if campaign.status != CampaignStatus.DRAFT:
                 return Failure(

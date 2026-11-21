@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -38,6 +39,8 @@ class AddCampaignCollectionCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     collection_id: uuid.UUID
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -45,6 +48,8 @@ class RemoveCampaignCollectionCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     collection_id: uuid.UUID
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 async def _require_open_campaign(
@@ -80,6 +85,9 @@ class AddCampaignCollection:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
+            management = await self._repo.find_management(input.workspace_id, input.campaign_id)
+            if refused := managed_elsewhere(management, input.acting_service):
+                return refused
             blocked = await _require_open_campaign(
                 self._repo, input.workspace_id, input.campaign_id
             )
@@ -127,6 +135,9 @@ class RemoveCampaignCollection:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
+            management = await self._repo.find_management(input.workspace_id, input.campaign_id)
+            if refused := managed_elsewhere(management, input.acting_service):
+                return refused
             blocked = await _require_open_campaign(
                 self._repo, input.workspace_id, input.campaign_id
             )

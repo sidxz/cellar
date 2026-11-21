@@ -26,6 +26,7 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.interface.dependencies import (
+    ActingServiceDep,
     AddCampaignChannelDep,
     AuthDep,
     MirrorProtocolChannelsDep,
@@ -50,9 +51,11 @@ async def add_campaign_channel(
     body: AddChannelRequest,
     auth: AuthDep,
     uc: AddCampaignChannelDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Add a channel to a draft Campaign."""
     cmd = AddCampaignChannelCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         label=body.label,
@@ -79,6 +82,7 @@ async def update_campaign_channel(
     body: UpdateChannelRequest,
     auth: AuthDep,
     uc: UpdateCampaignChannelDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Update a campaign channel.
 
@@ -114,6 +118,7 @@ async def update_campaign_channel(
     )
 
     cmd = UpdateCampaignChannelCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         channel_id=channel_id,
@@ -138,6 +143,7 @@ async def mirror_protocol_channels(
     body: MirrorProtocolRequest,
     auth: AuthDep,
     uc: MirrorProtocolChannelsDep,
+    acting: ActingServiceDep,
 ) -> MirrorProtocolOutcomeResponse:
     """Bulk-create channels for every readout in a protocol.
 
@@ -149,6 +155,7 @@ async def mirror_protocol_channels(
     duplicating columns.
     """
     cmd = MirrorProtocolChannelsCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         protocol_id=body.protocol_id,
@@ -171,9 +178,11 @@ async def remove_campaign_channel(
     channel_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveCampaignChannelDep,
+    acting: ActingServiceDep,
 ) -> CampaignResponse:
     """Remove a channel and its measurements from a draft Campaign."""
     cmd = RemoveCampaignChannelCommand(
+        acting_service=acting,
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         channel_id=channel_id,

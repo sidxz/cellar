@@ -18,6 +18,7 @@ from cellar.application.auth import AuthContext, require_editor, require_same_wo
 from cellar.application.research_organization.add_results_from_collection import (
     AddResultsOutcome,
 )
+from cellar.application.research_organization.campaign_management import managed_elsewhere
 from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
@@ -44,6 +45,8 @@ class AddResultsFromCampaignCommand(Command):
     #: ``None`` pulls every source result.
     stage_id: uuid.UUID | None = None
     description: str | None = None
+    # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
+    acting_service: str | None = None
 
 
 class AddResultsFromCampaign:
@@ -90,6 +93,9 @@ class AddResultsFromCampaign:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
+
+            if refused := managed_elsewhere(campaign.management, input.acting_service):
+                return refused
 
             source = await self._campaign_repo.find_by_id_in_workspace(
                 input.workspace_id, input.source_campaign_id
