@@ -38,10 +38,11 @@ function renderBanner(c: CampaignResponse) {
 }
 
 describe("ManagedByBanner", () => {
-  it("says the campaign is managed and locked by the other app", () => {
+  it("says only that the campaign is locked by the other app", () => {
     renderBanner(campaign());
-    expect(screen.getByText("Managed by Daikon")).toBeInTheDocument();
-    expect(screen.getByText(/Locked by Daikon/)).toBeInTheDocument();
+    expect(screen.getByText("Locked by Daikon")).toBeInTheDocument();
+    expect(screen.queryByText(/Managed by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/stages, runs, columns/)).not.toBeInTheDocument();
   });
 
   it("links to the round when its address is trusted", () => {
@@ -52,7 +53,7 @@ describe("ManagedByBanner", () => {
   it("offers no link to an address it does not trust", () => {
     renderBanner(campaign("http://localhost:3002.evil.com/screens/S1"));
     expect(screen.queryByRole("link", { name: /Open in Daikon/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Managed by Daikon")).toBeInTheDocument();
+    expect(screen.getByText("Locked by Daikon")).toBeInTheDocument();
   });
 
   it("offers release only to workspace admins", () => {

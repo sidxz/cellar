@@ -20,8 +20,8 @@ import { trustedReturnTarget } from "@/shared/lib/return-to";
 import { useReleaseCampaign } from "../../hooks/use-release-campaign";
 import type { CampaignResponse } from "../../types";
 
-/** Says plainly that another app manages this campaign and its structure is locked to that
- *  app, links to the campaign there when the address is trusted, and lets an admin release it.
+/** "Locked by <app>": another app manages this campaign and its structure is changed there.
+ *  Links to the campaign there when the address is trusted; lets an admin release it.
  *  Same dark strip and lime accent as the way-back bar: both mean "the other app". */
 export function ManagedByBanner({ campaign }: { campaign: CampaignResponse }) {
   const label = campaign.managed_label ?? campaign.managed_by ?? "another app";
@@ -32,16 +32,10 @@ export function ManagedByBanner({ campaign }: { campaign: CampaignResponse }) {
 
   return (
     <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-sm">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="inline-flex items-center gap-1.5 rounded-md bg-lime-400 px-2 py-0.5 text-xs font-semibold text-black">
-          <Lock className="size-3.5" aria-hidden />
-          <span>Managed by {label}</span>
-        </span>
-        <span className="opacity-90">
-          Locked by {label}: stages, runs, columns and compounds are changed in {label}. Notes and
-          outcome overrides stay editable here.
-        </span>
-      </div>
+      <span className="inline-flex items-center gap-2 font-medium">
+        <Lock className="size-4" aria-hidden />
+        <span>Locked by {label}</span>
+      </span>
       <div className="flex shrink-0 items-center gap-2">
         {isAdmin && (
           <Button

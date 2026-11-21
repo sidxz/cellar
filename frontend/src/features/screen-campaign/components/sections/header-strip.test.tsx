@@ -51,12 +51,12 @@ describe("HeaderStrip", () => {
     renderHeader(base);
     expect(screen.getByRole("button", { name: /Close/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Refresh/ })).toBeInTheDocument();
-    expect(screen.queryByText(/Managed by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Locked by/)).not.toBeInTheDocument();
   });
 
   it("says who manages the campaign and leaves its lifecycle to that app", () => {
     renderHeader(managed);
-    expect(screen.getByText("Managed by Daikon")).toBeInTheDocument();
+    expect(screen.getByText("Locked by Daikon")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Close$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Refresh/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Preview DAIKON export/ })).toBeInTheDocument();
