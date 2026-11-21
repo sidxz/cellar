@@ -32,7 +32,6 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.source_ref import SeedRun
-from cellar.domain.research_organization.stage_evaluation import _is_tested_nd
 
 MOL = uuid.uuid4()
 UM10 = Concentration(10.0, "µM")
@@ -154,7 +153,7 @@ def _assert_bare(m: CampaignMeasurement) -> None:
     assert m.value_qualifier == ValueQualifier.ND
     assert m.source_run_id is None
     assert m.curve_snapshot is None
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 # --- readout columns -----------------------------------------------------------
@@ -485,7 +484,7 @@ def test_tested_nd_still_miss():
     assert m.source_curve_id == c.run.curve_id
     assert m.source_run_id == c.run.run_id
     assert m.curve_snapshot is not None
-    assert _is_tested_nd(m)
+    assert m.is_tested_nd
     assert m.concentration_series is True
 
 
@@ -495,7 +494,7 @@ def test_manual_pick_stays_untested():
     assert m.value_qualifier == ValueQualifier.ND
     assert m.source_curve_id is None
     assert m.curve_snapshot is None
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 # --- resolution scope (§6.3) -------------------------------------------------------

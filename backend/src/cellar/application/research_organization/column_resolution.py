@@ -159,7 +159,7 @@ def _nd_measurement(
     inactive curve, or a fit with no readable intercept.
 
     Its snapshot (and, with ``pin_source``, its run/curve ids) is what tells "tested,
-    no value" from "nothing to resolve": ``stage_evaluation._is_tested_nd`` reads
+    no value" from "nothing to resolve": ``CampaignMeasurement.is_tested_nd`` reads
     exactly these fields to call the first a miss and the second untested. The
     aggregate rules pass ``pin_source=False``: they have no single run to point at.
     """

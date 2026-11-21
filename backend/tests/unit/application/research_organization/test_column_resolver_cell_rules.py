@@ -31,7 +31,6 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.stage_evaluation import _is_tested_nd
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
@@ -139,7 +138,7 @@ def test_no_candidates_yields_nd():
     assert m.value_qualifier == ValueQualifier.ND
     # Nothing was resolved, so the cell carries no provenance and the funnel
     # keeps reading it as untested rather than as a miss.
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 def test_qc_filter_drops_low_z_prime():
@@ -413,11 +412,11 @@ def test_latest_run_inactive_pick_emits_nd():
     assert m.value_qualifier == ValueQualifier.ND
     # The curve WAS fitted; it just yielded no readable value. Refresh/recompute
     # must keep that provenance or the stage funnel demotes the row back to
-    # untested — see stage_evaluation._is_tested_nd.
+    # untested — see CampaignMeasurement.is_tested_nd.
     assert m.source_curve_id == candidates[0].curve_id
     assert m.source_run_id == candidates[0].run_id
     assert m.curve_snapshot is not None
-    assert _is_tested_nd(m)
+    assert m.is_tested_nd
 
 
 def test_manual_pick_nd_carries_no_provenance():
@@ -428,7 +427,7 @@ def test_manual_pick_nd_carries_no_provenance():
     assert m.value_qualifier == ValueQualifier.ND
     assert m.source_curve_id is None
     assert m.curve_snapshot is None
-    assert not _is_tested_nd(m)
+    assert not m.is_tested_nd
 
 
 def test_latest_run_at_bound_pick_emits_gt_max_dose():
@@ -554,7 +553,7 @@ def test_mean_across_runs_all_inactive_emits_nd():
     assert m.source_curve_id is None
     assert m.source_run_id is None
     assert m.curve_snapshot is not None
-    assert _is_tested_nd(m)
+    assert m.is_tested_nd
 
 
 # ---------------------------------------------------------------------------
