@@ -38,7 +38,7 @@ def test_search_route_validation_and_query_contract():
                 "search": " Ref ",
                 "overridden": False,
                 "measurements": [
-                    {"channel_id": str(channel), "minimum": 0, "unit": "uM", "qc": "passed"}
+                    {"channel_id": str(channel), "minimum": 0, "unit": "uM", "qc": "verified"}
                 ],
             },
         }

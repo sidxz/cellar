@@ -126,7 +126,6 @@ class OverrideResultCell:
                     test_concentration_value=existing.test_concentration_value,
                     test_concentration_unit=existing.test_concentration_unit,
                     replicate_count=existing.replicate_count,
-                    qc_pass=existing.qc_pass,
                     contributing_run_ids=existing.contributing_run_ids,
                     batch_ids=existing.batch_ids,
                     basis=existing.basis,

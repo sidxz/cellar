@@ -8,6 +8,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.enums import QcVerdict
 from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.units import canonical_unit
 
@@ -21,7 +22,7 @@ class MeasurementFilter(BaseModel):
     # Bounds use the stored unit up to spelling (uM = µM; closed snapshots keep their old
     # spelling); empty means dimensionless. No silent conversion between different units.
     unit: str = Field(default="", max_length=40)
-    qc: Literal["any", "passed", "failed", "unknown"] = "any"
+    qc: Literal["any", "verified", "failed", "not_tested"] = "any"
 
     @model_validator(mode="after")
     def valid_bounds(self) -> Self:
@@ -35,10 +36,10 @@ class MeasurementFilter(BaseModel):
         cell = next((m for m in row.measurements if m.channel_id == self.channel_id), None)
         if cell is None:
             return False
-        if (
-            self.qc != "any"
-            and cell.qc_pass is not {"passed": True, "failed": False, "unknown": None}[self.qc]
-        ):
+        if self.qc == "not_tested":
+            if not (cell.holds_result and cell.qc_verdict is None):
+                return False
+        elif self.qc != "any" and cell.qc_verdict != QcVerdict(self.qc):
             return False
         if self.minimum is not None or self.maximum is not None:
             # Censored values (< or >), ND and excluded cells are not exact numeric evidence.

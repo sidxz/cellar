@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
@@ -20,6 +21,7 @@ from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     MeasurementBasis,
+    QcVerdict,
     QualifierHandling,
     SelectionRule,
     StageKind,
@@ -843,3 +845,44 @@ async def test_find_management_is_workspace_scoped(
         assert await repo.find_management(managed.workspace_id, managed.id) == _DAIKON
         assert await repo.find_management(plain.workspace_id, plain.id) is None
         assert await repo.find_management(uuid.uuid4(), managed.id) is None
+
+
+async def test_measurement_qc_verdict_round_trips(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    m = c.results[0].measurements[0]
+    by, at = uuid.uuid4(), datetime(2026, 11, 20, 9, 30, tzinfo=UTC)
+    m.qc_verdict, m.qc_verdict_by, m.qc_verdict_at, m.qc_verdict_note = (
+        QcVerdict.VERIFIED,
+        by,
+        at,
+        "clean curve",
+    )
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        lm = loaded.results[0].measurements[0]
+        assert (lm.qc_verdict, lm.qc_verdict_by, lm.qc_verdict_at, lm.qc_verdict_note) == (
+            QcVerdict.VERIFIED,
+            by,
+            at,
+            "clean curve",
+        )
+        lm.qc_verdict = lm.qc_verdict_by = lm.qc_verdict_at = lm.qc_verdict_note = None
+        await repo.save(loaded)
+        await uow.commit()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        again = await SQLAlchemyCampaignRepository(uow).find_by_id(c.id)
+    assert again is not None
+    am = again.results[0].measurements[0]
+    assert (am.qc_verdict, am.qc_verdict_by, am.qc_verdict_at, am.qc_verdict_note) == (
+        None,
+        None,
+        None,
+        None,
+    )

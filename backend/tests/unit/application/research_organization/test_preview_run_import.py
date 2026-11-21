@@ -292,9 +292,6 @@ class TestPreviewRunImport:
         assert cell["basis"] == "measured"
         assert cell["concentration_series"] is False
         assert cell["unresolved_reason"] is None
-        # The resolver's default QC heuristic (approved runs, no z′ recorded); no reason.
-        assert cell["qc_pass"] is True
-        assert "qc_reason" not in cell
 
     @pytest.mark.asyncio
     async def test_between_operator_filters_to_range(self) -> None:

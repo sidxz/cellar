@@ -63,9 +63,6 @@ _AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN
 # reading contributes one, without inventing a unit we don't know.
 _ND_UNIT_PLACEHOLDER = "-"
 
-#: The default QC heuristic's z′ floor (a run's z′ is checked only when recorded).
-_QC_MIN_Z_PRIME = 0.5
-
 
 @dataclass(frozen=True)
 class Candidate:
@@ -408,15 +405,6 @@ def _with_facts(m: CampaignMeasurement, used: list[_Value], series: bool) -> Cam
     m.replicate_count = None if None in counts else sum(c for c in counts if c is not None)
     m.basis = bases.pop() if len(bases) == 1 else MeasurementBasis.MIXED
     m.concentration_series = series
-    # Default QC heuristic over the readings behind the value, whatever the column's filter.
-    m.qc_pass = (
-        all(
-            c.run.run_approved and (c.run.z_prime is None or c.run.z_prime >= _QC_MIN_Z_PRIME)
-            for c in readings
-        )
-        if readings
-        else None
-    )
     dose = readings[0].dose if readings and not series else None
     if dose is not None:
         m.test_concentration_value, m.test_concentration_unit = dose.value, dose.unit

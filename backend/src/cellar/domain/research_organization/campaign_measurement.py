@@ -65,7 +65,6 @@ class CampaignMeasurement:
     test_concentration_value: float | None = None
     test_concentration_unit: str | None = None
     replicate_count: int | None = None
-    qc_pass: bool | None = None
     contributing_run_ids: list[uuid.UUID] | None = None
     # Migration 031 — frozen copy of the underlying dose-response curve so the
     # campaign's drawing is reproducible from the row alone (no live FK lookup

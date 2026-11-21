@@ -21,6 +21,7 @@ from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     MeasurementBasis,
+    QcVerdict,
     UnresolvedReason,
     ValueQualifier,
 )
@@ -365,7 +366,7 @@ class TestOverrideResultCell:
 
     @pytest.mark.asyncio
     async def test_override_carries_forward_snapshot_fields(self) -> None:
-        """B6: override preserves test_concentration, replicate_count, qc_pass,
+        """B6: override preserves test_concentration, replicate_count,
         contributing_run_ids and the per-value facts (batches, basis, series,
         unresolved reason) from the existing measurement."""
         auth = fake_auth()
@@ -385,7 +386,9 @@ class TestOverrideResultCell:
             test_concentration_value=10.0,
             test_concentration_unit="uM",
             replicate_count=3,
-            qc_pass=True,
+            qc_verdict=QcVerdict.VERIFIED,
+            qc_verdict_by=uuid.UUID(int=7),
+            qc_verdict_note="checked",
             contributing_run_ids=run_ids,
             batch_ids=batch_ids,
             basis=MeasurementBasis.MIXED,
@@ -417,7 +420,8 @@ class TestOverrideResultCell:
         assert new_m.test_concentration_value == 10.0
         assert new_m.test_concentration_unit == "uM"
         assert new_m.replicate_count == 3
-        assert new_m.qc_pass is True
+        # An override is a new value: the old value's QC verdict does not carry over.
+        assert new_m.qc_verdict is None
         assert new_m.contributing_run_ids == run_ids
         assert new_m.batch_ids == batch_ids
         assert new_m.basis is MeasurementBasis.MIXED

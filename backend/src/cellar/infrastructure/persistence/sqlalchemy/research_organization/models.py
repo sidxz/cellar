@@ -421,7 +421,10 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
     test_concentration_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     test_concentration_unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
     replicate_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    qc_pass: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    qc_verdict: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    qc_verdict_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    qc_verdict_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    qc_verdict_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     contributing_run_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
         PG_ARRAY(PG_UUID(as_uuid=True)), nullable=True
     )

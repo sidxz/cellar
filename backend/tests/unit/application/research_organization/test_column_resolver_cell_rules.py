@@ -807,7 +807,7 @@ def test_dr_channel_endpoint_wins_when_the_only_curve_fails_qc():
     assert m.source_readout_id == endpoint.readout_id
 
 
-def test_dr_channel_qc_passing_inactive_curve_beats_an_endpoint():
+def test_dr_channel_qc_surviving_inactive_curve_beats_an_endpoint():
     """A curve of any class that survives QC wins — an inactive one still
     resolves ND rather than letting the reported endpoint through."""
     ch = _channel(SelectionRule.LATEST_RUN)
@@ -842,3 +842,9 @@ def test_dr_channel_endpoint_fills_only_its_primary_intercept_channel():
     assert ic90.value_qualifier is ValueQualifier.ND
     assert ic90.source_curve_id is None
     assert ic90.curve_snapshot is None
+
+
+def test_resolved_cell_is_not_tested():
+    """Resolution never sets a QC verdict, even from an unapproved run with z′ 0.0."""
+    run = replace(_dr_candidate(0.013, run_date=date(2026, 1, 1)), run_approved=False, z_prime=0.0)
+    assert _resolve(_channel(SelectionRule.LATEST_RUN), [run]).qc_verdict is None

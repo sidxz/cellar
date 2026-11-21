@@ -482,7 +482,10 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
         "override_reason": m.override_reason,
         "test_concentration": test_concentration,
         "replicate_count": m.replicate_count,
-        "qc_pass": m.qc_pass,
+        "qc_verdict": m.qc_verdict.value if m.qc_verdict else "not_tested",
+        "qc_verdict_by": str(m.qc_verdict_by) if m.qc_verdict_by else None,
+        "qc_verdict_at": m.qc_verdict_at.isoformat() if m.qc_verdict_at else None,
+        "qc_verdict_note": m.qc_verdict_note,
         "source": source,
         "contributing_run_ids": (
             [str(rid) for rid in m.contributing_run_ids] if m.contributing_run_ids else None

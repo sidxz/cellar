@@ -301,7 +301,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["channel_id", "value_qualifier", "unit", "is_manual_override", "batch_ids", "basis", "concentration_series", "unresolved_reason", "concentrations_found"],
+              "required": ["channel_id", "value_qualifier", "unit", "is_manual_override", "batch_ids", "basis", "concentration_series", "unresolved_reason", "concentrations_found", "qc_verdict"],
               "additionalProperties": false,
               "properties": {
                 "channel_id":        { "type": "string", "format": "uuid" },
@@ -325,7 +325,10 @@
                   ]
                 },
                 "replicate_count":   { "type": ["integer", "null"] },
-                "qc_pass":           { "type": ["boolean", "null"] },
+                "qc_verdict":        { "type": "string", "enum": ["not_tested", "verified", "failed"] },
+                "qc_verdict_by":     { "type": ["string", "null"], "format": "uuid" },
+                "qc_verdict_at":     { "type": ["string", "null"], "format": "date-time" },
+                "qc_verdict_note":   { "type": ["string", "null"] },
                 "contributing_run_ids": {
                   "oneOf": [
                     {
