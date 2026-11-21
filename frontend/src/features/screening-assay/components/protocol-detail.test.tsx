@@ -12,6 +12,7 @@ vi.mock("@duar-auth/nextjs", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/assays/protocols/p1",
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/shared/hooks/use-hash-tab", async () => {
   const { useState } = await import("react");

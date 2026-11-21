@@ -6,10 +6,11 @@ import { RouteAccess } from "@/shared/components/layout/route-access";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { usePreferencesSync } from "@/shared/hooks/use-preferences-sync";
+import { rememberPlace } from "@/shared/lib/auth/return-after-login";
 import { usePreferencesStore } from "@/shared/lib/stores/preferences-store";
 import { useAuthz } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 function DashboardSkeleton() {
   return (
@@ -29,11 +30,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   usePreferencesSync();
   const { sidebarCollapsed, setSidebarCollapsed } = usePreferencesStore();
 
+  // Signed in at some point during this visit: a later sign-out was on purpose (Sign out,
+  // Switch workspace), so the next sign-in starts from home, not from this page.
+  const wasSignedIn = useRef(false);
+  if (authState === "authenticated") wasSignedIn.current = true;
+
   useEffect(() => {
     // Only bounce to login when the session is truly gone. During `needs_reauth`
     // (IdP token lost on reload) the AuthzProvider's `autoReauth` performs a
     // silent re-auth redirect — sending to /login here would pre-empt it.
     if (!isLoading && authState === "unauthenticated") {
+      // A visitor who arrived signed out comes back here after sign-in, link included.
+      if (!wasSignedIn.current) rememberPlace(window.location.pathname + window.location.search);
       router.replace("/login");
     }
   }, [isLoading, authState, router]);

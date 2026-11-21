@@ -40,4 +40,14 @@ describe("/api/config", () => {
     vi.stubEnv("APP_PROT_CELLAR_URL", "https://prot-cellar.example");
     expect((await GET().json()).protCellarUrl).toBe("https://prot-cellar.example");
   });
+
+  it("serves the trusted return origins, none by default", async () => {
+    vi.stubEnv("APP_RETURN_ORIGINS", "");
+    expect((await GET().json()).returnOrigins).toEqual([]);
+
+    vi.stubEnv("APP_RETURN_ORIGINS", "Daikon=https://d.org");
+    expect((await GET().json()).returnOrigins).toEqual([
+      { label: "Daikon", origin: "https://d.org" },
+    ]);
+  });
 });

@@ -3,6 +3,7 @@
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import { LoginPlate } from "@/shared/components/login-plate/login-plate";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { rememberPlace, takePlace } from "@/shared/lib/auth/return-after-login";
 import { forgetWorkspace } from "@/shared/lib/auth/workspace-memory";
 import { AuthzCallback } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
@@ -49,14 +50,17 @@ export default function CallbackPage() {
           <div className="w-full max-w-[320px] px-6 md:px-0">
             <div style={{ animation: "auth-enter 0.7s ease-out 0.2s both" }}>
               <AuthzCallback
-                onSuccess={(_user, returnTo) => router.replace(returnTo ?? "/")}
+                onSuccess={(_user, returnTo) => router.replace(returnTo ?? takePlace() ?? "/")}
                 onError={(error) => {
                   // A failed auto-entry must not loop — forget the remembered
                   // workspace so the next sign-in shows the picker again.
                   forgetWorkspace();
                   router.replace(`/login?error=${encodeURIComponent(error.message)}`);
                 }}
-                onSilentReauthFailed={() => router.replace("/login")}
+                onSilentReauthFailed={(returnTo) => {
+                  if (returnTo) rememberPlace(returnTo);
+                  router.replace("/login");
+                }}
                 loadingComponent={
                   <div>
                     <h2 className="text-sm font-medium text-muted-foreground">Signing in...</h2>

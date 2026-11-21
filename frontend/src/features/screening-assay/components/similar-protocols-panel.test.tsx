@@ -31,6 +31,20 @@ describe("SimilarProtocolsPanel", () => {
     expect(onLogRun).toHaveBeenCalledWith("p1");
   });
 
+  it("goes back to the calling app with the run candidate instead of logging a run", () => {
+    render(
+      <SimilarProtocolsPanel
+        draft={{ name: "RNAP core IC50" }}
+        onLogRun={vi.fn()}
+        backTo={{ label: "Daikon", url: "https://d.org/s" }}
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Continue in Daikon with this protocol" }),
+    ).toHaveAttribute("href", "https://d.org/s?protocol_id=p1");
+    expect(screen.queryByText("Log a run of this")).not.toBeInTheDocument();
+  });
+
   it("hides after dismiss", () => {
     render(<SimilarProtocolsPanel draft={{ name: "RNAP core IC50" }} onLogRun={vi.fn()} />);
     fireEvent.click(screen.getByLabelText("Dismiss suggestions"));

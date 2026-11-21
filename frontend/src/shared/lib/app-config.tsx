@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, createContext, useContext } from "react";
+import { type ReturnOrigin, parseReturnOrigins } from "./return-to";
 
 export interface AppConfig {
   apiUrl: string;
@@ -15,6 +16,8 @@ export interface AppConfig {
   uiGitSha: string;
   uiBuildDate: string;
   environment: string;
+  /** Apps a link may send the scientist back to (APP_RETURN_ORIGINS). */
+  returnOrigins: ReturnOrigin[];
 }
 
 const defaultConfig: AppConfig = {
@@ -30,6 +33,7 @@ const defaultConfig: AppConfig = {
   uiGitSha: "unknown",
   uiBuildDate: "unknown",
   environment: "development",
+  returnOrigins: [],
 };
 
 const AppConfigContext = createContext<AppConfig>(defaultConfig);
@@ -73,5 +77,6 @@ export async function fetchAppConfig(): Promise<AppConfig> {
     uiGitSha: process.env.NEXT_PUBLIC_UI_GIT_SHA ?? defaultConfig.uiGitSha,
     uiBuildDate: process.env.NEXT_PUBLIC_UI_BUILD_DATE ?? defaultConfig.uiBuildDate,
     environment: process.env.NEXT_PUBLIC_ENVIRONMENT ?? defaultConfig.environment,
+    returnOrigins: parseReturnOrigins(process.env.NEXT_PUBLIC_RETURN_ORIGINS),
   };
 }

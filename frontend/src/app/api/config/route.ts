@@ -1,3 +1,5 @@
+import { parseReturnOrigins } from "@/shared/lib/return-to";
+
 /**
  * Runtime configuration endpoint.
  *
@@ -28,5 +30,7 @@ export function GET() {
     uiGitSha: process.env.APP_GIT_SHA || "unknown",
     uiBuildDate: process.env.APP_BUILD_DATE || "unknown",
     environment: process.env.APP_ENV || "development",
+    // Apps a link may send the scientist back to: "Label=origin,…". Empty trusts none.
+    returnOrigins: parseReturnOrigins(process.env.APP_RETURN_ORIGINS),
   });
 }
