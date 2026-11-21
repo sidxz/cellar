@@ -15,6 +15,7 @@ import { showError } from "@/shared/lib/toast";
 import { campaignKeys } from "../../hooks/use-campaigns";
 import type { CampaignResponse } from "../../types";
 import { CampaignStatusChip } from "../campaign-status-chip";
+import { ManagedByBanner } from "./managed-by-banner";
 
 interface HeaderStripProps {
   campaign: CampaignResponse;
@@ -75,9 +76,12 @@ export function HeaderStrip({
   // Closed-metadata muted line. Resolves closed_by (Duar UUID) to the
   // member's display name via <MemberName />.
   const hasClosedMeta = !!(closedAt || closedBy || campaign.close_note);
+  // Another app (e.g. DAIKON) manages it: its lifecycle and structure are changed there.
+  const managed = Boolean(campaign.managed_by);
 
   return (
     <header className="flex flex-col gap-1 border-b px-6 py-4">
+      {managed && <ManagedByBanner campaign={campaign} />}
       {/* Superseded-by banner (closed-mode only) */}
       {!isDraft && supersededBy && projectId && (
         <div className="mb-2 flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
@@ -123,18 +127,22 @@ export function HeaderStrip({
         <div className="ml-auto flex items-center gap-2">
           {isDraft ? (
             <>
-              <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
-                <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                Refresh
-              </Button>
+              {!managed && (
+                <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+                  <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                  Refresh
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={onPreview}>
                 <FileText className="h-4 w-4" />
                 Preview DAIKON export
               </Button>
-              <Button size="sm" onClick={onClose}>
-                <Lock className="h-4 w-4" />
-                Close
-              </Button>
+              {!managed && (
+                <Button size="sm" onClick={onClose}>
+                  <Lock className="h-4 w-4" />
+                  Close
+                </Button>
+              )}
             </>
           ) : (
             <>
@@ -149,13 +157,13 @@ export function HeaderStrip({
                   {downloadLabel ?? "Download JSON"}
                 </Button>
               )}
-              {onReopen && campaign.status === "closed" && (
+              {!managed && onReopen && campaign.status === "closed" && (
                 <Button variant="outline" size="sm" onClick={onReopen}>
                   <Unlock className="h-4 w-4" />
                   Reopen
                 </Button>
               )}
-              {onSupersede && (
+              {!managed && onSupersede && (
                 <Button variant="outline" size="sm" onClick={onSupersede}>
                   <Lock className="h-4 w-4" />
                   Supersede
@@ -165,7 +173,7 @@ export function HeaderStrip({
           )}
         </div>
       </div>
-      <DescriptionRow campaign={campaign} editable={isDraft} />
+      <DescriptionRow campaign={campaign} editable={isDraft && !managed} />
       <TagChips entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
       {!isDraft && hasClosedMeta && (
         <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2">

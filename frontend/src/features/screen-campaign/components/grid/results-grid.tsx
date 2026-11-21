@@ -492,6 +492,8 @@ interface ResultsGridV2Props {
    *  chips, the Stage column and the stage half of the chip filters. */
   selectedStageId: string | null;
   readOnly: boolean;
+  /** Compound rows are the managing app's to add and remove (curation stays on readOnly). */
+  rowsLocked?: boolean;
 }
 
 // Row height tuned to fit the search-default 104-px structure thumbnail and
@@ -504,6 +506,7 @@ export function ResultsGridV2({
   filters,
   selectedStageId,
   readOnly,
+  rowsLocked = false,
 }: ResultsGridV2Props) {
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
@@ -964,7 +967,7 @@ export function ResultsGridV2({
         // visible, and the bulk gestures read that predicate.
         suppressFilters
         selectionToolbar={
-          readOnly
+          readOnly || rowsLocked
             ? undefined
             : (rows) => (
                 <RemoveSelectedButton
