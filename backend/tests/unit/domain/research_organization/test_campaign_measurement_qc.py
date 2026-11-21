@@ -8,9 +8,11 @@ from datetime import UTC, datetime
 import pytest
 
 from cellar.domain.research_organization.campaign_measurement import (
+    ND_UNIT_PLACEHOLDER,
     CampaignMeasurement,
     QcApplyOutcome,
 )
+from cellar.domain.research_organization.campaign_stage import UNSET
 from cellar.domain.research_organization.enums import QcVerdict, ValueQualifier
 from cellar.domain.shared.errors import ValidationError
 
@@ -46,7 +48,7 @@ def _nd(**overrides) -> CampaignMeasurement:
     )
 
 
-def _apply(cell, verdict, *, by=U1, at=T1, note=None, overwrite=False):
+def _apply(cell, verdict, *, by=U1, at=T1, note=UNSET, overwrite=False):
     return cell.apply_qc_verdict(verdict, by=by, at=at, note=note, overwrite=overwrite)
 
 
@@ -86,6 +88,37 @@ def test_same_verdict_with_overwrite_and_new_note_restamps():
     assert (c.qc_verdict_by, c.qc_verdict_at, c.qc_verdict_note) == (U2, T2, "n")
 
 
+def test_same_verdict_with_overwrite_and_no_note_named_is_unchanged():
+    """A bulk overwrite that names no note never takes over a colleague's sign-off."""
+    c = _cell()
+    _apply(c, V, note="clean curve")
+    assert _apply(c, V, by=U2, at=T2, overwrite=True) is QcApplyOutcome.UNCHANGED
+    assert (c.qc_verdict_by, c.qc_verdict_at, c.qc_verdict_note) == (U1, T1, "clean curve")
+
+
+@pytest.mark.parametrize("no_note", [None, "", "  "])
+def test_same_verdict_with_overwrite_and_explicit_no_note_restamps(no_note):
+    c = _cell()
+    _apply(c, V, note="clean curve")
+    assert _apply(c, V, by=U2, at=T2, note=no_note, overwrite=True) is QcApplyOutcome.CHANGED
+    assert (c.qc_verdict_by, c.qc_verdict_at, c.qc_verdict_note) == (U2, T2, None)
+
+
+def test_same_verdict_with_overwrite_and_same_note_is_unchanged():
+    c = _cell()
+    _apply(c, V, note="clean curve")
+    assert _apply(c, V, by=U2, note=" clean curve ", overwrite=True) is QcApplyOutcome.UNCHANGED
+    assert _apply(c, V, by=U2, note="other") is QcApplyOutcome.UNCHANGED  # no overwrite
+    assert c.qc_verdict_by == U1
+
+
+def test_changed_verdict_without_a_note_named_drops_the_old_note():
+    c = _cell()
+    _apply(c, F, note="bad well")
+    assert _apply(c, V, by=U2, at=T2, overwrite=True) is QcApplyOutcome.CHANGED
+    assert (c.qc_verdict, c.qc_verdict_by, c.qc_verdict_note) == (V, U2, None)
+
+
 def test_other_verdict_without_overwrite_is_kept():
     c = _cell()
     _apply(c, F)
@@ -120,9 +153,29 @@ def test_no_result_cell_is_never_marked():
     assert c.qc_verdict is None
 
 
+def test_clear_removes_a_stale_verdict_on_a_cell_with_no_result():
+    c = _cell(value=None, value_qualifier=ValueQualifier.ND, unit="")
+    c.qc_verdict, c.qc_verdict_by, c.qc_verdict_at, c.qc_verdict_note = V, U1, T1, "ok"
+    assert _apply(c, F, overwrite=True) is QcApplyOutcome.NO_RESULT
+    assert _apply(c, None) is QcApplyOutcome.CHANGED
+    assert (c.qc_verdict, c.qc_verdict_by, c.qc_verdict_at, c.qc_verdict_note) == (
+        None,
+        None,
+        None,
+        None,
+    )
+
+
 def test_note_with_clear_is_rejected():
     with pytest.raises(ValidationError):
         _apply(_cell(), None, note="why")
+
+
+@pytest.mark.parametrize("no_note", [None, ""])
+def test_explicit_no_note_with_clear_is_allowed(no_note):
+    c = _verified(_cell())
+    assert _apply(c, None, note=no_note) is QcApplyOutcome.CHANGED
+    assert c.qc_verdict is None
 
 
 def test_note_over_limit_is_rejected():
@@ -189,6 +242,27 @@ def test_carry_on_nd_ignores_unit():
     new.unit = "uM"
     new.contributing_run_ids = old.contributing_run_ids = [R1]
     assert new.carry_qc_verdict_from(old) is True
+
+
+def test_carry_needs_a_result_on_the_new_cell():
+    """An aggregate tested ND (snapshot only) typed over as ND loses its result: no carry."""
+    old = _verified(
+        _cell(value=None, value_qualifier=ValueQualifier.ND, unit="", curve_snapshot={})
+    )
+    old.curve_snapshot = {"top": 1}
+    new = _cell(value=None, value_qualifier=ValueQualifier.ND, unit="")
+    assert old.holds_result and not new.holds_result
+    assert new.carry_qc_verdict_from(old) is False
+    assert new.qc_verdict is None
+
+
+@pytest.mark.parametrize(
+    ("old_unit", "new_unit"), [("%", ND_UNIT_PLACEHOLDER), (ND_UNIT_PLACEHOLDER, "%")]
+)
+def test_carry_treats_the_placeholder_unit_as_unknown(old_unit, new_unit):
+    """Close repairs "-" to the readout's unit; a recompute after reopen resolves "-" again."""
+    old = _verified(_cell(unit=old_unit))
+    assert _cell(unit=new_unit).carry_qc_verdict_from(old) is True
 
 
 def test_carry_from_not_tested_is_false():

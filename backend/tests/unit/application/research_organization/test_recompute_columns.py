@@ -295,14 +295,21 @@ async def test_recompute_keeps_verdict_on_mean_cell(rule):
     c, ch, row = _one_row(rule)
     runs = [uuid.uuid4() for _ in range(3)]
     mid = row.molecule_id
-    readings = [reading(mid, v, r) for v, r in zip((0.1, 0.2, 0.3), runs, strict=True)]
-    # Float sums depend on order, so a carry that compared exact values would break.
-    await _recompute(c, ch, _SeqQuery({mid: list(readings)}))
-    _verified(row.find_measurement(ch.id))
 
-    await _recompute(c, ch, _SeqQuery({mid: list(reversed(readings))}))
+    def fetch(values: tuple[float, ...]):
+        # A concentration unit, so the geometric mean really runs (``%`` falls back).
+        return {mid: [reading(mid, v, r, unit="uM") for v, r in zip(values, runs, strict=True)]}
 
-    assert row.find_measurement(ch.id).qc_verdict is QcVerdict.VERIFIED
+    await _recompute(c, ch, _SeqQuery(fetch((0.1, 0.2, 0.3))))
+    first = row.find_measurement(ch.id)
+    _verified(first)
+
+    # The same readings to within float noise: a carry comparing exact values drops it.
+    await _recompute(c, ch, _SeqQuery(fetch((0.1 * (1 + 1e-12), 0.2, 0.3))))
+
+    m = row.find_measurement(ch.id)
+    assert m.value != first.value
+    assert m.qc_verdict is QcVerdict.VERIFIED
 
 
 @pytest.mark.asyncio

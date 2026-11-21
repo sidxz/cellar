@@ -349,19 +349,23 @@ class QcWhereRequest(BaseModel):
 
 
 class QcTargetRequest(BaseModel):
-    """Columns times rows: ``result_ids`` (``null`` = every row) or ``where``, never both."""
+    """Columns times rows, the rows named exactly one way: the ``result_ids`` key (a list,
+    or ``null`` for every row) or a non-null ``where``."""
 
     # A misspelt ``result_ids`` must not silently widen to every row.
     model_config = ConfigDict(extra="forbid")
 
-    channel_ids: list[uuid.UUID] = Field(min_length=1)
+    channel_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
     result_ids: list[uuid.UUID] | None = None
     where: QcWhereRequest | None = None
 
     @model_validator(mode="after")
     def _rows_named_one_way(self) -> QcTargetRequest:
-        if self.result_ids is not None and self.where is not None:
-            raise ValueError("a target takes result_ids or where, not both")
+        # Presence, not value: an omitted result_ids is not "every row".
+        if ("result_ids" in self.model_fields_set) == (self.where is not None):
+            raise ValueError(
+                "a target names its rows by result_ids (null = every row) or where, exactly one"
+            )
         return self
 
 
@@ -369,9 +373,11 @@ class SetQcVerdictsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     verdict: Literal["verified", "failed", "not_tested"]
-    targets: list[QcTargetRequest] = Field(min_length=1)
+    targets: list[QcTargetRequest] = Field(min_length=1, max_length=100)
     #: Verified/Failed only: also replace the other verdict.
     overwrite: bool = False
+    #: Omitted: a cell already holding the verdict keeps its note and who/when. Named
+    #: (``null``/blank = no note), with ``overwrite``, it re-stamps such a cell.
     note: str | None = Field(default=None, max_length=2000)
 
 

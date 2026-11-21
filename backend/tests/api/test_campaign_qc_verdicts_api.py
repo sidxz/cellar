@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -77,6 +78,31 @@ async def test_put_qc_verdicts_returns_counts(
     assert failed.json() == {"changed": 0, "unchanged": 0, "kept": 1, "no_result": 0}
 
 
+async def test_overwrite_without_a_note_key_keeps_the_note(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+) -> None:
+    m = await _build(client, session_factory, workspace_id, managed=False)
+    url = f"/api/v1/campaigns/{m.campaign_id}/qc-verdicts"
+    target = {"channel_ids": [m.channel_id], "result_ids": [m.result_id]}
+
+    async def put(**extra: object) -> dict:
+        r = await client.put(url, json={"verdict": "verified", "targets": [target], **extra})
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    async def note() -> str | None:
+        campaign = (await client.get(f"/api/v1/campaigns/{m.campaign_id}")).json()
+        return campaign["results"][0]["measurements"][0]["qc_verdict_note"]
+
+    assert (await put(note="clean curve"))["changed"] == 1
+    assert (await put(overwrite=True))["unchanged"] == 1
+    assert await note() == "clean curve"
+    assert (await put(overwrite=True, note=None))["changed"] == 1
+    assert await note() is None
+
+
 async def test_both_result_ids_and_where_is_422(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -96,6 +122,42 @@ async def test_both_result_ids_and_where_is_422(
             ],
         },
     )
+    assert response.status_code == 422, response.text
+
+
+_C, _R = str(uuid.uuid4()), str(uuid.uuid4())
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # A target names its rows: no selector is not "every row".
+        {"verdict": "not_tested", "targets": [{"channel_ids": [_C]}]},
+        {"verdict": "verified", "targets": [{"channel_ids": [_C], "where": None}]},
+        {
+            "verdict": "verified",
+            "targets": [{"channel_ids": [_C], "result_ids": None, "where": {}}],
+        },
+        # Caps: 100 targets, 500 columns per target.
+        {"verdict": "verified", "targets": [{"channel_ids": [_C], "result_ids": [_R]}] * 101},
+        {
+            "verdict": "verified",
+            "targets": [
+                {"channel_ids": [str(uuid.uuid4()) for _ in range(501)], "result_ids": None}
+            ],
+        },
+    ],
+    ids=[
+        "no_selector",
+        "null_where_alone",
+        "null_result_ids_and_where",
+        "101_targets",
+        "501_columns",
+    ],
+)
+async def test_badly_named_target_is_422(client: AsyncClient, body: dict) -> None:
+    # Refused before the campaign is looked up, so an unknown campaign id serves.
+    response = await client.put(f"/api/v1/campaigns/{uuid.uuid4()}/qc-verdicts", json=body)
     assert response.status_code == 422, response.text
 
 
@@ -133,7 +195,10 @@ async def test_closed_campaign_is_423(
 
     response = await client.put(
         f"/api/v1/campaigns/{m.campaign_id}/qc-verdicts",
-        json={"verdict": "verified", "targets": [{"channel_ids": [m.channel_id]}]},
+        json={
+            "verdict": "verified",
+            "targets": [{"channel_ids": [m.channel_id], "result_ids": None}],
+        },
     )
     assert response.status_code == 423, response.text
     assert response.json()["error"] == "DataLockedError"

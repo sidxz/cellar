@@ -41,6 +41,7 @@ from cellar.application.research_organization.set_result_notes import (
     SetResultNotesCommand,
 )
 from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
+from cellar.domain.research_organization.campaign_stage import UNSET
 from cellar.domain.research_organization.enums import QcVerdict, StageOutcome, ValueQualifier
 from cellar.interface.dependencies import (
     ActingServiceDep,
@@ -232,11 +233,13 @@ async def set_qc_verdicts(
 ) -> QcVerdictCountsResponse:
     """Put a person's QC verdict on many cells of a DRAFT campaign in one save.
 
-    Each target is its ``channel_ids`` times its rows: ``result_ids`` (``null`` = every
-    row) or ``where``, the rows ``POST /results/search`` returns for that stage, outcome
-    and filters. A cell named twice counts once. ``not_tested`` clears a verdict whatever
-    ``overwrite`` says; Verified/Failed over the other verdict needs ``overwrite`` (else
-    ``kept``). A note goes with Verified/Failed only.
+    Each target is its ``channel_ids`` times its rows, named exactly one way: the
+    ``result_ids`` key (``null`` = every row) or ``where``, the rows ``POST /results/search``
+    returns for that stage, outcome and filters. A cell named twice counts once.
+    ``not_tested`` clears a verdict whatever ``overwrite`` says; Verified/Failed over the
+    other verdict needs ``overwrite`` (else ``kept``). A note goes with Verified/Failed
+    only. A cell already holding the verdict is re-stamped only with ``overwrite`` and a
+    ``note`` key whose note differs (``null`` = no note); omit ``note`` to leave it alone.
 
     404 on the first unknown result, column, stage or filter column, with nothing
     applied. 423 when the campaign is not a draft. Open to the managing app and to
@@ -262,7 +265,7 @@ async def set_qc_verdicts(
             for t in body.targets
         ),
         overwrite=body.overwrite,
-        note=body.note,
+        note=body.note if "note" in body.model_fields_set else UNSET,
     )
     return QcVerdictCountsResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
 

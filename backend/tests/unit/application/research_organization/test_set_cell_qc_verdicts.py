@@ -304,6 +304,29 @@ async def test_overwrite_replaces_the_other_verdict() -> None:
     )
 
 
+async def test_overwrite_naming_no_note_leaves_a_same_verdict_cell_alone() -> None:
+    auth = fake_auth()
+    fx = _fixture(auth.workspace_id)
+    m = fx.rows[3].find_measurement(fx.a.id)
+    assert m is not None
+    m.qc_verdict_note = "edge well"
+    target = _target([fx.a], [fx.rows[3]])
+
+    out = await _use_case(fx)(
+        _command(auth, fx, target, verdict=QcVerdict.FAILED, overwrite=True), auth=auth
+    )
+    assert out == Success(_counts(unchanged=1))
+    assert (m.qc_verdict_by, m.qc_verdict_note) == (SOMEONE, "edge well")
+
+    # An explicit null is "no note": it re-stamps and removes the note.
+    out = await _use_case(fx)(
+        _command(auth, fx, target, verdict=QcVerdict.FAILED, overwrite=True, note=None),
+        auth=auth,
+    )
+    assert out == Success(_counts(changed=1))
+    assert (m.qc_verdict_by, m.qc_verdict_note) == (auth.user_id, None)
+
+
 async def test_overlapping_targets_count_each_cell_once() -> None:
     auth = fake_auth()
     fx = _fixture(auth.workspace_id)

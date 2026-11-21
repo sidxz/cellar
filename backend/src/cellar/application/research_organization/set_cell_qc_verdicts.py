@@ -37,6 +37,7 @@ from cellar.domain.research_organization.campaign_measurement import (
     normalize_qc_note,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import UNSET
 from cellar.domain.research_organization.enums import CampaignStatus, QcVerdict
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.research_organization.stage_evaluation import StageOutcomes, evaluate_stages
@@ -64,9 +65,11 @@ class SetCellQcVerdictsCommand(Command):
     user_id: uuid.UUID
     verdict: QcVerdict | None  # None = not tested
     targets: tuple[QcTarget, ...]
-    #: Verified/Failed only: also replace the other verdict (and re-stamp a new note).
+    #: Verified/Failed only: also replace the other verdict (and re-stamp a named note).
     overwrite: bool = False
-    note: str | None = None
+    #: UNSET = not named: a cell already holding the verdict keeps its note and stamp.
+    #: None or blank = "no note": with ``overwrite`` it re-stamps and removes one.
+    note: str | object | None = UNSET
 
 
 @dataclass(frozen=True)
@@ -103,7 +106,8 @@ class SetCellQcVerdicts:
         if not input.targets:
             return Failure(ValidationError("targets must not be empty"))
         try:
-            note = normalize_qc_note(input.verdict, input.note)
+            # Checked once, before any cell; each cell normalizes it again.
+            normalize_qc_note(input.verdict, input.note if isinstance(input.note, str) else None)
         except ValidationError as e:
             return Failure(e)
 
@@ -128,7 +132,11 @@ class SetCellQcVerdicts:
                     tally[QcApplyOutcome.NO_RESULT] += 1
                     continue
                 outcome = m.apply_qc_verdict(
-                    input.verdict, by=input.user_id, at=at, note=note, overwrite=input.overwrite
+                    input.verdict,
+                    by=input.user_id,
+                    at=at,
+                    note=input.note,
+                    overwrite=input.overwrite,
                 )
                 tally[outcome] += 1
 

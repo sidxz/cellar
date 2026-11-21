@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_measurement import UNTESTED_QUALIFIERS
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import (
     CampaignStage,
@@ -31,10 +32,7 @@ from cellar.domain.research_organization.enums import (
     CheckVerdict,
     StageKind,
     StageOutcome,
-    ValueQualifier,
 )
-
-_UNTESTED_QUALIFIERS = frozenset({ValueQualifier.ND, ValueQualifier.EXCLUDED})
 
 
 @dataclass(frozen=True)
@@ -70,7 +68,7 @@ def _check_criterion(result: CampaignResult, criterion: StageCriterion) -> Stage
     measurement = result.find_measurement(criterion.channel_id)
     if (
         measurement is None
-        or measurement.value_qualifier in _UNTESTED_QUALIFIERS
+        or measurement.value_qualifier in UNTESTED_QUALIFIERS
         or measurement.value is None
     ):
         return StageCheck(

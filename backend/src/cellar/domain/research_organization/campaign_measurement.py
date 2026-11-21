@@ -17,6 +17,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
+from cellar.domain.research_organization.campaign_stage import UNSET
 from cellar.domain.research_organization.enums import (
     MeasurementBasis,
     QcVerdict,
@@ -29,7 +30,13 @@ from cellar.domain.shared.units import canonical_unit
 
 QC_NOTE_MAX_LENGTH = 2000
 
-_UNTESTED_QUALIFIERS = frozenset({ValueQualifier.ND, ValueQualifier.EXCLUDED})
+#: The domain forbids an empty unit, even on an ND cell; this stands in when no reading
+#: contributes one, without inventing a unit we don't know. Close swaps it for the
+#: readout's unit (``Campaign.repair_placeholder_units``).
+ND_UNIT_PLACEHOLDER = "-"
+
+#: Qualifiers that hold no value: the cell was not measured (ND may still be a tested ND).
+UNTESTED_QUALIFIERS = frozenset({ValueQualifier.ND, ValueQualifier.EXCLUDED})
 
 
 class QcApplyOutcome(StrEnum):
@@ -54,6 +61,11 @@ def _close(a: float | None, b: float | None) -> bool:
     if a is None or b is None:
         return a is b
     return math.isclose(a, b, rel_tol=1e-9)
+
+
+def _same_unit(a: str, b: str) -> bool:
+    """The placeholder is "unit unknown": it matches any unit."""
+    return ND_UNIT_PLACEHOLDER in (a, b) or canonical_unit(a) == canonical_unit(b)
 
 
 @dataclass
@@ -151,7 +163,7 @@ class CampaignMeasurement:
     def holds_result(self) -> bool:
         """A value or a tested ND: the cells a person can put a QC verdict on."""
         return self.is_tested_nd or (
-            self.value is not None and self.value_qualifier not in _UNTESTED_QUALIFIERS
+            self.value is not None and self.value_qualifier not in UNTESTED_QUALIFIERS
         )
 
     def apply_qc_verdict(
@@ -160,17 +172,21 @@ class CampaignMeasurement:
         *,
         by: uuid.UUID,
         at: datetime,
-        note: str | None,
+        note: str | object | None = UNSET,
         overwrite: bool,
     ) -> QcApplyOutcome:
-        note = normalize_qc_note(verdict, note)
-        if not self.holds_result:
-            return QcApplyOutcome.NO_RESULT
+        """``note`` UNSET (not named) never re-stamps a cell already holding ``verdict``;
+        None or blank names "no note". A clear also removes a stale verdict from a cell
+        that no longer holds a result."""
+        named = note is not UNSET
+        note = normalize_qc_note(verdict, note if isinstance(note, str) else None)
         if verdict is None:
             if self.qc_verdict is None:
-                return QcApplyOutcome.UNCHANGED
+                return QcApplyOutcome.UNCHANGED if self.holds_result else QcApplyOutcome.NO_RESULT
+        elif not self.holds_result:
+            return QcApplyOutcome.NO_RESULT
         elif self.qc_verdict == verdict:
-            if not (overwrite and note != self.qc_verdict_note):
+            if not (overwrite and named and note != self.qc_verdict_note):
                 return QcApplyOutcome.UNCHANGED
         elif self.qc_verdict is not None and not overwrite:
             return QcApplyOutcome.KEPT
@@ -182,7 +198,7 @@ class CampaignMeasurement:
 
     def carry_qc_verdict_from(self, old: CampaignMeasurement) -> bool:
         """Take ``old``'s verdict when this cell is the same reading; else stay not tested."""
-        if old.qc_verdict is None or not self._same_reading_as(old):
+        if old.qc_verdict is None or not self.holds_result or not self._same_reading_as(old):
             return False
         self.qc_verdict = old.qc_verdict
         self.qc_verdict_by = old.qc_verdict_by
@@ -193,9 +209,7 @@ class CampaignMeasurement:
     def _same_reading_as(self, old: CampaignMeasurement) -> bool:
         if self.value_qualifier != old.value_qualifier or not _close(self.value, old.value):
             return False
-        if self.value_qualifier not in _UNTESTED_QUALIFIERS and canonical_unit(
-            self.unit
-        ) != canonical_unit(old.unit):
+        if self.value_qualifier not in UNTESTED_QUALIFIERS and not _same_unit(self.unit, old.unit):
             return False
         return (
             _close(self.test_concentration_value, old.test_concentration_value)

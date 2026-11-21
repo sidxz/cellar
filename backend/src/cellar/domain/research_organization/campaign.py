@@ -22,6 +22,7 @@ from cellar.domain.research_organization.campaign_management import (
     CampaignManagement,
     ensure_writable_by,
 )
+from cellar.domain.research_organization.campaign_measurement import ND_UNIT_PLACEHOLDER
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import (
     MAX_STAGE_CRITERIA,
@@ -421,7 +422,7 @@ class Campaign(AggregateRoot):
                 measurement = result.find_measurement(channel.id)
                 if measurement is None or measurement.is_manual_override:
                     continue
-                if measurement.unit != "-":
+                if measurement.unit != ND_UNIT_PLACEHOLDER:
                     continue
                 unit = readout_unit_by_channel.get(channel.id)
                 if not unit or not unit.strip():

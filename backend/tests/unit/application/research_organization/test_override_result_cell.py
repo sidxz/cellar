@@ -518,3 +518,50 @@ class TestOverrideResultCell:
         new_m = await self._override_verified(6.0)
         assert new_m.qc_verdict is None
         assert new_m.qc_verdict_by is None
+
+    @pytest.mark.asyncio
+    async def test_nd_over_a_verified_aggregate_nd_is_not_tested(self) -> None:
+        """An aggregate tested ND is marked only by its snapshot, which the override does
+        not copy: the typed ND holds no result, so it takes no verdict."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        channel_id = uuid.uuid4()
+        result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        aggregate_nd = CampaignMeasurement(
+            result_id=result.id,
+            channel_id=channel_id,
+            value=None,
+            value_qualifier=ValueQualifier.ND,
+            unit="",
+            protocol_name_snapshot="Proto A",
+            protocol_version_snapshot=2,
+            curve_snapshot={"aggregate_label": "mean"},
+            qc_verdict=QcVerdict.VERIFIED,
+            qc_verdict_by=uuid.UUID(int=7),
+        )
+        assert aggregate_nd.holds_result
+        result.add_measurement(aggregate_nd)
+        campaign.add_result(result)
+        uc = OverrideResultCell(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            dispatcher=AsyncMock(),
+        )
+
+        out = await uc(
+            OverrideResultCellCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                result_id=result.id,
+                channel_id=channel_id,
+                value=None,
+                value_qualifier=ValueQualifier.ND,
+                unit="",
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(out, Success)
+        new_m = out.unwrap().results[0].find_measurement(channel_id)
+        assert not new_m.holds_result
+        assert new_m.qc_verdict is None and new_m.qc_verdict_by is None

@@ -43,7 +43,10 @@ from cellar.application.screening.run_aggregation import (
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import CampaignMeasurement
+from cellar.domain.research_organization.campaign_measurement import (
+    ND_UNIT_PLACEHOLDER,
+    CampaignMeasurement,
+)
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     MeasurementBasis,
@@ -58,10 +61,6 @@ from cellar.domain.shared.units import comparable_magnitude
 
 _CENSORED = {ValueQualifier.GT, ValueQualifier.LT}
 _AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN}
-
-# The domain forbids an empty unit, even on an ND cell; this stands in when no
-# reading contributes one, without inventing a unit we don't know.
-_ND_UNIT_PLACEHOLDER = "-"
 
 
 @dataclass(frozen=True)
@@ -165,7 +164,7 @@ def _nd_measurement(
         channel_id=channel_id,
         value=None,
         value_qualifier=ValueQualifier.ND,
-        unit=unit or _ND_UNIT_PLACEHOLDER,
+        unit=unit or ND_UNIT_PLACEHOLDER,
         protocol_name_snapshot=protocol_name or "-",
         protocol_version_snapshot=protocol_version,
         source_run_id=source.run_id if source and pin_source else None,
@@ -208,7 +207,7 @@ def _resolve(
     found = _concentrations_found(recorded)
     groups = _at_one_concentration(recorded, channel.test_concentration)
     if groups is None:
-        m = _nd_measurement(result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER)
+        m = _nd_measurement(result_id=result_id, channel_id=channel.id, unit=ND_UNIT_PLACEHOLDER)
         m.unresolved_reason = UnresolvedReason.SEVERAL_CONCENTRATIONS
     else:
         values = [_combine(g) for g in groups]
@@ -325,7 +324,7 @@ def _measure(
     """The column's rule over ``values``, building the cell (snapshot, source pin, ND)."""
     if not values:
         return _nd_measurement(
-            result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER
+            result_id=result_id, channel_id=channel.id, unit=ND_UNIT_PLACEHOLDER
         )
     values = _newest_first(values)
     runs = [v.run for v in values]
@@ -340,14 +339,14 @@ def _measure(
             return _nd_measurement(
                 result_id=result_id,
                 channel_id=channel.id,
-                unit=rep.unit or _ND_UNIT_PLACEHOLDER,
+                unit=rep.unit or ND_UNIT_PLACEHOLDER,
                 protocol_name=rep.protocol_name,
                 protocol_version=rep.protocol_version,
             )
         m = _nd_measurement(
             result_id=result_id,
             channel_id=channel.id,
-            unit=rep.unit or _ND_UNIT_PLACEHOLDER,
+            unit=rep.unit or ND_UNIT_PLACEHOLDER,
             protocol_name=rep.protocol_name,
             protocol_version=rep.protocol_version,
             source=rep,
@@ -372,7 +371,7 @@ def _measure(
         channel_id=channel.id,
         value=result.value,
         value_qualifier=result.qualifier,
-        unit=pick.unit or _ND_UNIT_PLACEHOLDER,
+        unit=pick.unit or ND_UNIT_PLACEHOLDER,
         source_run_id=None if is_aggregate else pick.run_id,
         source_curve_id=None if is_aggregate else pick.curve_id,
         source_readout_id=None if is_aggregate else pick.readout_id,
