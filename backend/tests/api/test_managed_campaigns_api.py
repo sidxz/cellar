@@ -216,6 +216,7 @@ async def test_managing_app_is_not_refused(
     response = await _call(client, method, path, body)
     # The call's own rules may still answer (a draft cannot be reopened, an unknown
     # collection is not found); only the managed refusal must not.
+    assert response.status_code < 500, response.text
     assert response.status_code == 204 or response.json().get("error") != MANAGED, response.text
 
 
