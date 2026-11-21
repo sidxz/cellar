@@ -408,11 +408,11 @@ class CampaignMeasurementResponse(BaseModel):
     test_concentration_value: float | None = None
     test_concentration_unit: str | None = None
     replicate_count: int | None = None
-    qc_verdict: Literal["not_tested", "verified", "failed"] = "not_tested"
+    qc_verdict: Literal["not_tested", "verified", "failed"]
     qc_verdict_by: uuid.UUID | None = None
     qc_verdict_at: datetime | None = None
     qc_verdict_note: str | None = None
-    holds_result: bool = False
+    holds_result: bool
     contributing_run_ids: list[uuid.UUID] | None = None
     # Migration 031 — frozen copy of the upstream dose-response curve.
     # Populated for source_kind=dose_response_curve cells; ReadoutData
