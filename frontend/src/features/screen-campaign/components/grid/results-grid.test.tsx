@@ -732,3 +732,54 @@ describe("ResultsGridV2 QC marks", () => {
     expect(screen.getByRole("button", { name: "Verified" })).toBeInTheDocument();
   });
 });
+
+describe("ResultsGridV2 notes column", () => {
+  const campaign = {
+    id: "c-notes",
+    stages: [],
+    channels: [],
+    results: [
+      {
+        id: "r1",
+        molecule_id: "mol-1",
+        notes: "Watch hERG",
+        notes_edited_by: "u-1",
+        notes_edited_at: "2026-11-21T14:03:00Z",
+        measurements: [],
+        stage_outcomes: [],
+      },
+    ],
+  } as unknown as CampaignResponse;
+
+  function renderNotesCell(flags: { readOnly: boolean; notesReadOnly?: boolean }) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ResultsGridV2
+          campaign={campaign}
+          filters={emptyFilters()}
+          selectedStageId={null}
+          {...flags}
+        />
+      </QueryClientProvider>,
+    );
+    const col = grid.columnDefs.find((c) => (c as ColDef).colId === "notes") as ColDef;
+    const Renderer = col.cellRenderer as ComponentType<unknown>;
+    const params = { data: { result: campaign.results[0] } };
+    return render(
+      <QueryClientProvider client={qc}>
+        <Renderer {...(params as object)} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("lets an editor write a note on a campaign whose curation is locked", () => {
+    renderNotesCell({ readOnly: true, notesReadOnly: false });
+    expect(screen.getByRole("button", { name: "Edit notes" })).toBeInTheDocument();
+  });
+
+  it("follows readOnly when no notes flag is given", () => {
+    renderNotesCell({ readOnly: true });
+    expect(screen.getByRole("button", { name: "Note history" })).toBeInTheDocument();
+  });
+});

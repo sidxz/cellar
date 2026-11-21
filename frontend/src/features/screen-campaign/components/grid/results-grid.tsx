@@ -523,6 +523,8 @@ interface ResultsGridV2Props {
   readOnly: boolean;
   /** QC verdicts are an editor's call; defaults to ``readOnly``. */
   qcReadOnly?: boolean;
+  /** Notes are an editor's to write on any campaign status; defaults to ``readOnly``. */
+  notesReadOnly?: boolean;
   /** Compound rows are the managing app's to add and remove (curation stays on readOnly). */
   rowsLocked?: boolean;
 }
@@ -538,6 +540,7 @@ export function ResultsGridV2({
   selectedStageId,
   readOnly,
   qcReadOnly = readOnly,
+  notesReadOnly = readOnly,
   rowsLocked = false,
 }: ResultsGridV2Props) {
   const [overrideTarget, setOverrideTarget] = useState<{
@@ -947,7 +950,7 @@ export function ResultsGridV2({
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
-        return <NotesCell campaignId={campaign.id} result={r} readOnly={readOnly} />;
+        return <NotesCell campaignId={campaign.id} result={r} readOnly={notesReadOnly} />;
       },
     });
 
@@ -963,6 +966,7 @@ export function ResultsGridV2({
     curveFrames,
     readOnly,
     qcReadOnly,
+    notesReadOnly,
     // Every input the cell renderers read has to be here or the memoised
     // column defs keep rendering the previous stage's verdicts/chips.
     selectedStage,

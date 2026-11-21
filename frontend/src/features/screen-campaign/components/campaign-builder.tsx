@@ -147,7 +147,8 @@ function CampaignBuilderV2({
   const refreshing = refreshMutation.isPending;
   const onRefresh = () => refreshMutation.mutate({ campaignId: campaign.id });
 
-  // Curation (notes, outcome overrides, a cell pick) follows the draft status; structure
+  // Notes are an editor's to write on any status (scientists annotate a closed campaign
+  // months later). Curation (outcome overrides, a cell pick) follows the draft status; structure
   // (sources, columns, stages, compound rows) is also locked when another app manages it.
   const curationLocked = campaign.status !== "draft";
   const structureLocked = curationLocked || Boolean(campaign.managed_by);
@@ -210,6 +211,7 @@ function CampaignBuilderV2({
         selectedStageId={effectiveStageId}
         readOnly={curationLocked}
         qcReadOnly={qcReadOnly}
+        notesReadOnly={!canEditTags}
         rowsLocked={structureLocked}
       />
 

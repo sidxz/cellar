@@ -1,9 +1,10 @@
 "use client";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { useState } from "react";
 import type { CampaignResultResponse } from "../../types";
-import { NotesPopover } from "../popovers/notes-popover";
+import { NotesPopover, noteStamp } from "../popovers/notes-popover";
 
 interface NotesCellProps {
   campaignId: string;
@@ -12,35 +13,54 @@ interface NotesCellProps {
 }
 
 /**
- * NotesCell — the grid's Notes column. Shows the notes clamped to 3 lines
- * (full text in the title tooltip); in a draft campaign the whole cell is a
- * button that opens <NotesPopover> for an explicit edit-and-save.
+ * NotesCell — the grid's Notes column. Shows the note clamped to 3 lines (full
+ * text in the title tooltip) with who saved it and when underneath. For an
+ * editor the whole cell is a button that opens <NotesPopover> for an explicit
+ * edit-and-save, on any campaign status; read-only, a cell with a note (or a
+ * removed one) opens the note's history instead.
  */
 export function NotesCell({ campaignId, result, readOnly }: NotesCellProps) {
   const [open, setOpen] = useState(false);
+  const nameOf = useMemberNames();
   const notes = result.notes?.trim() ?? "";
 
   const body = notes ? (
-    <p className="line-clamp-3 text-[11px] leading-tight text-muted-foreground" title={notes}>
-      {notes}
-    </p>
+    <>
+      <p className="line-clamp-3 text-[11px] leading-tight text-muted-foreground" title={notes}>
+        {notes}
+      </p>
+      {result.notes_edited_at && (
+        <p className="text-[10px] leading-tight text-muted-foreground/70">
+          {noteStamp(nameOf(result.notes_edited_by), result.notes_edited_at)}
+        </p>
+      )}
+    </>
   ) : readOnly ? null : (
     <span className="text-[11px] italic text-muted-foreground/70">Add note</span>
   );
 
-  if (readOnly) {
+  if (readOnly && !notes && !result.notes_edited_at) {
     return <div className="max-w-[200px] py-1 text-left">{body}</div>;
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="max-w-[200px] py-1 text-left" aria-label="Edit notes">
+        <button
+          type="button"
+          className="max-w-[200px] py-1 text-left"
+          aria-label={readOnly ? "Note history" : "Edit notes"}
+        >
           {body}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[360px]">
-        <NotesPopover campaignId={campaignId} result={result} onClose={() => setOpen(false)} />
+        <NotesPopover
+          campaignId={campaignId}
+          result={result}
+          onClose={() => setOpen(false)}
+          readOnly={readOnly}
+        />
       </PopoverContent>
     </Popover>
   );
