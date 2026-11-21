@@ -39,8 +39,14 @@ from cellar.application.research_organization.preview_run_import import (
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSourcesCommand,
 )
+from cellar.application.research_organization.release_campaign import (
+    ReleaseCampaignCommand,
+)
 from cellar.application.research_organization.reopen_campaign import (
     ReopenCampaignCommand,
+)
+from cellar.application.research_organization.set_campaign_management import (
+    SetCampaignManagementCommand,
 )
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaignCommand,
@@ -61,7 +67,9 @@ from cellar.interface.dependencies import (
     ListCampaignsDep,
     PreviewRunImportDep,
     RefreshFromSourcesDep,
+    ReleaseCampaignDep,
     ReopenCampaignDep,
+    SetCampaignManagementDep,
     SupersedeCampaignDep,
     UpdateCampaignMetadataDep,
 )
@@ -77,7 +85,9 @@ from cellar.interface.routes._campaign_dtos import (
     CloseCampaignRequest,
     CreateCampaignRequest,
     PreviewRunImportRequest,
+    ReleaseCampaignRequest,
     ReopenCampaignRequest,
+    SetCampaignManagementRequest,
     SupersedeRequest,
     UpdateCampaignRequest,
 )
@@ -101,6 +111,8 @@ async def create_campaign(
         description=body.description,
         created_by=auth.user_id,
         supersedes_campaign_id=body.supersedes_campaign_id,
+        managed_url=body.managed_url,
+        managed_label=body.managed_label,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -326,6 +338,49 @@ async def close_campaign(
         campaign_id=campaign_id,
         user_id=auth.user_id,
         note=body.note,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.put("/{campaign_id}/managed-by", response_model=CampaignResponse)
+async def set_campaign_management(
+    campaign_id: uuid.UUID,
+    body: SetCampaignManagementRequest,
+    auth: AuthDep,
+    uc: SetCampaignManagementDep,
+    acting: ActingServiceDep,
+) -> CampaignResponse:
+    """The app making the call (its X-Service-Token) manages this campaign from now on.
+
+    Only that app then changes the campaign's lifecycle and structure; calling again
+    updates where the campaign lives there.
+    """
+    cmd = SetCampaignManagementCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        managed_url=body.managed_url,
+        managed_label=body.managed_label,
+        acting_service=acting,
+        user_id=auth.user_id,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.post("/{campaign_id}/release", response_model=CampaignResponse)
+async def release_campaign(
+    campaign_id: uuid.UUID,
+    body: ReleaseCampaignRequest,
+    auth: AuthDep,
+    uc: ReleaseCampaignDep,
+) -> CampaignResponse:
+    """A workspace admin gives a managed campaign back to ChemCellar, with a reason."""
+    cmd = ReleaseCampaignCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        user_id=auth.user_id,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

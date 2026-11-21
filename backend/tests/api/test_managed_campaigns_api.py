@@ -14,9 +14,13 @@ from dataclasses import dataclass
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.research_organization.campaign_management import CampaignManagement
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.messaging.audit_event_handler import AuditEventHandler
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (  # noqa: E501
     SQLAlchemyCampaignRepository,
 )
@@ -321,3 +325,143 @@ async def test_an_unmanaged_campaign_is_unchanged(
         f"/api/v1/campaigns/{m.campaign_id}/stages", json={"name": "Confirmation"}
     )
     assert response.status_code == 200, response.text
+
+
+# ---------------------------------------------------------------------------
+# Create managed, mark an existing campaign, an admin releases it
+# ---------------------------------------------------------------------------
+
+_MARK = {"managed_url": DAIKON.url, "managed_label": "Daikon"}
+
+
+async def _project(client: AsyncClient) -> str:
+    resp = await client.post("/api/v1/projects", json={"name": f"P-{uuid.uuid4().hex[:6]}"})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+async def test_create_managed_from_daikon(client: AsyncClient, acting_as) -> None:
+    project_id = await _project(client)
+    acting_as("daikon")
+    resp = await client.post(
+        "/api/v1/campaigns", json={"name": "Round 1", "project_id": project_id, **_MARK}
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert (body["managed_by"], body["managed_url"], body["managed_label"]) == (
+        "daikon",
+        DAIKON.url,
+        "Daikon",
+    )
+
+
+async def test_create_with_managed_fields_but_no_app_is_refused(client: AsyncClient) -> None:
+    project_id = await _project(client)
+    resp = await client.post(
+        "/api/v1/campaigns", json={"name": "Round 1", "project_id": project_id, **_MARK}
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_mark_an_existing_campaign_and_move_it(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+    acting_as,
+) -> None:
+    m = await _build(client, session_factory, workspace_id, managed=False)
+    acting_as("daikon")
+    marked = await client.put(f"/api/v1/campaigns/{m.campaign_id}/managed-by", json=_MARK)
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["managed_by"] == "daikon"
+
+    moved_url = "http://localhost:3002/screens/S2?round=R1"
+    moved = await client.put(
+        f"/api/v1/campaigns/{m.campaign_id}/managed-by",
+        json={"managed_url": moved_url, "managed_label": "Daikon"},
+    )
+    assert moved.status_code == 200 and moved.json()["managed_url"] == moved_url
+
+
+async def test_mark_without_an_app_is_forbidden(
+    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession], workspace_id
+) -> None:
+    m = await _build(client, session_factory, workspace_id, managed=False)
+    resp = await client.put(f"/api/v1/campaigns/{m.campaign_id}/managed-by", json=_MARK)
+    assert resp.status_code == 403, resp.text
+
+
+async def test_mark_a_campaign_another_app_manages_conflicts(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+    acting_as,
+) -> None:
+    m = await _build(client, session_factory, workspace_id)
+    acting_as("other-app")
+    resp = await client.put(f"/api/v1/campaigns/{m.campaign_id}/managed-by", json=_MARK)
+    assert resp.status_code == 409, resp.text
+
+
+async def test_an_admin_releases_it_and_chemcellar_may_edit_again(
+    client: AsyncClient,
+    api_app: FastAPI,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+) -> None:
+    m = await _build(client, session_factory, workspace_id)
+    # The shared test app leaves out the audit catch-all that production's lifespan wires.
+    container = api_app.state.container
+    container[EventDispatcher].register(
+        DomainEvent, AuditEventHandler(container[async_sessionmaker])
+    )
+    released = await client.post(
+        f"/api/v1/campaigns/{m.campaign_id}/release", json={"reason": "round abandoned"}
+    )
+    assert released.status_code == 200, released.text
+    assert released.json()["managed_by"] is None
+
+    stage = await client.post(
+        f"/api/v1/campaigns/{m.campaign_id}/stages", json={"name": "Confirmation"}
+    )
+    assert stage.status_code == 200, stage.text
+
+    async with session_factory() as s:
+        reasons = (
+            (
+                await s.execute(
+                    text("SELECT reason FROM audit_operations WHERE entity_id = :id"),
+                    {"id": uuid.UUID(m.campaign_id)},
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert "round abandoned" in reasons
+
+
+async def test_an_editor_may_not_release(
+    client: AsyncClient,
+    editor_client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+) -> None:
+    m = await _build(client, session_factory, workspace_id)
+    resp = await editor_client.post(
+        f"/api/v1/campaigns/{m.campaign_id}/release", json={"reason": "round abandoned"}
+    )
+    assert resp.status_code == 403, resp.text
+
+
+async def test_the_campaign_list_shows_who_manages_it(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+) -> None:
+    m = await _build(client, session_factory, workspace_id)
+    resp = await client.get("/api/v1/campaigns", params={"project_id": m.project_id})
+    assert resp.status_code == 200, resp.text
+    items = resp.json()
+    items = items["items"] if isinstance(items, dict) else items
+    [row] = [c for c in items if c["id"] == m.campaign_id]
+    assert (row["managed_by"], row["managed_label"]) == ("daikon", "Daikon")

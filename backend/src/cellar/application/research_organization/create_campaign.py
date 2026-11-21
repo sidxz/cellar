@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.campaign_management import managed_elsewhere
@@ -18,9 +18,11 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_management import CampaignManagement
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
     DomainError,
+    ValidationError,
 )
 
 
@@ -34,6 +36,9 @@ class CreateCampaignCommand(Command):
     supersedes_campaign_id: uuid.UUID | None = None
     # The realm app making the call (verified X-Service-Token); None for ChemCellar's own client.
     acting_service: str | None = None
+    # Sent by the managing app with its token: the campaign is managed from creation.
+    managed_url: str | None = None
+    managed_label: str | None = None
 
 
 class CreateCampaign:
@@ -65,6 +70,15 @@ class CreateCampaign:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
 
+        wants_management = input.managed_url is not None or input.managed_label is not None
+        if wants_management and input.acting_service is None:
+            return Failure(
+                ValidationError(
+                    "managed_url and managed_label come from the managing app, with its "
+                    "X-Service-Token"
+                )
+            )
+
         async with self._uow:
             if input.supersedes_campaign_id is not None:
                 # Naming a managed campaign as the one this replaces is the managing app's call.
@@ -81,6 +95,18 @@ class CreateCampaign:
                 created_by=input.created_by,
                 supersedes_campaign_id=input.supersedes_campaign_id,
             )
+            if wants_management:
+                try:
+                    campaign.set_management(
+                        CampaignManagement(
+                            managed_by=input.acting_service or "",
+                            url=input.managed_url or "",
+                            label=input.managed_label or "",
+                        ),
+                        user_id=input.created_by,
+                    )
+                except ValidationError as e:
+                    return Failure(e)
 
             await self._campaign_repo.save(campaign)
             events = await self._uow.commit()

@@ -156,6 +156,11 @@ class CampaignReleased(DomainEvent):
     reason: str
     released_by: uuid.UUID | None
 
+    @property
+    def audit_reason(self) -> str:
+        """The admin's reason, carried into the audit operation."""
+        return self.reason
+
 
 @dataclass(frozen=True, kw_only=True)
 class CampaignCollectionAdded(DomainEvent):
