@@ -301,7 +301,8 @@ function SearchPageInner() {
   /** The query a structure link ran. It, and its re-runs (sort, rule), stay out of recent
    *  searches (owner, 2026-11-21); a search the person runs from the form records as usual. */
   const linkQuery = useRef<SearchQuery | null>(null);
-  const linkHandled = useRef(false);
+  /** Key of the link already handled (`id|mode|threshold`, or "invalid"). */
+  const handledLinkKey = useRef<string | null>(null);
   const onDraftChange = useCallback((query: SearchQuery) => {
     draftQuery.current = query;
   }, []);
@@ -630,19 +631,30 @@ function SearchPageInner() {
   // PREPARE: structure link — once the molecule has loaded (or failed), build the query once.
   const [pendingLinkQuery, setPendingLinkQuery] = useState<SearchQuery | null>(null);
   useEffect(() => {
-    if (!structureLink || linkHandled.current) return;
+    if (!structureLink) return;
+    const key =
+      structureLink === "invalid"
+        ? "invalid"
+        : `${structureLink.moleculeId}|${structureLink.mode}|${structureLink.threshold}`;
+    if (handledLinkKey.current === key) return;
     if (structureLink === "invalid") {
-      linkHandled.current = true;
+      handledLinkKey.current = key;
       showError("This search link isn't valid.");
       return;
     }
     if (linkedMolecule.isError) {
-      linkHandled.current = true;
-      showError("That compound wasn't found, or you don't have access to it.");
+      handledLinkKey.current = key;
+      const status = (linkedMolecule.error as { response?: { status?: number } } | null)?.response
+        ?.status;
+      showError(
+        status === 404 || status === 403
+          ? "That compound wasn't found, or you don't have access to it."
+          : "Couldn't load that compound. Try again.",
+      );
       return;
     }
     if (!linkedMolecule.data) return;
-    linkHandled.current = true;
+    handledLinkKey.current = key;
     const smiles = linkedMolecule.data.structure?.smiles;
     if (!smiles) {
       showError("This compound has no structure to search with.");
@@ -652,7 +664,7 @@ function SearchPageInner() {
       logic: "and",
       criteria: [structureLinkCriterion(structureLink, smiles)],
     });
-  }, [structureLink, linkedMolecule.data, linkedMolecule.isError]);
+  }, [structureLink, linkedMolecule.data, linkedMolecule.isError, linkedMolecule.error]);
 
   // FIRE: structure link — through handleSearch, like the scaffold handoff.
   useEffect(() => {
