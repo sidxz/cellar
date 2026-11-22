@@ -82,6 +82,7 @@ from cellar.application.screening.resolve_target_links import (
     GetProtocolTargetsQuery,
     ResolveProtocolTargetsQuery,
 )
+from cellar.application.shared.change_owner import ChangeOwnerCommand
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.enums import ReferenceKind
 from cellar.domain.screening_assay.melt_window import MeltMeasure
@@ -96,6 +97,7 @@ from cellar.interface.dependencies import (
     AddReadoutDefinitionDep,
     AddTemperatureWindowDep,
     AuthDep,
+    ChangeProtocolOwnerDep,
     ConditionGroupingServiceDep,
     CorrectProtocolDep,
     CreateProtocolDep,
@@ -274,6 +276,9 @@ class ProtocolResponse(BaseModel):
     status: str
     created_at: datetime | None = None
     created_by: uuid.UUID
+    # Duar org ids: the creator's org when it was made, and who owns it now.
+    created_by_org_id: uuid.UUID | None = None
+    owner_org_id: uuid.UUID | None = None
     # Canonical dose unit for all wells + IC50 fits of runs of this protocol.
     dose_unit: str
     # POS control signal direction — "high" (uninhibited reference) or
@@ -342,6 +347,8 @@ class ProtocolResponse(BaseModel):
             status=p.status.value,
             created_at=p.created_at,
             created_by=p.created_by,
+            created_by_org_id=p.created_by_org_id,
+            owner_org_id=p.owner_org_id,
             dose_unit=p.dose_unit.value,
             pos_control_signal=p.pos_control_signal.value,
             readout_definitions=[
@@ -1011,6 +1018,25 @@ class UpdateProtocolRequest(BaseModel):
     # (migration 051); forbid extras so an old client PATCHing target_id gets
     # a 422 instead of a silent 200 no-op.
     model_config = {"extra": "forbid"}
+
+
+class ChangeProtocolOwnerRequest(BaseModel):
+    owner_org_id: uuid.UUID
+
+
+@router.put("/protocols/{protocol_id}/owner", response_model=ProtocolResponse, tags=["protocols"])
+async def change_protocol_owner(
+    protocol_id: uuid.UUID,
+    body: ChangeProtocolOwnerRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: ChangeProtocolOwnerDep,
+) -> ProtocolResponse:
+    """Hand the protocol to another Duar org (an admin or its creator), in any status."""
+    cmd = ChangeOwnerCommand(
+        workspace_id=auth.workspace_id, entity_id=protocol_id, owner_org_id=body.owner_org_id
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
 
 
 @router.patch("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])

@@ -6,7 +6,11 @@ import uuid
 from datetime import UTC, datetime
 
 from cellar.domain.research_organization.enums import ProjectStatus
-from cellar.domain.research_organization.events import ProjectArchived, ProjectCreated
+from cellar.domain.research_organization.events import (
+    ProjectArchived,
+    ProjectCreated,
+    ProjectOwnerChanged,
+)
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ValidationError
 
@@ -28,6 +32,8 @@ class Project(AggregateRoot):
         description: str | None = None,
         status: ProjectStatus = ProjectStatus.ACTIVE,
         created_by: uuid.UUID,
+        created_by_org_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
         archived_by: uuid.UUID | None = None,
         archived_at: datetime | None = None,
         created_at: datetime | None = None,
@@ -42,6 +48,9 @@ class Project(AggregateRoot):
         self.description = description
         self.status = status
         self.created_by = created_by
+        # Duar org ids. The creator's org is fixed at creation; the owner can change.
+        self.created_by_org_id = created_by_org_id
+        self.owner_org_id = owner_org_id
         self.archived_by = archived_by
         self.archived_at = archived_at
 
@@ -53,12 +62,16 @@ class Project(AggregateRoot):
         name: str,
         description: str | None = None,
         created_by: uuid.UUID,
+        created_by_org_id: uuid.UUID | None = None,
     ) -> Project:
+        """The owner starts as the creator's org."""
         project = cls(
             workspace_id=workspace_id,
             name=name,
             description=description,
             created_by=created_by,
+            created_by_org_id=created_by_org_id,
+            owner_org_id=created_by_org_id,
         )
         project.register_event(
             ProjectCreated(
@@ -89,6 +102,23 @@ class Project(AggregateRoot):
         if description is not ...:
             self.description = description
         self.updated_at = datetime.now(UTC)
+
+    def change_owner(self, owner_org_id: uuid.UUID) -> None:
+        """Hand the project to another org; an archived project is read-only."""
+        self._guard_archived()
+        if owner_org_id == self.owner_org_id:
+            return
+        old, self.owner_org_id = self.owner_org_id, owner_org_id
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            ProjectOwnerChanged(
+                aggregate_id=self.id,
+                aggregate_type="Project",
+                workspace_id=self.workspace_id,
+                old_owner_org_id=old,
+                new_owner_org_id=owner_org_id,
+            )
+        )
 
     def archive(self, *, archived_by: uuid.UUID) -> None:
         """Archive the project. Archived projects cannot be modified."""

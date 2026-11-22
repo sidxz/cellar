@@ -431,6 +431,23 @@ async def editor_client_other_org(
 
 
 @pytest.fixture
+async def other_editor_client(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """An editor in the same workspace who is a *different person* from ``client``'s
+    user — for "only the creator or an admin" rules."""
+    auth = FakeAuth(
+        role="editor", workspace_id=workspace_id, user_id=uuid.uuid4(), org_id=OTHER_ORG_ID
+    )
+    app = _create_test_app(database_url, auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
+
+
+@pytest.fixture
 async def viewer_client(
     database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
 ) -> AsyncIterator[AsyncClient]:

@@ -18,6 +18,30 @@ class ProjectArchived(DomainEvent):
     archived_by: uuid.UUID
 
 
+def _owner_change(
+    old: uuid.UUID | None, new: uuid.UUID
+) -> list[tuple[str, str | None, str | None]]:
+    return [("owner_org_id", str(old) if old else None, str(new))]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectOwnerChanged(DomainEvent):
+    old_owner_org_id: uuid.UUID | None
+    new_owner_org_id: uuid.UUID
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return _owner_change(self.old_owner_org_id, self.new_owner_org_id)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CollectionOwnerChanged(DomainEvent):
+    old_owner_org_id: uuid.UUID | None
+    new_owner_org_id: uuid.UUID
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return _owner_change(self.old_owner_org_id, self.new_owner_org_id)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CollectionCreated(DomainEvent):
     name: str

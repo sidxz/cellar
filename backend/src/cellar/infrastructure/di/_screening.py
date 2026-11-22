@@ -31,6 +31,7 @@ from cellar.application.inventory.registered_plates import (
     UpdatePlate,
 )
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
+from cellar.application.screening.change_protocol_owner import ChangeProtocolOwner
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.compound_curves_reader import CompoundCurvesReader
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
@@ -462,6 +463,14 @@ def register_screening(container: Container) -> None:
     container.define(UnlockProtocol, _protocol_cmd(UnlockProtocol))
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
     container.define(UpdateProtocol, _protocol_named(UpdateProtocol))
+
+    def _change_protocol_owner(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ChangeProtocolOwner(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], c[OrgDirectoryPort]
+        )
+
+    container.define(ChangeProtocolOwner, _change_protocol_owner)
     container.define(SetProtocolDiscriminator, _protocol_named(SetProtocolDiscriminator))
     container.define(CorrectProtocol, _protocol_named(CorrectProtocol))
     container.define(

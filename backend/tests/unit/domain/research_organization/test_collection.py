@@ -6,7 +6,7 @@ import pytest
 
 from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import CollectionType
-from cellar.domain.research_organization.events import CollectionCreated
+from cellar.domain.research_organization.events import CollectionCreated, CollectionOwnerChanged
 from cellar.domain.shared.errors import CollectionFrozenError, ValidationError
 
 
@@ -29,7 +29,7 @@ class TestCollectionCreate:
             name="Hit Compounds",
             description="Confirmed hits from HTS",
             project_id=project_id,
-            owned_by_org_id=org_id,
+            owner_org_id=org_id,
             created_by=user_id,
         )
         assert collection.molecule_count == 0
@@ -130,3 +130,44 @@ class TestCollectionTypeOnAggregate:
         collection.freeze(derived_from_campaign_id=uuid.uuid4())
         with pytest.raises(CollectionFrozenError):
             collection.update(type=CollectionType.HIT_LIST)
+
+
+class TestCollectionOwner:
+    def test_owner_defaults_to_the_creators_org(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        org = uuid.uuid4()
+        c = Collection.create(
+            workspace_id=ws_id, name="Leads", created_by=user_id, created_by_org_id=org
+        )
+        assert (c.created_by_org_id, c.owner_org_id) == (org, org)
+
+    def test_owner_change_records_old_and_new(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        old, new = uuid.uuid4(), uuid.uuid4()
+        c = Collection.create(
+            workspace_id=ws_id, name="Leads", created_by=user_id, created_by_org_id=old
+        )
+        c.clear_events()
+        c.change_owner(new)
+        assert c.owner_org_id == new
+        (event,) = c.collect_events()
+        assert isinstance(event, CollectionOwnerChanged)
+        assert event.audit_changes() == [("owner_org_id", str(old), str(new))]
+
+    def test_same_owner_raises_no_event(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        org = uuid.uuid4()
+        c = Collection.create(
+            workspace_id=ws_id, name="Leads", created_by=user_id, created_by_org_id=org
+        )
+        c.clear_events()
+        c.change_owner(org)
+        assert c.collect_events() == []
+
+    def test_frozen_collection_owner_can_change(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        c = Collection.create(workspace_id=ws_id, name="Leads", created_by=user_id)
+        c.freeze(derived_from_campaign_id=uuid.uuid4())
+        new = uuid.uuid4()
+        c.change_owner(new)
+        assert c.owner_org_id == new

@@ -28,6 +28,7 @@ from cellar.application.research_organization.get_collection import (
     ListCollectionsQuery,
 )
 from cellar.application.research_organization.update_collection import UpdateCollectionCommand
+from cellar.application.shared.change_owner import ChangeOwnerCommand
 from cellar.application.shared.molecule_resolver import MoleculeReference, RefType
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.research_organization.bulk_add_types import BulkAddRow
@@ -37,6 +38,7 @@ from cellar.interface.dependencies import (
     AddMoleculesToCollectionDep,
     AuthDep,
     BulkAddToCollectionDep,
+    ChangeCollectionOwnerDep,
     ComposeCollectionsDep,
     CreateCollectionDep,
     DeleteCollectionDep,
@@ -63,8 +65,10 @@ class CollectionResponse(BaseModel):
     name: str
     description: str | None = None
     project_id: uuid.UUID | None = None
-    owned_by_org_id: uuid.UUID | None = None
+    # Duar org ids: who owns it now, and the creator's org when it was made.
+    owner_org_id: uuid.UUID | None = None
     created_by: uuid.UUID
+    created_by_org_id: uuid.UUID | None = None
     molecule_count: int
     visibility: str
     type: str
@@ -80,8 +84,9 @@ class CollectionResponse(BaseModel):
             name=coll.name,
             description=coll.description,
             project_id=coll.project_id,
-            owned_by_org_id=coll.owned_by_org_id,
+            owner_org_id=coll.owner_org_id,
             created_by=coll.created_by,
+            created_by_org_id=coll.created_by_org_id,
             molecule_count=coll.molecule_count,
             visibility=coll.visibility.value,
             type=coll.type.value,
@@ -95,7 +100,8 @@ class CreateCollectionBody(BaseModel):
     name: str
     description: str | None = None
     project_id: uuid.UUID | None = None
-    owned_by_org_id: uuid.UUID | None = None
+    # A Duar org; omitted = your own org.
+    owner_org_id: uuid.UUID | None = None
     visibility: str = "private"
     type: CollectionType = CollectionType.GENERIC
     # Seed members in the same transaction; every id must be in the workspace.
@@ -106,7 +112,6 @@ class UpdateCollectionBody(BaseModel):
     name: str | None = None
     description: str | None = None
     project_id: uuid.UUID | None = None
-    owned_by_org_id: uuid.UUID | None = None
     visibility: str | None = None
     # Non-nullable: explicit JSON null 422s at Pydantic boundary (matches invalid-string).
     type: CollectionType = CollectionType.GENERIC
@@ -265,7 +270,7 @@ async def create_collection(
         name=body.name,
         description=body.description,
         project_id=body.project_id,
-        owned_by_org_id=body.owned_by_org_id,
+        owner_org_id=body.owner_org_id,
         created_by=auth.user_id,
         visibility=body.visibility,
         type=body.type.value,
@@ -289,12 +294,29 @@ async def update_collection(
         name=body.name if "name" in provided else UNSET,
         description=body.description if "description" in provided else UNSET,
         project_id=body.project_id if "project_id" in provided else UNSET,
-        owned_by_org_id=body.owned_by_org_id if "owned_by_org_id" in provided else UNSET,
         visibility=body.visibility if "visibility" in provided else UNSET,
         type=body.type.value if "type" in provided else UNSET,
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)
+
+
+class ChangeOwnerBody(BaseModel):
+    owner_org_id: uuid.UUID
+
+
+@router.put("/{collection_id}/owner", response_model=CollectionResponse)
+async def change_collection_owner(
+    collection_id: uuid.UUID,
+    body: ChangeOwnerBody,
+    auth: AuthDep,
+    use_case: ChangeCollectionOwnerDep,
+) -> CollectionResponse:
+    """Hand the collection to another Duar org (an admin or its creator)."""
+    command = ChangeOwnerCommand(
+        workspace_id=auth.workspace_id, entity_id=collection_id, owner_org_id=body.owner_org_id
+    )
+    return CollectionResponse.from_domain(result_to_response(await use_case(command, auth=auth)))
 
 
 @router.delete("/{collection_id}", status_code=204)

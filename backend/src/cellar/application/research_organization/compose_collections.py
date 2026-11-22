@@ -59,6 +59,7 @@ class ComposeCollections:
                 workspace_id=input.workspace_id,
                 name=input.result_name,
                 created_by=input.created_by,
+                created_by_org_id=auth.org_id if auth else None,
             )
             await self._repo.save(collection)
 

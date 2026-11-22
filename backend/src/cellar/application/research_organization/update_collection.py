@@ -26,7 +26,6 @@ class UpdateCollectionCommand(Command):
     name: str | object = UNSET
     description: str | object | None = UNSET
     project_id: uuid.UUID | object | None = UNSET
-    owned_by_org_id: uuid.UUID | object | None = UNSET
     visibility: str | object = UNSET
     type: str | object = UNSET
 
@@ -65,8 +64,6 @@ class UpdateCollection:
                 fields["description"] = input.description
             if input.project_id is not UNSET:
                 fields["project_id"] = input.project_id
-            if input.owned_by_org_id is not UNSET:
-                fields["owned_by_org_id"] = input.owned_by_org_id
             if input.visibility is not UNSET:
                 fields["visibility"] = CollectionVisibility(input.visibility)
             if input.type is not UNSET:

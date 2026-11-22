@@ -623,6 +623,8 @@ class Protocol(AggregateRoot):
         parent_protocol_id: uuid.UUID | None = None,
         status: ProtocolStatus = ProtocolStatus.DRAFT,
         created_by: uuid.UUID,
+        created_by_org_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
         dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
         pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
         readout_definitions: list[ReadoutDefinition] | None = None,
@@ -660,6 +662,9 @@ class Protocol(AggregateRoot):
         self.parent_protocol_id = parent_protocol_id
         self.status = status
         self.created_by = created_by
+        # Duar org ids. The creator's org is fixed at creation; the owner can change.
+        self.created_by_org_id = created_by_org_id
+        self.owner_org_id = owner_org_id
         # The canonical concentration unit for this assay's well doses (and IC50
         # fits). Single source of truth — every well of every run inherits this.
         self.dose_unit = dose_unit
@@ -771,6 +776,7 @@ class Protocol(AggregateRoot):
         code: str | None = None,
         protocol_type: ProtocolType,
         created_by: uuid.UUID,
+        created_by_org_id: uuid.UUID | None = None,
         description: str | None = None,
         category: str | None = None,
         dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
@@ -810,6 +816,8 @@ class Protocol(AggregateRoot):
             protocol_type=protocol_type,
             category=category,
             created_by=created_by,
+            created_by_org_id=created_by_org_id,
+            owner_org_id=created_by_org_id,
             dose_unit=dose_unit,
             pos_control_signal=pos_control_signal,
             readout_definitions=readout_definitions,
@@ -1551,6 +1559,24 @@ class Protocol(AggregateRoot):
             raise NotFoundError("Nickname", label)
         self.aliases = keep
         self.updated_at = datetime.now(UTC)
+
+    def change_owner(self, owner_org_id: uuid.UUID) -> None:
+        """Hand the protocol to another org. Ownership isn't scientific content:
+        allowed in any status, even locked."""
+        if owner_org_id == self.owner_org_id:
+            return
+        old, self.owner_org_id = self.owner_org_id, owner_org_id
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            ProtocolUpdated(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                field="owner_org_id",
+                old_value=str(old) if old else None,
+                new_value=str(owner_org_id),
+            )
+        )
 
     def add_reference(self, reference: ProtocolReference) -> None:
         """Provenance: describes the protocol without defining it, so draft and active take it;

@@ -32,6 +32,10 @@ from cellar.application.research_organization.campaign_collection_coverage impor
 from cellar.application.research_organization.campaign_scientist_reader import (
     CampaignScientistReader,
 )
+from cellar.application.research_organization.change_owner import (
+    ChangeCollectionOwner,
+    ChangeProjectOwner,
+)
 from cellar.application.research_organization.close_campaign import CloseCampaign
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
@@ -139,6 +143,7 @@ from cellar.application.research_organization.update_project import UpdateProjec
 from cellar.application.research_organization.update_saved_search import UpdateSavedSearch
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.shared.molecule_resolver import MoleculeResolver
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.visualization.dataset_reader import VisualizationDatasetReader
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.research_organization.repository import (
@@ -228,7 +233,14 @@ def register_research_organization(container: Container) -> None:
             member_repo=SQLAlchemyProjectMemberRepository(uow),
         )
 
+    def _change_project_owner(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ChangeProjectOwner(
+            uow, SQLAlchemyProjectRepository(uow), c[EventDispatcher], c[OrgDirectoryPort]
+        )
+
     container.define(CreateProject, _create_project)
+    container.define(ChangeProjectOwner, _change_project_owner)
     container.define(UpdateProject, _project_cmd(UpdateProject))
     container.define(ArchiveProject, _project_cmd(ArchiveProject))
     container.define(GetProject, _project_query(GetProject))
@@ -326,9 +338,17 @@ def register_research_organization(container: Container) -> None:
             SQLAlchemyCollectionRepository(uow),
             c[EventDispatcher],
             MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]),
+            org_directory=c[OrgDirectoryPort],
+        )
+
+    def _change_collection_owner(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ChangeCollectionOwner(
+            uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher], c[OrgDirectoryPort]
         )
 
     container.define(CreateCollection, _create_collection)
+    container.define(ChangeCollectionOwner, _change_collection_owner)
     container.define(ComposeCollections, _collection_cmd(ComposeCollections))
     container.define(UpdateCollection, _collection_cmd(UpdateCollection))
     container.define(DeleteCollection, _delete_collection)

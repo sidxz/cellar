@@ -221,13 +221,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # manual molecule reassignment beforehand.
     ("molecules", "originating_org_id", "organizations"),
     # -------------------------------------------------------------------------
-    # collections → organizations (owned_by_org_id): SET NULL on org delete
-    # -------------------------------------------------------------------------
-    # collections.owned_by_org_id is a nullable org ownership reference
-    # (ondelete=SET NULL). If the org is deleted the collection's org link is
-    # cleared automatically by the DB; no cascade rule needed.
-    ("collections", "owned_by_org_id", "organizations"),
-    # -------------------------------------------------------------------------
     # Campaign aggregate — owned children, ORM + DB cascade handles them
     # -------------------------------------------------------------------------
     # campaign_channel.campaign_id, campaign_result.campaign_id,
@@ -548,6 +541,12 @@ LEFT_ALONE: dict[str, str] = {
     "plate_loans.owner_org_id": _ORG,
     "registered_plates.owner_org_id": _ORG,
     "runs.performed_at_org_id": _ORG,
+    "collections.owner_org_id": _ORG,
+    "collections.created_by_org_id": _ORG,
+    "projects.owner_org_id": _ORG,
+    "projects.created_by_org_id": _ORG,
+    "protocols.owner_org_id": _ORG,
+    "protocols.created_by_org_id": _ORG,
     "shipments.destination_org_id": _ORG,
     "synthesis_requests.assigned_org_id": _ORG,
     "audit_entries.entity_id": _AUDIT,
