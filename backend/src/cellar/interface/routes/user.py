@@ -104,6 +104,8 @@ class WorkspaceMemberResponse(BaseModel):
     name: str
     avatar_url: str | None = None
     role: str
+    # Duar >= 2.1.0 sends it; older Duar omits it.
+    org_id: uuid.UUID | None = None
 
 
 @router.get("/workspace-members", response_model=list[WorkspaceMemberResponse])
@@ -122,6 +124,7 @@ async def list_workspace_members(
             name=m["name"],
             avatar_url=m.get("avatar_url"),
             role=m["role"],
+            org_id=m.get("org_id"),
         )
         for m in members
     ]

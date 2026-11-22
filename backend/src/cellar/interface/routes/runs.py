@@ -192,7 +192,6 @@ class RunResponse(BaseModel):
 class CreateRunRequest(BaseModel):
     protocol_id: uuid.UUID
     run_date: date
-    performed_at_org_id: uuid.UUID | None = None
     parent_run_id: uuid.UUID | None = None
     run_relationship_type: str | None = None
     plate_format: str | None = None
@@ -248,7 +247,6 @@ async def create_run(
         workspace_id=auth.workspace_id,
         protocol_id=body.protocol_id,
         run_date=body.run_date,
-        performed_at_org_id=body.performed_at_org_id,
         parent_run_id=body.parent_run_id,
         run_relationship_type=body.run_relationship_type,
         plate_format=body.plate_format,

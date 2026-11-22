@@ -8,6 +8,7 @@ import type {
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
   CreateProtocolRequest,
+  CreateRunRequest,
   CurvePositionsResponse,
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
@@ -644,19 +645,7 @@ export interface CreateProtocolInput
   ontology_annotations?: Record<string, OntologyTerm[]>;
 }
 
-export interface CreateRunInput {
-  protocol_id: string;
-  run_date: string;
-  plate_format?: PlateFormat | null;
-  plate_template_id?: string | null;
-  performed_at_org_id?: string | null;
-  parent_run_id?: string | null;
-  run_relationship_type?: RunRelationshipType | null;
-  notes?: string | null;
-  conditions?: Record<string, unknown> | null;
-  /** Biological targets to link to the run on create. */
-  target_ids?: string[];
-}
+export type CreateRunInput = CreateRunRequest;
 
 export interface CreateReadoutDataInput {
   run_id: string;
