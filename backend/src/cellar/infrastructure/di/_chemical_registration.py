@@ -24,6 +24,7 @@ from cellar.application.chemical_registration.bulk_registration_orchestrator imp
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationService,
 )
+from cellar.application.chemical_registration.change_discloser import ChangeDiscloser
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from cellar.application.chemical_registration.create_relationship import CreateRelationship
 from cellar.application.chemical_registration.decide_merge_candidates import (
@@ -303,6 +304,14 @@ def register_chemical_registration(container: Container) -> None:
         )
 
     container.define(UpdateMolecule, _update_molecule)
+
+    def _change_discloser(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ChangeDiscloser(
+            uow, SQLAlchemyMoleculeRepository(uow), c[EventDispatcher], c[OrgDirectoryPort]
+        )
+
+    container.define(ChangeDiscloser, _change_discloser)
     container.define(GetMolecule, _mol_query(GetMolecule))
     container.define(ListMolecules, _mol_query(ListMolecules))
     container.define(ListMoleculesByIds, _mol_query(ListMoleculesByIds))

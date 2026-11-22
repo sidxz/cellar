@@ -9,6 +9,7 @@ from typing import Any, Literal
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from cellar.application.chemical_registration.change_discloser import ChangeDiscloserCommand
 from cellar.application.chemical_registration.depict_molecules import (
     DepictMoleculesQuery,
 )
@@ -50,6 +51,7 @@ from cellar.domain.chemical_registration.molecule_identifier import MoleculeIden
 from cellar.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
+    ChangeDiscloserDep,
     CreateBatchDep,
     DepictMoleculesDep,
     GetMoleculeByIdentifierDep,
@@ -930,6 +932,28 @@ async def update_molecule(
     )
     mol = result_to_response(await use_case(command, auth=auth))
     return MoleculeResponse.from_domain(mol)
+
+
+class ChangeDiscloserBody(BaseModel):
+    disclosed_by: uuid.UUID
+    disclosed_by_org_id: uuid.UUID | None = None
+
+
+@router.put("/{molecule_id}/discloser", response_model=MoleculeResponse)
+async def change_discloser(
+    molecule_id: uuid.UUID,
+    body: ChangeDiscloserBody,
+    auth: AuthDep,
+    use_case: ChangeDiscloserDep,
+) -> MoleculeResponse:
+    """Correct who disclosed the compound and for which Duar org (an admin or its registrant)."""
+    command = ChangeDiscloserCommand(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+        disclosed_by=body.disclosed_by,
+        disclosed_by_org_id=body.disclosed_by_org_id,
+    )
+    return MoleculeResponse.from_domain(result_to_response(await use_case(command, auth=auth)))
 
 
 @router.get("/{molecule_id}/activity", response_model=ActivitySummaryResponse)
