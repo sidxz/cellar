@@ -132,7 +132,6 @@ def _make_source() -> Molecule:
         registration_number=RegistrationNumber(value="CV-00001"),
         name="Source compound",
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol
@@ -165,7 +164,6 @@ def _make_target() -> Molecule:
             heavy_atom_count=13,
             ro5_violations=0,
         ),
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol

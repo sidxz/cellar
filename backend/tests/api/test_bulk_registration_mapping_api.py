@@ -227,7 +227,6 @@ async def test_start_hands_the_mapping_to_the_workflow(
         "/api/v1/bulk-registrations",
         files={"file": ("export.csv", CSV, "text/csv")},
         data={
-            "originating_org_id": await _org(async_client),
             "file_format": "csv",
             "column_mapping": json.dumps(MAPPING),
         },
@@ -256,7 +255,6 @@ async def test_start_invalid_mapping_is_422_before_a_workflow_starts(
         "/api/v1/bulk-registrations",
         files={"file": ("export.csv", CSV, "text/csv")},
         data={
-            "originating_org_id": await _org(async_client),
             "file_format": "csv",
             "column_mapping": _form_value(mapping),
         },
@@ -272,7 +270,6 @@ async def test_start_in_process_with_invalid_mapping_is_422(client: AsyncClient)
         "/api/v1/bulk-registrations",
         files={"file": ("export.csv", CSV, "text/csv")},
         data={
-            "originating_org_id": await _org(client),
             "file_format": "csv",
             "column_mapping": json.dumps(
                 {"columns": [_NAME, {"header": "Lot Number", "target": "batch_id", "source": "L"}]}
@@ -321,7 +318,6 @@ async def test_preview_registration_forecasts_batches(client: AsyncClient) -> No
         "/api/v1/bulk-registrations",
         files={"file": ("export.csv", CSV, "text/csv")},
         data={
-            "originating_org_id": await _org(client),
             "file_format": "csv",
             "column_mapping": json.dumps(MAPPING),
         },
@@ -429,7 +425,6 @@ async def test_preview_registration_stored_only_ids_held_elsewhere_warn_not_conf
         "/api/v1/bulk-registrations",
         files={"file": ("export.csv", csv, "text/csv")},
         data={
-            "originating_org_id": await _org(client),
             "file_format": "csv",
             "column_mapping": json.dumps(MAPPING),
         },
@@ -597,3 +592,16 @@ async def test_saved_mappings_are_scoped_to_the_workspace(
 async def test_viewer_lists_but_cannot_save_mappings(viewer_client: AsyncClient) -> None:
     assert (await viewer_client.get(MAPPINGS)).status_code == 200
     assert (await viewer_client.post(MAPPINGS, json={"name": "V", **MAPPING})).status_code == 403
+
+
+async def test_bulk_start_with_originating_org_id_form_field_is_accepted(
+    async_client: AsyncClient, orchestrator: _RecordingOrchestrator
+) -> None:
+    """Clients that still send the retired local-org id (DAIKON) are not refused."""
+    resp = await async_client.post(
+        "/api/v1/bulk-registrations",
+        files={"file": ("export.csv", CSV, "text/csv")},
+        data={"originating_org_id": str(uuid.uuid4()), "file_format": "csv"},
+    )
+    assert resp.status_code == 202, resp.text
+

@@ -192,7 +192,6 @@ def _make_undisclosed_mol() -> Molecule:
         registration_number=RegistrationNumber(value="CV-00099"),
         name="Undisclosed compound",
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol

@@ -24,7 +24,6 @@ async def test_registrant_and_discloser_orgs_round_trip(uow: AsyncUnitOfWork) ->
         registration_number=RegistrationNumber(value=f"CV-{uuid.uuid4().hex[:6]}"),
         name="Partner compound",
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=local_org,
         registered_by=user,
         registered_by_org_id=duar_org,
     )

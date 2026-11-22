@@ -51,7 +51,6 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 @dataclass(frozen=True, kw_only=True)
 class StartBulkRegistrationFromFileCommand(Command):
     workspace_id: uuid.UUID
-    originating_org_id: uuid.UUID
     submitted_by: uuid.UUID
     filename: str
     file_format: str
@@ -157,7 +156,6 @@ class StartBulkRegistration:
 
         request = StartBulkRegistrationRequest(
             workspace_id=input.workspace_id,
-            originating_org_id=input.originating_org_id,
             submitted_by=input.submitted_by,
             filename=input.filename,
             file_format=input.file_format,
@@ -217,7 +215,6 @@ class StartBulkRegistration:
                 file_format=input.file_format,
                 items=items,
                 submitted_by=input.submitted_by,
-                originating_org_id=input.originating_org_id,
                 create_batch_on_duplicate=input.create_batch_on_duplicate,
                 project_ids=input.project_ids,
                 submitted_by_org_id=input.submitted_by_org_id,

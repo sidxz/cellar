@@ -22,7 +22,6 @@ def _input(**overrides) -> CddVaultImportWorkflowInput:
         "cdd_vault_id": "4443",
         "import_mode": "filtered",
         "submitted_by": "u",
-        "originating_org_id": "org",
         "secret_ref": "ws:cdd_vault",
         "filter_criteria": {"names": NAMES},
         "entity_mappings": [{"entity_type": "molecule"}],

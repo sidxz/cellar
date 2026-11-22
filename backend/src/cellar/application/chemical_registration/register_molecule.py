@@ -110,7 +110,6 @@ class RegisterMoleculeCommand(Command):
     smiles: str | None = None  # None for undisclosed
     molecule_type: str = MoleculeType.SMALL_MOLECULE.value
     external_ids: list[ExternalId] = field(default_factory=list)
-    originating_org_id: uuid.UUID
     registered_by: uuid.UUID
     # The registrant's Duar org — from their token, or the job's starter in a worker.
     registered_by_org_id: uuid.UUID | None = None
@@ -484,7 +483,6 @@ class RegisterMolecule:
                     molecule_type=MoleculeType(input.molecule_type),
                     structure=processed.structure,
                     descriptors=processed.descriptors,
-                    originating_org_id=input.originating_org_id,
                     custom_fields=input.custom_fields,
                     scientist_name=input.scientist_name,
                     disclosure_date=input.disclosure_date,
@@ -643,7 +641,6 @@ class RegisterMolecule:
                 registration_number=reg_number,
                 name=input.name,
                 molecule_type=MoleculeType(input.molecule_type),
-                originating_org_id=input.originating_org_id,
                 custom_fields=input.custom_fields,
                 scientist_name=input.scientist_name,
                 registered_by=input.registered_by,

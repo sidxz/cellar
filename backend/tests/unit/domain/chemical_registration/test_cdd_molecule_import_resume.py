@@ -20,7 +20,6 @@ def _processing(
         workspace_id=uuid.uuid4(),
         cdd_vault_id="4443",
         import_mode=CddImportMode.FULL_VAULT,
-        originating_org_id=uuid.uuid4(),
         submitted_by=uuid.uuid4(),
         workflow_id="wf-1",
         run_settings=settings,

@@ -27,8 +27,8 @@ async def _insert_org_and_molecule(
     await uow.session.execute(
         text(
             "INSERT INTO molecules (id, workspace_id, registration_number, name, "
-            "molecule_type, version, originating_org_id) VALUES "
-            "(:id, :ws, :reg, :name, 'small_molecule', 1, :org)"
+            "molecule_type, version) VALUES "
+            "(:id, :ws, :reg, :name, 'small_molecule', 1)"
         ),
         {"id": mol_id, "ws": workspace_id, "reg": reg, "name": reg, "org": org_id},
     )

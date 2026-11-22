@@ -87,9 +87,9 @@ async def _insert_molecule(uow: AsyncUnitOfWork, mol_id: uuid.UUID, ws_id: uuid.
             sa.text(
                 "INSERT INTO molecules (id, workspace_id, name, molecule_type, "
                 "structure_status, registration_status, synthesis_status, "
-                "lifecycle_stage, registration_number, originating_org_id, version) "
+                "lifecycle_stage, registration_number, version) "
                 "VALUES (:id, :ws, 'Test Mol', 'small_molecule', 'disclosed', "
-                "'approved', 'virtual', 'registered', :reg, :org, 1)"
+                "'approved', 'virtual', 'registered', :reg, 1)"
             ),
             {"id": mol_id, "ws": ws_id, "reg": f"CV-{mol_id.hex[:6]}", "org": org_id},
         )

@@ -130,7 +130,6 @@ class Molecule(AggregateRoot):
         disclosure_date: date | None = None,
         merged_into_id: uuid.UUID | None = None,
         custom_fields: dict[str, Any] | None = None,
-        originating_org_id: uuid.UUID,
         registered_by: uuid.UUID | None = None,
         registered_by_org_id: uuid.UUID | None = None,
         scientist_name: str | None = None,
@@ -171,13 +170,11 @@ class Molecule(AggregateRoot):
         self.disclosure_date = disclosure_date
         self.merged_into_id = merged_into_id
         self.custom_fields = dict(custom_fields) if custom_fields else None
-        self.originating_org_id = originating_org_id
         # Who registered it and their Duar org at the time; fixed once set.
         self.registered_by = registered_by
         self.registered_by_org_id = registered_by_org_id
-        # The person half of provenance (originating_org_id is the org half).
-        # Free text, not a user id: API/bulk registrants often act on behalf of
-        # a scientist who is not a Cellar user. Mirrors DisclosureRequest.
+        # The scientist behind it, in free text: API/bulk registrants often act on
+        # behalf of a scientist who is not a Cellar user. Mirrors DisclosureRequest.
         self.scientist_name = scientist_name
         self.identifiers: list[MoleculeIdentifier] = list(identifiers) if identifiers else []
         self.mixture_components: list[MixtureComponent] = (
@@ -269,7 +266,6 @@ class Molecule(AggregateRoot):
         molecule_type: MoleculeType,
         structure: ChemicalStructure,
         descriptors: ComputedDescriptors,
-        originating_org_id: uuid.UUID,
         molecular_formula: str | None = None,
         stereochemistry: Stereochemistry | None = None,
         sequence: str | None = None,
@@ -294,7 +290,6 @@ class Molecule(AggregateRoot):
             molecule_type=molecule_type,
             structure=structure,
             descriptors=descriptors,
-            originating_org_id=originating_org_id,
             molecular_formula=molecular_formula or descriptors.molecular_formula,
             stereochemistry=stereochemistry,
             sequence=sequence,
@@ -318,7 +313,6 @@ class Molecule(AggregateRoot):
                 registration_number=registration_number.value,
                 molecule_type=molecule_type.value,
                 workspace_id=workspace_id,
-                originating_org_id=originating_org_id,
                 registered_by_org_id=registered_by_org_id,
             )
         )
@@ -332,7 +326,6 @@ class Molecule(AggregateRoot):
         registration_number: RegistrationNumber,
         name: str,
         molecule_type: MoleculeType,
-        originating_org_id: uuid.UUID,
         sequence: str | None = None,
         registration_status: RegistrationStatus = RegistrationStatus.APPROVED,
         synthesis_status: SynthesisStatus = SynthesisStatus.VIRTUAL,
@@ -348,7 +341,6 @@ class Molecule(AggregateRoot):
             registration_number=registration_number,
             name=name,
             molecule_type=molecule_type,
-            originating_org_id=originating_org_id,
             structure=None,
             descriptors=None,
             molecular_formula=None,
@@ -369,7 +361,6 @@ class Molecule(AggregateRoot):
                 registration_number=registration_number.value,
                 molecule_type=molecule_type.value,
                 workspace_id=workspace_id,
-                originating_org_id=originating_org_id,
                 registered_by_org_id=registered_by_org_id,
             )
         )

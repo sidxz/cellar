@@ -53,7 +53,6 @@ class ChunkInput:
     """Input for the process_chunk activity."""
 
     workspace_id: str
-    originating_org_id: str
     submitted_by: str
     items: list[ChunkItem] = field(default_factory=list)
     chunk_index: int = 0
@@ -178,7 +177,6 @@ class CreateCddImportInput:
     workspace_id: str
     cdd_vault_id: str
     import_mode: str
-    originating_org_id: str
     submitted_by: str
     workflow_id: str | None = None
     filter_criteria: dict | None = None

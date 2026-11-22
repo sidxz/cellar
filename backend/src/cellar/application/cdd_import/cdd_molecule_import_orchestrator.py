@@ -19,7 +19,6 @@ class StartCddMoleculeImportRequest:
     cdd_vault_id: str
     import_mode: str
     submitted_by: uuid.UUID
-    originating_org_id: uuid.UUID
     secret_ref: str
     entity_mappings: list[dict]
     registration_mapping: list[dict] | None = None  # vault field → target, see data source
@@ -41,7 +40,6 @@ class ResumeCddMoleculeImportRequest:
     cdd_vault_id: str
     import_mode: str
     submitted_by: uuid.UUID  # who resumed it: the actor of what the run registers now
-    originating_org_id: uuid.UUID
     filter_criteria: dict | None
     run_settings: dict  # the options the run started with
     cdd_export_id: int

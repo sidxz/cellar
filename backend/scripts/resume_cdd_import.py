@@ -16,7 +16,6 @@ from temporalio.client import Client
 # --- Config: edit these if needed ---
 WORKSPACE_ID = "442df0cf-e618-4938-a089-80ae2f1e43e7"
 CDD_VAULT_ID = "4443"
-ORIGINATING_ORG_ID = "cf6f3437-d3d2-431b-ad4a-91faf1f30e93"
 SUBMITTED_BY = "eabe1e6c-4f47-46b5-bdf6-4eccca2b8b97"
 SECRET_REF = f"{WORKSPACE_ID}:cdd_vault"
 IMPORT_MODE = "full_vault"
@@ -45,14 +44,14 @@ async def main():
             sa.text("""
                 INSERT INTO cdd_molecule_imports (
                     id, workspace_id, cdd_vault_id, import_mode,
-                    originating_org_id, submitted_by, workflow_id,
+                    submitted_by, workflow_id,
                     status, total_count,
                     registered_count, duplicate_count, error_count, skipped_count,
                     last_processed_offset,
                     submitted_at, created_at, updated_at, version
                 ) VALUES (
                     :id, :workspace_id, :cdd_vault_id, :import_mode,
-                    :originating_org_id, :submitted_by, :workflow_id,
+                    :submitted_by, :workflow_id,
                     'processing', :total_count,
                     0, 0, 0, 0,
                     0,
@@ -64,7 +63,6 @@ async def main():
                 "workspace_id": WORKSPACE_ID,
                 "cdd_vault_id": CDD_VAULT_ID,
                 "import_mode": IMPORT_MODE,
-                "originating_org_id": ORIGINATING_ORG_ID,
                 "submitted_by": SUBMITTED_BY,
                 "workflow_id": workflow_id,
                 "total_count": TOTAL_COUNT,
@@ -96,7 +94,6 @@ async def main():
             cdd_vault_id=CDD_VAULT_ID,
             import_mode=IMPORT_MODE,
             submitted_by=SUBMITTED_BY,
-            originating_org_id=ORIGINATING_ORG_ID,
             secret_ref=SECRET_REF,
             entity_mappings=entity_mappings,
             # Edit to the data source's own mapping if it differs from the default.

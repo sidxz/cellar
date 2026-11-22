@@ -88,7 +88,6 @@ def _make_mol(name: str = "Benzene") -> Molecule:
         molecule_type=MoleculeType.SMALL_MOLECULE,
         structure=_STRUCTURE,
         descriptors=_DESCRIPTORS,
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol

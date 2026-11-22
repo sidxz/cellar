@@ -39,7 +39,6 @@ class BulkRegistrationWorkflowInput:
     """Input for starting a bulk registration workflow."""
 
     workspace_id: str
-    originating_org_id: str
     submitted_by: str
     source_file: str
     file_format: str
@@ -197,7 +196,6 @@ class BulkRegistrationWorkflow:
                 RegistrationActivities.process_chunk,
                 ChunkInput(
                     workspace_id=input.workspace_id,
-                    originating_org_id=input.originating_org_id,
                     submitted_by=input.submitted_by,
                     items=items,
                     chunk_index=i,

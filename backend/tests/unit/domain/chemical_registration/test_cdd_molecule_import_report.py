@@ -15,7 +15,6 @@ def _processing() -> CddMoleculeImport:
         workspace_id=uuid.uuid4(),
         cdd_vault_id="v",
         import_mode=CddImportMode.FULL_VAULT,
-        originating_org_id=uuid.uuid4(),
         submitted_by=uuid.uuid4(),
     )
     imp.start_discovery()

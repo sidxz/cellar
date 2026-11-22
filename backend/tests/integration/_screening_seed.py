@@ -334,10 +334,10 @@ async def molecule(
         sa.text(
             "INSERT INTO molecules (id, workspace_id, registration_number, name, molecule_type, "
             "smiles, cxsmiles, inchi, inchi_key, molfile, structure_status, registration_status, synthesis_status, lifecycle_stage, "
-            f"originating_org_id, version{extra}) "  # noqa: S608 - column names from the test
+            f"version{extra}) "  # noqa: S608 - column names from the test
             "VALUES (:id, :ws, :reg, :name, 'small_molecule', 'CCO', 'CCO', 'InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3', "
             ":ik, 'mol', 'disclosed', 'approved', "
-            f"'virtual', 'active', :org, 1{extra_vals})"
+            f"'virtual', 'active', 1{extra_vals})"
         ),
         {
             "id": mid,

@@ -44,7 +44,6 @@ class CddVaultImportWorkflowInput:
     cdd_vault_id: str
     import_mode: str
     submitted_by: str
-    originating_org_id: str
     secret_ref: str
     filter_criteria: dict | None = None  # filtered mode: {"names": [...]}
     max_molecules: int | None = None
@@ -195,7 +194,6 @@ class CddVaultImportWorkflow:
                     workspace_id=input.workspace_id,
                     cdd_vault_id=input.cdd_vault_id,
                     import_mode=input.import_mode,
-                    originating_org_id=input.originating_org_id,
                     submitted_by=input.submitted_by,
                     workflow_id=workflow.info().workflow_id,
                     filter_criteria=input.filter_criteria,
@@ -261,7 +259,6 @@ class CddVaultImportWorkflow:
                     RegistrationActivities.process_chunk,
                     ChunkInput(
                         workspace_id=input.workspace_id,
-                        originating_org_id=input.originating_org_id,
                         submitted_by=input.submitted_by,
                         items=items,
                         chunk_index=chunk_index,

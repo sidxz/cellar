@@ -47,7 +47,6 @@ class CddMoleculeImportFilter(BaseModel):
 
 
 class StartCddMoleculeImportBody(BaseModel):
-    originating_org_id: uuid.UUID
     # Who disclosed the structures and for which Duar org; omitted = you and your org.
     disclosed_by: uuid.UUID | None = None
     disclosed_by_org_id: uuid.UUID | None = None
@@ -117,7 +116,7 @@ class CddMoleculeImportSummary(BaseModel):
     # A failed run that saved its export picks up here (molecules already done).
     resumable: bool
     last_processed_offset: int
-    originating_org_id: str | None = None
+    disclosed_by_org_id: str | None = None
     max_molecules: int | None = None
     selected_names: list[str] | None = None
 
@@ -160,7 +159,7 @@ async def list_cdd_molecule_imports(
             report=CddMoleculeImportReport(**imp.report),
             resumable=imp.resumable,
             last_processed_offset=imp.last_processed_offset,
-            originating_org_id=str(imp.originating_org_id),
+            disclosed_by_org_id=str(imp.disclosed_by_org_id) if imp.disclosed_by_org_id else None,
             max_molecules=(imp.run_settings or {}).get("max_molecules"),
             selected_names=(imp.filter_criteria or {}).get("names"),
         )
@@ -178,7 +177,6 @@ async def start_cdd_molecule_import(
     cmd = StartCddMoleculeImportCommand(
         workspace_id=auth.workspace_id,
         submitted_by=auth.user_id,
-        originating_org_id=body.originating_org_id,
         import_mode=body.import_mode,
         filter_criteria=body.filter_criteria.model_dump() if body.filter_criteria else None,
         max_molecules=body.max_molecules,

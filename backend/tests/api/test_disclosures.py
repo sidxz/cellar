@@ -111,13 +111,10 @@ async def test_merge_target_keeps_its_discloser(
 ) -> None:
     """Disclosing a structure that is already registered merges into that compound; the
     compound keeps the discloser it already had."""
-    org = (await client.get(f"/api/v1/molecules/{undisclosed_molecule_id}")).json()[
-        "originating_org_id"
-    ]
     target = (
         await client.post(
             "/api/v1/molecules",
-            json={"name": "Known-target", "smiles": "CCCCCCN", "originating_org_id": org},
+            json={"name": "Known-target", "smiles": "CCCCCCN"},
         )
     ).json()["molecule"]
     before = (target["disclosed_by"], target["disclosed_by_org_id"])
@@ -139,18 +136,15 @@ async def test_merge_target_keeps_its_discloser(
 async def test_reregistering_existing_structure_keeps_discloser(
     client: AsyncClient, other_editor_client: AsyncClient, undisclosed_molecule_id: str
 ) -> None:
-    org = (await client.get(f"/api/v1/molecules/{undisclosed_molecule_id}")).json()[
-        "originating_org_id"
-    ]
     first = (
         await client.post(
             "/api/v1/molecules",
-            json={"name": "Once", "smiles": "CCCCCCCN", "originating_org_id": org},
+            json={"name": "Once", "smiles": "CCCCCCCN"},
         )
     ).json()["molecule"]
     again = await other_editor_client.post(
         "/api/v1/molecules",
-        json={"name": "Twice", "smiles": "CCCCCCCN", "originating_org_id": org},
+        json={"name": "Twice", "smiles": "CCCCCCCN"},
     )
     assert again.status_code == 201, again.text
     after = (await client.get(f"/api/v1/molecules/{first['id']}")).json()

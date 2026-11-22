@@ -46,7 +46,6 @@ class TemporalBulkRegistrationOrchestrator:
             BulkRegistrationWorkflow.run,
             BulkRegistrationWorkflowInput(
                 workspace_id=str(request.workspace_id),
-                originating_org_id=str(request.originating_org_id),
                 submitted_by=str(request.submitted_by),
                 source_file=request.filename,
                 file_format=request.file_format,

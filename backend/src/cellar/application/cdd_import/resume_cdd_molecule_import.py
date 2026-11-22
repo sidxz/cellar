@@ -127,7 +127,6 @@ def _request(
         cdd_vault_id=imp.cdd_vault_id,
         import_mode=imp.import_mode.value,
         submitted_by=resumed_by,
-        originating_org_id=imp.originating_org_id,
         filter_criteria=imp.filter_criteria,
         run_settings=imp.run_settings,
         cdd_export_id=imp.cdd_export_id,

@@ -101,9 +101,6 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     registered_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     disclosure_date: Mapped[date | None] = mapped_column(Date)
     merged_into_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
-    originating_org_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id"), nullable=False
-    )
     scientist_name: Mapped[str | None] = mapped_column(String(200))
 
     # Relationships

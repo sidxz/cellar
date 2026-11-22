@@ -41,7 +41,6 @@ class TestRegisterMolecule:
                 "name": "Aspirin",
                 "smiles": "CC(=O)Oc1ccccc1C(=O)O",
                 "molecule_type": "small_molecule",
-                "originating_org_id": seed_org,
             },
         )
         assert resp.status_code == 201
@@ -62,7 +61,6 @@ class TestRegisterMolecule:
             json={
                 "name": "Partner Compound X",
                 "molecule_type": "small_molecule",
-                "originating_org_id": seed_org,
             },
         )
         assert resp.status_code == 201
@@ -82,7 +80,6 @@ class TestRegisterMolecule:
                 "name": "Bad Molecule",
                 "smiles": "not_valid_smiles",
                 "molecule_type": "small_molecule",
-                "originating_org_id": seed_org,
             },
         )
         assert resp.status_code == 422 or resp.status_code == 400
@@ -96,7 +93,6 @@ class TestRegisterMolecule:
                 "name": "Ibuprofen",
                 "smiles": "CC(C)Cc1ccc(cc1)C(C)C(O)=O",
                 "molecule_type": "small_molecule",
-                "originating_org_id": seed_org,
                 "external_ids": [
                     {"identifier": "CAS-15687-27-1", "identifier_type": "cas_number"},
                 ],
@@ -118,7 +114,6 @@ class TestRegisterMolecule:
             json={
                 "name": "Aspirin",
                 "smiles": "CC(=O)Oc1ccccc1C(=O)O",
-                "originating_org_id": seed_org,
             },
         )
         assert resp1.status_code == 201
@@ -130,7 +125,6 @@ class TestRegisterMolecule:
             json={
                 "name": "Aspirin again",
                 "smiles": "CC(=O)Oc1ccccc1C(=O)O",
-                "originating_org_id": seed_org,
             },
         )
         assert resp2.status_code == 201
@@ -235,7 +229,6 @@ class TestUpdateMolecule:
             json={
                 "name": "Test Mol",
                 "smiles": "CCCC",
-                "originating_org_id": seed_org,
             },
         )
         mol_id = reg_resp.json()["molecule"]["id"]

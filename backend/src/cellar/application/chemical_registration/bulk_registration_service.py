@@ -85,7 +85,6 @@ class StartBulkRegistrationCommand(Command):
     file_format: str
     items: list[BulkRegistrationItem]
     submitted_by: uuid.UUID
-    originating_org_id: uuid.UUID
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
     project_ids: list[uuid.UUID] = field(default_factory=list)
     # The starter's Duar org (their token) and the discloser pick (None = them).
@@ -195,7 +194,6 @@ class BulkRegistrationService:
             items=input.items,
             bulk_reg=bulk_reg,
             workspace_id=input.workspace_id,
-            originating_org_id=input.originating_org_id,
             submitted_by=input.submitted_by,
             attribution=input,
             auth=auth,
@@ -224,7 +222,6 @@ class BulkRegistrationService:
         items: list[BulkRegistrationItem],
         bulk_reg: BulkRegistration,
         workspace_id: uuid.UUID,
-        originating_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
         attribution: StartBulkRegistrationCommand,
         auth: AuthContext | None,
@@ -269,7 +266,6 @@ class BulkRegistrationService:
                 smiles=item.smiles,
                 molecule_type=item.molecule_type,
                 external_ids=external_ids(item.external_ids),
-                originating_org_id=originating_org_id,
                 registered_by=submitted_by,
                 registered_by_org_id=attribution.submitted_by_org_id,
                 disclosed_by=attribution.disclosed_by,

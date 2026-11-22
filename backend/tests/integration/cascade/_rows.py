@@ -158,9 +158,9 @@ async def molecule(
 ) -> uuid.UUID:
     return await _insert(
         session,
-        "INSERT INTO molecules (id, workspace_id, registration_number, name, molecule_type, "
-        "originating_org_id, merged_into_id, version) "
-        "VALUES (:id, :ws, :reg, :reg, 'small_molecule', :org, :merged, 1)",
+        "INSERT INTO molecules (id, workspace_id, registration_number, name, molecule_type,"
+        " merged_into_id, version) "
+        "VALUES (:id, :ws, :reg, :reg, 'small_molecule', :merged, 1)",
         ws=ws,
         reg=reg,
         org=org_id,

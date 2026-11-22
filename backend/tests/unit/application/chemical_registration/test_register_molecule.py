@@ -130,7 +130,6 @@ def _make_undisclosed_molecule(
         registration_number=RegistrationNumber(value="CV-00001"),
         name=name,
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
     if mol_id is not None:
         object.__setattr__(mol, "_id", mol_id)
@@ -188,7 +187,6 @@ def _make_command(
         workspace_id=WS_ID,
         name=name,
         smiles=smiles,
-        originating_org_id=ORG_ID,
         registered_by=USER_ID,
         auto_approve=auto_approve,
         external_ids=external_ids or [],
@@ -223,7 +221,6 @@ def _make_disclosed_molecule(name: str = "Known-001") -> Molecule:
         molecule_type=MoleculeType.SMALL_MOLECULE,
         structure=_STRUCTURE,
         descriptors=_DESCRIPTORS,
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol
@@ -473,7 +470,6 @@ class TestDisclosureDetection:
             molecule_type=MoleculeType.SMALL_MOLECULE,
             structure=_STRUCTURE,
             descriptors=_DESCRIPTORS,
-            originating_org_id=ORG_ID,
         )
         existing_disclosed.clear_events()
 
@@ -645,7 +641,6 @@ def _attributed(**fields) -> RegisterMoleculeCommand:
         workspace_id=WS_ID,
         name="Attributed",
         smiles="c1ccccc1",
-        originating_org_id=ORG_ID,
         registered_by=USER_ID,
         **fields,
     )

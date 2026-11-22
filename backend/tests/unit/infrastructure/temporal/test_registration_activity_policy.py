@@ -61,7 +61,6 @@ def _make_chunk_input(*, create_batch_on_duplicate: bool | None = None) -> Chunk
     )
     return ChunkInput(
         workspace_id=WORKSPACE_ID,
-        originating_org_id=ORG_ID,
         submitted_by=SUBMITTED_BY,
         items=[item],
         chunk_index=0,

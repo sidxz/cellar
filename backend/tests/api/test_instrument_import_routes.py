@@ -81,9 +81,9 @@ async def _seed(session_factory: async_sessionmaker[AsyncSession], ws: uuid.UUID
                 "INSERT INTO molecules "
                 "(id, workspace_id, name, molecule_type, structure_status, "
                 "registration_status, synthesis_status, lifecycle_stage, "
-                "registration_number, originating_org_id, version) "
+                "registration_number, version) "
                 "VALUES (:id, :ws, 'Molecule 1', 'small_molecule', 'undisclosed', "
-                "'approved', 'virtual', 'registered', :reg, :org, 1)"
+                "'approved', 'virtual', 'registered', :reg, 1)"
             ),
             {"id": s.molecule_id, "ws": ws, "reg": f"REG-{uuid.uuid4().hex[:8]}", "org": org_id},
         )

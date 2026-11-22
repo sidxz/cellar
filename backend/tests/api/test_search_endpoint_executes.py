@@ -43,7 +43,6 @@ async def benzene_registered(client: AsyncClient, org_id: str) -> str:
             "name": "benzene-smoke",
             "smiles": "c1ccccc1",
             "molecule_type": "small_molecule",
-            "originating_org_id": org_id,
         },
     )
     assert resp.status_code == 201, resp.text

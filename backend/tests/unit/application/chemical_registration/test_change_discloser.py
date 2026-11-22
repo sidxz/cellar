@@ -65,7 +65,6 @@ def _molecule(ws: uuid.UUID, registrant: uuid.UUID | None, *, disclosed: bool = 
         registration_number=RegistrationNumber(value="CV-00007"),
         name="EtOH",
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=uuid.uuid4(),
         registered_by=registrant,
         registered_by_org_id=ORG,
     )

@@ -28,7 +28,6 @@ from cellar.domain.workspace_config.data_source import DataSourceType
 class StartCddMoleculeImportCommand(Command):
     workspace_id: uuid.UUID
     submitted_by: uuid.UUID
-    originating_org_id: uuid.UUID
     import_mode: str = "full_vault"
     # With import_mode "filtered": {"names": [...]}, molecule names or synonyms in the vault.
     filter_criteria: dict | None = None
@@ -124,7 +123,6 @@ class StartCddMoleculeImport:
             cdd_vault_id=vault_id,
             import_mode=input.import_mode,
             submitted_by=input.submitted_by,
-            originating_org_id=input.originating_org_id,
             secret_ref=secret_ref,
             entity_mappings=[em.to_dict() for em in config.data_source.entity_mappings],
             registration_mapping=config.data_source.registration_mapping,

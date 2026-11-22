@@ -70,6 +70,5 @@ def _make_molecule_model(
         registration_status="approved",
         synthesis_status="virtual",
         lifecycle_stage="active",
-        originating_org_id=org_id,
         version=1,
     )

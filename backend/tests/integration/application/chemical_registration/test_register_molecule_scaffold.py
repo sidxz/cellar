@@ -75,7 +75,6 @@ async def test_register_molecule_persists_scaffold(uow: AsyncUnitOfWork) -> None
         workspace_id=ws_id,
         name="Ibuprofen",
         smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O",
-        originating_org_id=org_id,
         registered_by=uuid.uuid4(),
     )
     result = await use_case(cmd, auth=FakeAuth(role="editor", workspace_id=ws_id))

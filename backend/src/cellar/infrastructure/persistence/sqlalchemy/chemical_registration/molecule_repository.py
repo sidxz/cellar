@@ -64,7 +64,6 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
             registration_status=aggregate.registration_status.value,
             synthesis_status=aggregate.synthesis_status.value,
             lifecycle_stage=aggregate.lifecycle_stage.value,
-            originating_org_id=aggregate.originating_org_id,
             version=aggregate.version,
         )
         self._set_structure_fields(model, aggregate)
@@ -86,7 +85,6 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         model.registration_status = aggregate.registration_status.value
         model.synthesis_status = aggregate.synthesis_status.value
         model.lifecycle_stage = aggregate.lifecycle_stage.value
-        model.originating_org_id = aggregate.originating_org_id
         self._set_structure_fields(model, aggregate)
         self._set_optional_fields(model, aggregate)
 

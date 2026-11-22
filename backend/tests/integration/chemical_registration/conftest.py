@@ -80,9 +80,9 @@ async def seeded_workspace_and_molecule(
                 "INSERT INTO molecules "
                 "(id, workspace_id, name, molecule_type, structure_status, "
                 "registration_status, synthesis_status, lifecycle_stage, "
-                "registration_number, originating_org_id, version) "
+                "registration_number, version) "
                 "VALUES (:id, :ws, 'Test Mol', 'small_molecule', 'undisclosed', "
-                "'approved', 'virtual', 'registered', 'CC-000001', :org, 1)"
+                "'approved', 'virtual', 'registered', 'CC-000001', 1)"
             ),
             {"id": mol_id, "ws": workspace_id, "org": workspace_id},
         )

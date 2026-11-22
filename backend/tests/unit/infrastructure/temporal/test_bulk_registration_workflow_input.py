@@ -13,7 +13,6 @@ from cellar.infrastructure.temporal.workflows.bulk_registration import (
 def test_continue_input_keeps_options_and_takes_progress() -> None:
     first = BulkRegistrationWorkflowInput(
         workspace_id="ws",
-        originating_org_id="org",
         submitted_by="u",
         source_file="f.csv",
         file_format="csv",
@@ -38,7 +37,7 @@ def test_continue_input_keeps_options_and_takes_progress() -> None:
 
 def test_continue_as_new_carries_submitter_org() -> None:
     first = BulkRegistrationWorkflowInput(
-        workspace_id="ws", originating_org_id="org", submitted_by="u", source_file="f.csv",
+        workspace_id="ws", submitted_by="u", source_file="f.csv",
         file_format="csv", storage_path="/tmp/f.csv", filename="f.csv",
         submitted_by_org_id="duar-org", disclosed_by="jane", disclosed_by_org_id="partner",
     )

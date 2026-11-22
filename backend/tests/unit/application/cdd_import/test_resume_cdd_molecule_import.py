@@ -43,7 +43,6 @@ def _import(*, failed: bool = True, export_id: int | None = 82939461, settings=S
         workspace_id=WS,
         cdd_vault_id="4443",
         import_mode=CddImportMode.FULL_VAULT,
-        originating_org_id=uuid.uuid4(),
         submitted_by=uuid.uuid4(),
         workflow_id="wf-1",
         run_settings=settings,

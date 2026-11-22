@@ -382,7 +382,6 @@ class TestStartCddMoleculeImport:
         return StartCddMoleculeImportCommand(
             workspace_id=WORKSPACE_ID,
             submitted_by=USER_ID,
-            originating_org_id=uuid.uuid4(),
             import_mode="full_vault",
         )
 
@@ -443,7 +442,6 @@ class TestStartCddMoleculeImport:
         return StartCddMoleculeImportCommand(
             workspace_id=WORKSPACE_ID,
             submitted_by=USER_ID,
-            originating_org_id=uuid.uuid4(),
             import_mode=mode,
             filter_criteria=filter_criteria,
         )

@@ -103,7 +103,6 @@ def _make_disclosed(
         molecule_type=MoleculeType.SMALL_MOLECULE,
         structure=structure,
         descriptors=descriptors,
-        originating_org_id=org_id,
         **kwargs,
     )
 
@@ -116,7 +115,6 @@ def _make_undisclosed(
         registration_number=RegistrationNumber(value="CV-00002"),
         name="Partner Compound X",
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=org_id,
         **kwargs,
     )
 
@@ -203,7 +201,6 @@ class TestRegisterDisclosed:
             molecule_type=MoleculeType.SMALL_MOLECULE,
             structure=aspirin_structure,
             descriptors=aspirin_descriptors,
-            originating_org_id=org_id,
         )
         assert mol.name == "Aspirin"
 
@@ -222,7 +219,6 @@ class TestRegisterDisclosed:
                 molecule_type=MoleculeType.SMALL_MOLECULE,
                 structure=aspirin_structure,
                 descriptors=aspirin_descriptors,
-                originating_org_id=org_id,
             )
 
 
@@ -262,7 +258,6 @@ class TestRegisterUndisclosed:
                 structure=aspirin_structure,
                 descriptors=aspirin_descriptors,
                 structure_status=StructureStatus.UNDISCLOSED,
-                originating_org_id=org_id,
             )
 
 
@@ -284,7 +279,6 @@ class TestInvariants:
                 structure=None,
                 descriptors=None,
                 structure_status=StructureStatus.DISCLOSED,
-                originating_org_id=org_id,
             )
 
     def test_disclosed_without_descriptors_raises(
@@ -302,7 +296,6 @@ class TestInvariants:
                 structure=aspirin_structure,
                 descriptors=None,
                 structure_status=StructureStatus.DISCLOSED,
-                originating_org_id=org_id,
             )
 
     def test_molecular_formula_mismatch_raises(
@@ -322,7 +315,6 @@ class TestInvariants:
                 descriptors=aspirin_descriptors,
                 molecular_formula="WRONG",
                 structure_status=StructureStatus.DISCLOSED,
-                originating_org_id=org_id,
             )
 
     def test_tombstone_cannot_be_merged_again(
@@ -368,7 +360,6 @@ class TestInvariants:
             registration_number=RegistrationNumber(value="CV-00003"),
             name="Salt Form",
             molecule_type=MoleculeType.MIXTURE,
-            originating_org_id=org_id,
         )
         mol.add_mixture_component(
             MixtureComponent.create(
@@ -389,7 +380,6 @@ class TestInvariants:
             registration_number=RegistrationNumber(value="CV-00003"),
             name="Salt Form",
             molecule_type=MoleculeType.MIXTURE,
-            originating_org_id=org_id,
         )
         mol.add_mixture_component(
             MixtureComponent.create(

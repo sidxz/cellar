@@ -154,7 +154,6 @@ async def start_bulk_registration(
     auth: AuthDep,
     use_case: StartBulkRegistrationDep,
     file: UploadFile = File(...),
-    originating_org_id: uuid.UUID = Form(...),
     file_format: str = Form(...),
     # Who disclosed the structures and for which Duar org; omitted = you and your org.
     disclosed_by: uuid.UUID | None = Form(None),
@@ -176,7 +175,6 @@ async def start_bulk_registration(
 
     cmd = StartBulkRegistrationFromFileCommand(
         workspace_id=auth.workspace_id,
-        originating_org_id=originating_org_id,
         submitted_by=auth.user_id,
         filename=filename,
         file_format=file_format,

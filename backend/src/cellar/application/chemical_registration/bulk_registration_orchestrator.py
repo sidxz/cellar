@@ -17,7 +17,6 @@ class StartBulkRegistrationRequest:
     """
 
     workspace_id: uuid.UUID
-    originating_org_id: uuid.UUID
     submitted_by: uuid.UUID
     filename: str
     file_format: str

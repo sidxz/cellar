@@ -84,7 +84,6 @@ class _App:
 
 def _filtered_body(filter_criteria: dict | None) -> dict:
     return {
-        "originating_org_id": str(uuid.uuid4()),
         "import_mode": "filtered",
         "filter_criteria": filter_criteria,
     }
@@ -172,7 +171,6 @@ async def test_the_history_carries_each_import_s_report():
         workspace_id=uuid.uuid4(),
         cdd_vault_id="4443",
         import_mode=CddImportMode.FULL_VAULT,
-        originating_org_id=uuid.uuid4(),
         submitted_by=uuid.uuid4(),
         report={"ids_added": 18, "problem_lines": ["SACC-1: 'X' is on 2 compounds"]},
     )
@@ -244,7 +242,6 @@ async def test_history_says_which_imports_can_resume():
             workspace_id=uuid.uuid4(),
             cdd_vault_id="4443",
             import_mode=CddImportMode.FULL_VAULT,
-            originating_org_id=uuid.uuid4(),
             submitted_by=uuid.uuid4(),
             status=CddMoleculeImportStatus.FAILED,
             last_processed_offset=50750,
@@ -265,3 +262,12 @@ async def test_history_says_which_imports_can_resume():
     first, second = response.json()
     assert (first["resumable"], first["last_processed_offset"]) == (True, 50750)
     assert second["resumable"] is False
+
+
+async def test_cdd_start_with_originating_org_id_is_accepted():
+    """Clients that still send the retired local-org id are not refused."""
+    app = _App("editor")
+    body = _filtered_body({"names": ["SACC-0001"]}) | {"originating_org_id": str(uuid.uuid4())}
+    response = await app.client.post(START, json=body)
+    assert response.status_code == 202
+

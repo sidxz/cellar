@@ -85,12 +85,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # append-only and never admin-deleted; cascade handled by ORM relationship.
     ("audit_entries", "operation_id", "audit_operations"),
     ("electronic_signatures", "operation_id", "audit_operations"),
-    # -------------------------------------------------------------------------
-    # Organizations — referenced as provenance (no admin delete cascade needed)
-    # -------------------------------------------------------------------------
-    # cdd_molecule_imports.originating_org_id is import provenance metadata;
-    # deleting an org doesn't require cascading import records.
-    ("cdd_molecule_imports", "originating_org_id", "organizations"),
     # collections.organization_id is a loose scope reference (SET NULL in schema);
     # the FK is to organizations which is a Tier-1 entity — RESTRICT surfaces it.
     # The cascade rule is declared in research_organization/cascade.py (SET_NULL).
@@ -211,15 +205,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # -------------------------------------------------------------------------
     # Already covered by a Tier-2 SET_NULL cascade rule in research_organization/cascade.py.
     # Listed here to document that the FK to organizations is intentional.
-    # -------------------------------------------------------------------------
-    # molecules → organizations: provenance, not cascade-deletable via org delete
-    # -------------------------------------------------------------------------
-    # molecules.originating_org_id is the organization that registered the molecule
-    # (provenance/attribution). Deleting an organization should not cascade-delete
-    # all molecules it registered — that would be catastrophic data loss.
-    # Organizations are reference entities; admin deletion is rare and requires
-    # manual molecule reassignment beforehand.
-    ("molecules", "originating_org_id", "organizations"),
     # -------------------------------------------------------------------------
     # Campaign aggregate — owned children, ORM + DB cascade handles them
     # -------------------------------------------------------------------------

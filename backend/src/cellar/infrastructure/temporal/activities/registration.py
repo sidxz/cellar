@@ -145,7 +145,6 @@ class RegistrationActivities:
         )
 
         ws_id = uuid.UUID(input.workspace_id)
-        org_id = uuid.UUID(input.originating_org_id)
         submitted_by = uuid.UUID(input.submitted_by)
         submitted_by_org_id = _uuid(input.submitted_by_org_id)
         disclosed_by = _uuid(input.disclosed_by)
@@ -189,7 +188,6 @@ class RegistrationActivities:
                 smiles=item.smiles,
                 molecule_type=item.molecule_type,
                 external_ids=external_ids(item.external_ids),
-                originating_org_id=org_id,
                 registered_by=submitted_by,
                 registered_by_org_id=submitted_by_org_id,
                 disclosed_by=disclosed_by,

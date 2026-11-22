@@ -24,7 +24,6 @@ async def molecule_with_2_identifiers(client: AsyncClient, org_id: str) -> str:
         json={
             "name": "BatchMirrorMol",
             "smiles": "c1ccccc1",  # benzene
-            "originating_org_id": org_id,
         },
     )
     assert mol_resp.status_code == 201, mol_resp.text
@@ -97,7 +96,6 @@ async def test_create_batch_mirror_summary_empty_when_no_identifiers(
         json={
             "name": "NoIdentifierMol",
             "smiles": "CCO",  # ethanol
-            "originating_org_id": org_id,
         },
     )
     assert mol_resp.status_code == 201, mol_resp.text

@@ -166,7 +166,6 @@ class TestExecuteSearch:
                 json={
                     "name": f"PageMol{i}",
                     "smiles": f"{'C' * (i + 5)}",
-                    "originating_org_id": org_id,
                 },
             )
         resp = await client.post(
@@ -308,7 +307,6 @@ class TestCountSearch:
                 json={
                     "name": f"ParityMol{i}",
                     "smiles": f"{'C' * (i + 4)}",
-                    "originating_org_id": org_id,
                 },
             )
         body = {
@@ -582,7 +580,6 @@ class TestExecuteSearchAggregationWiring:
             json={
                 "name": "AggMol",
                 "smiles": "CCN",
-                "originating_org_id": org_id,
             },
         )
         assert resp.status_code == 201
@@ -628,7 +625,6 @@ class TestExecuteSearchAggregationWiring:
             json={
                 "name": "DefaultAggMol",
                 "smiles": "CCC",
-                "originating_org_id": org_id,
             },
         )
         assert resp.status_code == 201
@@ -680,7 +676,6 @@ class TestExecuteSearchAggregationWiring:
             json={
                 "name": "ScopedMol",
                 "smiles": "CCCO",
-                "originating_org_id": org_id,
             },
         )
         assert resp.status_code == 201

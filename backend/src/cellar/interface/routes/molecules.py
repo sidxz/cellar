@@ -179,7 +179,6 @@ class MoleculeResponse(BaseModel):
     disclosure_date: date | None = None
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
-    originating_org_id: uuid.UUID
     # Who registered it and who disclosed it, each with their Duar org.
     registered_by: uuid.UUID | None = None
     registered_by_org_id: uuid.UUID | None = None
@@ -236,7 +235,6 @@ class MoleculeResponse(BaseModel):
             disclosure_date=mol.disclosure_date,
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
-            originating_org_id=mol.originating_org_id,
             registered_by=mol.registered_by,
             registered_by_org_id=mol.registered_by_org_id,
             disclosed_by=mol.disclosed_by,
@@ -442,7 +440,6 @@ class RegisterMoleculeBody(BaseModel):
     smiles: str | None = None
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
-    originating_org_id: uuid.UUID
     # Who disclosed it and for which Duar org; omitted = you and your org.
     disclosed_by: uuid.UUID | None = None
     disclosed_by_org_id: uuid.UUID | None = None
@@ -465,7 +462,7 @@ class PreviewBatchIdBody(BaseModel):
 
 class PreviewRegistrationItemBody(BaseModel):
     """Mirrors RegisterMoleculeBody so a caller can preview the exact payload it will
-    POST; keys the forecast does not use (originating_org_id, batch, …) are ignored."""
+    POST; keys the forecast does not use (batch, …) are ignored."""
 
     name: str | None = None
     smiles: str | None = None  # None = intends an undisclosed registration
@@ -546,7 +543,6 @@ async def register_molecule(
             )
             for e in body.external_ids
         ],
-        originating_org_id=body.originating_org_id,
         scientist_name=body.scientist_name,
         disclosure_date=body.disclosure_date,
         custom_fields=body.custom_fields,

@@ -12,7 +12,6 @@ from cellar.domain.shared.events import DomainEvent
 class MoleculeRegistered(DomainEvent):
     registration_number: str
     molecule_type: str
-    originating_org_id: uuid.UUID
     registered_by_org_id: uuid.UUID | None = None
 
 

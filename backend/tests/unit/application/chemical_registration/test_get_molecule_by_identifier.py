@@ -73,7 +73,6 @@ def _make_mol_with_identifier(identifier: str) -> Molecule:
         registration_number=RegistrationNumber(value="CV-00001"),
         name="Test compound",
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
     mol.add_identifier(
         MoleculeIdentifier.create(

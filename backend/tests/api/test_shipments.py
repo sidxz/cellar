@@ -36,7 +36,6 @@ async def _mk_batch(client: AsyncClient) -> dict:
         json={
             "smiles": "CCO",
             "name": f"mol-{uuid.uuid4().hex[:6]}",
-            "originating_org_id": org.json()["id"],
         },
     )
     assert mol.status_code in (200, 201), mol.text

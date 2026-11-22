@@ -24,7 +24,6 @@ async def molecule_with_2_batches(client: AsyncClient, org_id: str) -> str:
         json={
             "name": "MirrorMol",
             "smiles": "c1ccccc1",  # benzene
-            "originating_org_id": org_id,
         },
     )
     assert mol_resp.status_code == 201

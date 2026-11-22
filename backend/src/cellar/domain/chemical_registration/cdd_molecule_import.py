@@ -82,7 +82,6 @@ class CddMoleculeImport(AggregateRoot):
         workspace_id: uuid.UUID,
         cdd_vault_id: str,
         import_mode: CddImportMode,
-        originating_org_id: uuid.UUID,
         filter_criteria: dict | None = None,
         status: CddMoleculeImportStatus = CddMoleculeImportStatus.PENDING,
         workflow_id: str | None = None,
@@ -113,7 +112,6 @@ class CddMoleculeImport(AggregateRoot):
         self.workspace_id = workspace_id
         self.cdd_vault_id = cdd_vault_id.strip()
         self.import_mode = import_mode
-        self.originating_org_id = originating_org_id
         self.filter_criteria = filter_criteria
         self.status = status
         self.workflow_id = workflow_id
@@ -147,7 +145,6 @@ class CddMoleculeImport(AggregateRoot):
         workspace_id: uuid.UUID,
         cdd_vault_id: str,
         import_mode: CddImportMode,
-        originating_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
         workflow_id: str | None = None,
         filter_criteria: dict | None = None,
@@ -160,7 +157,6 @@ class CddMoleculeImport(AggregateRoot):
             workspace_id=workspace_id,
             cdd_vault_id=cdd_vault_id,
             import_mode=import_mode,
-            originating_org_id=originating_org_id,
             submitted_by=submitted_by,
             workflow_id=workflow_id,
             filter_criteria=filter_criteria,
