@@ -350,6 +350,7 @@ class RegisterMolecule:
             molecule_id=molecule_id,
             disclosed_smiles=input.smiles,  # type: ignore[arg-type]
             requested_by=input.registered_by,
+            requested_by_org_id=input.registered_by_org_id,
             disclosing_org_id=_discloser_org(input),
             scientist_name=input.scientist_name,
             notes="Auto-recorded during registration",
@@ -527,6 +528,7 @@ class RegisterMolecule:
                     molecule_id=delegate_to_disclosure.id,
                     disclosed_smiles=input.smiles,  # type: ignore[arg-type]
                     requested_by=input.registered_by,
+                    requested_by_org_id=input.registered_by_org_id,
                     disclosing_org_id=_discloser_org(input),
                     scientist_name=input.scientist_name,
                     auto_approve=input.auto_approve,

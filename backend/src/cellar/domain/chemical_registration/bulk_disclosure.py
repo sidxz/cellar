@@ -45,6 +45,7 @@ class BulkDisclosure(AggregateRoot):
         source_file: str,
         partner_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
+        submitted_by_org_id: uuid.UUID | None = None,
         submitted_at: datetime | None = None,
         status: BulkDisclosureStatus = BulkDisclosureStatus.PENDING,
         total_count: int,
@@ -68,6 +69,7 @@ class BulkDisclosure(AggregateRoot):
         self.source_file = source_file.strip()
         self.partner_org_id = partner_org_id
         self.submitted_by = submitted_by
+        self.submitted_by_org_id = submitted_by_org_id  # Duar org, like partner_org_id
         self.submitted_at = submitted_at or datetime.now(UTC)
         self.status = status
         self.total_count = total_count

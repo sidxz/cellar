@@ -25,6 +25,7 @@ class BulkDisclosureModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin
     source_file: Mapped[str] = mapped_column(String(500), nullable=False)
     partner_org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    submitted_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)  # Duar org, no FK
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, server_default="pending")
     total_count: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -60,6 +61,7 @@ class DisclosureRequestModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
     scientist_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     disclosing_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     requested_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    requested_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)  # Duar org, no FK
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disclosure_date: Mapped[date | None] = mapped_column(Date)

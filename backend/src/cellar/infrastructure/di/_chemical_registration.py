@@ -428,6 +428,7 @@ def register_chemical_registration(container: Container) -> None:
             structure_processor=c[StructureProcessorProtocol],
             merge_service=merge_svc,
             dispatcher=c[EventDispatcher],
+            org_directory=c[OrgDirectoryPort],
         )
 
     container.define(DisclosureService, _disclosure_service)

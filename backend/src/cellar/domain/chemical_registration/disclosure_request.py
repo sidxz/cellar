@@ -80,6 +80,7 @@ class DisclosureRequest(AggregateRoot):
         resolved_to_molecule_id: uuid.UUID | None = None,
         disclosing_org_id: uuid.UUID | None = None,
         requested_by: uuid.UUID,
+        requested_by_org_id: uuid.UUID | None = None,
         requested_at: datetime | None = None,
         resolved_at: datetime | None = None,
         matched_molecule_id: uuid.UUID | None = None,
@@ -107,6 +108,8 @@ class DisclosureRequest(AggregateRoot):
         self.resolved_to_molecule_id = resolved_to_molecule_id
         self.disclosing_org_id = disclosing_org_id
         self.requested_by = requested_by
+        # The requester's Duar org; ``disclosing_org_id`` (also Duar) defaults to it.
+        self.requested_by_org_id = requested_by_org_id
         self.requested_at = requested_at or datetime.now(UTC)
         self.resolved_at = resolved_at
         self.matched_molecule_id = matched_molecule_id
@@ -130,13 +133,16 @@ class DisclosureRequest(AggregateRoot):
         molecule_id: uuid.UUID,
         disclosed_smiles: str,
         requested_by: uuid.UUID,
+        requested_by_org_id: uuid.UUID | None = None,
         disclosing_org_id: uuid.UUID | None = None,
         bulk_disclosure_id: uuid.UUID | None = None,
         scientist_name: str | None = None,
         notes: str | None = None,
         disclosure_date: date | None = None,
     ) -> DisclosureRequest:
-        """Create a new disclosure request in PENDING status."""
+        """Create a new disclosure request in PENDING status. The org it discloses for
+        defaults to the requester's."""
+        disclosing_org_id = disclosing_org_id or requested_by_org_id
         if disclosure_date is not None and disclosure_date > datetime.now(UTC).date():
             raise ValidationError("disclosure_date cannot be in the future")
         req = cls(
@@ -144,6 +150,7 @@ class DisclosureRequest(AggregateRoot):
             molecule_id=molecule_id,
             disclosed_smiles=disclosed_smiles,
             requested_by=requested_by,
+            requested_by_org_id=requested_by_org_id,
             disclosing_org_id=disclosing_org_id,
             bulk_disclosure_id=bulk_disclosure_id,
             scientist_name=scientist_name,

@@ -415,3 +415,44 @@ class TestValidation:
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ValidationError)
+
+
+class TestAcceptAsNewCredit:
+    @pytest.mark.asyncio
+    async def test_accept_as_new_credits_requester_not_admin(self) -> None:
+        mol_repo, disclosure_repo = FakeMoleculeRepo(), FakeDisclosureRepo()
+        mol = _make_undisclosed_mol()
+        mol_repo.add(mol)
+        requester_org = uuid.uuid4()
+        dr = DisclosureRequest.create(
+            workspace_id=WS_ID,
+            molecule_id=mol.id,
+            disclosed_smiles="c1ccccc1",
+            requested_by=USER_ID,
+            requested_by_org_id=requester_org,
+        )
+        dr.start_processing()
+        dr.mark_conflict(reason="CAS mismatch")
+        disclosure_repo.add(dr)
+        admin = uuid.uuid4()
+
+        uc = ResolveDisclosureConflict(
+            uow=FakeUnitOfWork(),
+            disclosure_repo=disclosure_repo,
+            molecule_repo=mol_repo,
+            merge_service=AsyncMock(),
+            structure_processor=FakeStructureProcessor(),
+            dispatcher=FakeEventDispatcher(),
+        )
+        await uc(
+            ResolveConflictCommand(
+                workspace_id=WS_ID,
+                disclosure_id=dr.id,
+                resolution="accept_as_new",
+                resolved_by=admin,
+            ),
+            auth=FakeAuth(workspace_id=WS_ID, role="admin", user_id=admin),
+        )
+
+        assert (mol.disclosed_by, mol.disclosed_by_org_id) == (USER_ID, requester_org)
+

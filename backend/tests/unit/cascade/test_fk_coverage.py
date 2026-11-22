@@ -552,6 +552,8 @@ LEFT_ALONE: dict[str, str] = {
     "molecules.registered_by_org_id": _ORG,
     "molecules.disclosed_by_org_id": _ORG,
     "cdd_molecule_imports.disclosed_by_org_id": _ORG,
+    "disclosure_requests.requested_by_org_id": _ORG,
+    "bulk_disclosures.submitted_by_org_id": _ORG,
     "shipments.destination_org_id": _ORG,
     "synthesis_requests.assigned_org_id": _ORG,
     "audit_entries.entity_id": _AUDIT,
