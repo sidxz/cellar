@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 
+# Table and column names below are fixed literals, never input — hence the S608 noqa.
 _SCOPE = "(:every OR workspace_id = :ws)"
 _LOCAL = "IN (SELECT id FROM organizations)"
 
@@ -44,16 +45,16 @@ _STEPS: list[tuple[str, str]] = [
                   WHERE entity_type = 'Molecule' AND operation_type = 'registration'
                     AND actor_type = 'user'
                   ORDER BY entity_id, started_at) a
-            WHERE a.entity_id = m.id AND m.registered_by IS NULL AND {_SCOPE}""",
+            WHERE a.entity_id = m.id AND m.registered_by IS NULL AND {_SCOPE}""",  # noqa: S608
     ),
     (
         "molecules.disclosed_by",
         f"""UPDATE molecules SET disclosed_by = registered_by, disclosed_at = created_at
             WHERE structure_status = 'disclosed' AND disclosed_by IS NULL
-              AND registered_by IS NOT NULL AND {_SCOPE}""",
+              AND registered_by IS NOT NULL AND {_SCOPE}""",  # noqa: S608
     ),
     *(
-        (f"{t}.{c}", f"UPDATE {t} SET {c} = :org WHERE {c} IS NULL AND {_SCOPE}")
+        (f"{t}.{c}", f"UPDATE {t} SET {c} = :org WHERE {c} IS NULL AND {_SCOPE}")  # noqa: S608
         for t, c in (
             ("molecules", "registered_by_org_id"),
             ("cdd_molecule_imports", "disclosed_by_org_id"),
@@ -69,12 +70,13 @@ _STEPS: list[tuple[str, str]] = [
     (
         "molecules.disclosed_by_org_id",
         f"""UPDATE molecules SET disclosed_by_org_id = :org
-            WHERE disclosed_by_org_id IS NULL AND structure_status = 'disclosed' AND {_SCOPE}""",
+            WHERE disclosed_by_org_id IS NULL AND structure_status = 'disclosed'
+              AND {_SCOPE}""",  # noqa: S608
     ),
     *(
         (
             f"{t}.{c}",
-            f"UPDATE {t} SET {c} = :org WHERE ({c} IS NULL OR {c} {_LOCAL}) AND {_SCOPE}",
+            f"UPDATE {t} SET {c} = :org WHERE ({c} IS NULL OR {c} {_LOCAL}) AND {_SCOPE}",  # noqa: S608
         )
         for t, c in (
             ("runs", "performed_at_org_id"),
@@ -96,13 +98,12 @@ async def backfill(
     """Rows changed per ``table.column``, in one transaction (rolled back on a dry run)."""
     params = {"org": org_id, "every": workspace_id is None, "ws": workspace_id}
     counts: dict[str, int] = {}
-    async with session_factory() as session:
-        async with session.begin():
-            for label, sql in _STEPS:
-                result = await session.execute(text(sql), params)
-                counts[label] = result.rowcount  # type: ignore[attr-defined]
-            if dry_run:
-                await session.rollback()
+    async with session_factory() as session, session.begin():
+        for label, sql in _STEPS:
+            result = await session.execute(text(sql), params)
+            counts[label] = result.rowcount  # type: ignore[attr-defined]
+        if dry_run:
+            await session.rollback()
     return counts
 
 
