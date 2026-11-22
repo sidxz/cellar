@@ -14,4 +14,6 @@ regexTarget = "line"
 regexes = [
   '''ISSUED_TOKEN = "tok_abc123xyz"''',
   '''auth\.workspace_id, (result_count|curve_id)''',
+  # passing the configured key by name, not a key value
+  '''service_key=_settings\.service_key''',
 ]
