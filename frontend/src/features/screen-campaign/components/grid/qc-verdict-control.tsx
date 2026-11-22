@@ -1,11 +1,20 @@
 "use client";
 
-/** QC verdict on one campaign cell: the mark beside the value, and the "QC" row in its facts. */
+/** QC verdict on one campaign cell: its lines under the value, its right-click menu, and the
+ *  "QC" row in its facts. */
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
+import { type ReactElement, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/shared/components/ui/context-menu";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut } from "@/shared/lib/api/campaigns/campaigns";
@@ -26,21 +35,116 @@ function useQcStamp(m: CampaignMeasurementResponse): string {
   return `by ${nameOf(m.qc_verdict_by)} · ${when}`;
 }
 
-export function QcMark({ measurement: m }: { measurement: CampaignMeasurementResponse }) {
-  const stamp = useQcStamp(m);
+/** Saves one cell's QC verdict. On the hook, not per call: a card or menu may close before the
+ *  save lands. */
+export function useSetQcVerdict(campaignId: string) {
+  const qc = useQueryClient();
+  const mutation = useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut({
+    mutation: {
+      onSuccess: () => void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) }),
+      onError: () => showError("Could not save the QC verdict."),
+    },
+  });
+  // A person changing one cell means it, hence overwrite. Leaving `note` out names no note
+  // (a changed verdict starts without one); a string names it, blank = none.
+  const set = (resultId: string, channelId: string, verdict: Verdict, note?: string) => {
+    const data: SetQcVerdictsRequest = {
+      verdict,
+      targets: [{ channel_ids: [channelId], result_ids: [resultId] }],
+      overwrite: true,
+      ...(note !== undefined ? { note: note.trim() || null } : {}),
+    };
+    mutation.mutate({ campaignId, data });
+  };
+  return { set, pending: mutation.isPending };
+}
+
+/** A value's QC under it: the verdict, who set it, when, and its note; nothing while nobody has
+ *  checked it. */
+export function QcSummary({ measurement: m }: { measurement: CampaignMeasurementResponse }) {
+  const nameOf = useMemberNames();
   if (m.qc_verdict === "not_tested") return null;
-  const title = `${QC_LABEL[m.qc_verdict]} ${stamp}${
-    m.qc_verdict_note ? ` · ${m.qc_verdict_note}` : ""
-  }`;
+  const failed = m.qc_verdict === "failed";
   return (
-    <span
-      role="img"
-      aria-label={`QC ${m.qc_verdict}`}
-      title={title}
-      className={`text-xs font-medium ${m.qc_verdict === "verified" ? "text-emerald-600" : "text-red-600"}`}
-    >
-      {m.qc_verdict === "verified" ? "✓" : "✕"}
+    <span className="flex max-w-full flex-col items-end text-xs leading-tight">
+      <span
+        className={`flex items-center gap-1 whitespace-nowrap font-medium ${failed ? "text-destructive" : "text-foreground"}`}
+      >
+        {failed ? (
+          <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
+        ) : (
+          <CircleCheck className="size-3 shrink-0 text-emerald-600" aria-hidden="true" />
+        )}
+        QC {QC_LABEL[m.qc_verdict].toLowerCase()}
+      </span>
+      {m.qc_verdict_by && (
+        <span className="max-w-full truncate text-muted-foreground">{nameOf(m.qc_verdict_by)}</span>
+      )}
+      {m.qc_verdict_at && (
+        <span className="tabular-nums text-muted-foreground">
+          {new Date(m.qc_verdict_at).toLocaleDateString()}
+        </span>
+      )}
+      {m.qc_verdict_note && (
+        <span
+          className="line-clamp-1 max-w-full break-words italic text-muted-foreground"
+          title={m.qc_verdict_note}
+        >
+          {m.qc_verdict_note}
+        </span>
+      )}
     </span>
+  );
+}
+
+/** Right-click anywhere in ``children`` (a value's cell) to set or clear its QC verdict, or to
+ *  open its QC note (``onEditNote``). ``readOnly`` offers no menu. */
+export function QcMenu({
+  campaignId,
+  measurement: m,
+  resultId,
+  readOnly,
+  onEditNote,
+  children,
+}: {
+  campaignId: string;
+  measurement: CampaignMeasurementResponse;
+  resultId: string;
+  readOnly: boolean;
+  onEditNote: () => void;
+  children: ReactElement;
+}) {
+  const write = useSetQcVerdict(campaignId);
+  const verdict = m.qc_verdict;
+  // Setting needs a result to judge; a verdict left on a value that lost its result can still go.
+  const choices: Verdict[] = [
+    ...(m.holds_result ? (["verified", "failed"] as const).filter((v) => v !== verdict) : []),
+    ...(verdict !== "not_tested" ? (["not_tested"] as const) : []),
+  ];
+  if (readOnly || (choices.length === 0 && !m.holds_result)) return children;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        {choices.map((v) => (
+          <ContextMenuItem
+            key={v}
+            disabled={write.pending}
+            onSelect={() => write.set(resultId, m.channel_id, v)}
+          >
+            {v === "verified" ? "Mark QC verified" : v === "failed" ? "Mark QC failed" : "Clear QC"}
+          </ContextMenuItem>
+        ))}
+        {m.holds_result && (
+          <>
+            {choices.length > 0 && <ContextMenuSeparator />}
+            <ContextMenuItem onSelect={onEditNote}>
+              {m.qc_verdict_note ? "Edit QC note…" : "Add QC note…"}
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -57,7 +161,6 @@ export function QcVerdictControl({
   resultId,
   readOnly,
 }: QcVerdictControlProps) {
-  const qc = useQueryClient();
   const stored = m.qc_verdict_note ?? "";
   const [note, setNote] = useState(stored);
   // A saved verdict or note replaces what was typed: the box shows what is stored.
@@ -67,13 +170,7 @@ export function QcVerdictControl({
     setNote(stored);
   }
   const stamp = useQcStamp(m);
-  // On the hook, not per call: the card may close before the save lands.
-  const mutation = useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut({
-    mutation: {
-      onSuccess: () => void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) }),
-      onError: () => showError("Could not save the QC verdict."),
-    },
-  });
+  const write = useSetQcVerdict(campaignId);
 
   if (!m.holds_result) return null;
   const stampEl = m.qc_verdict !== "not_tested" && (
@@ -89,17 +186,9 @@ export function QcVerdictControl({
     );
   }
 
-  // A person changing one cell means it, hence overwrite. A verdict button names no note
-  // (a changed verdict starts without one); Save names the box's note, blank = none.
-  const send = (verdict: Verdict, withNote: boolean) => {
-    const data: SetQcVerdictsRequest = {
-      verdict,
-      targets: [{ channel_ids: [m.channel_id], result_ids: [resultId] }],
-      overwrite: true,
-      ...(withNote ? { note: note.trim() || null } : {}),
-    };
-    mutation.mutate({ campaignId, data });
-  };
+  // A verdict button names no note; Save names the box's note, blank = none.
+  const send = (verdict: Verdict, withNote: boolean) =>
+    write.set(resultId, m.channel_id, verdict, withNote ? note : undefined);
 
   return (
     <div className="mt-2 space-y-1.5 border-t pt-2 text-xs">
@@ -112,7 +201,7 @@ export function QcVerdictControl({
             size="sm"
             variant={m.qc_verdict === v ? "default" : "outline"}
             className="h-6 px-2 text-[11px]"
-            disabled={mutation.isPending}
+            disabled={write.pending}
             onClick={() => send(v, false)}
           >
             {QC_LABEL[v]}
@@ -134,7 +223,7 @@ export function QcVerdictControl({
             type="button"
             size="sm"
             className="h-6 px-2 text-[11px]"
-            disabled={mutation.isPending}
+            disabled={write.pending}
             onClick={() => send(m.qc_verdict, true)}
           >
             Save

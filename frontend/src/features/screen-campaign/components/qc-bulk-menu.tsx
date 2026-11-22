@@ -2,31 +2,25 @@
 
 /**
  * QcBulkMenu — marks (or clears) the QC verdict on many campaign cells in one save.
- * Cells = the visible rows (`rowPassesFilters`, same predicate as StageBulkMenu) x the
- * ticked columns. Nothing applies until Apply; the count beside it is the forecast.
- * Renders only its controls: the builder's bulk bar holds it beside StageBulkMenu.
+ * Cells = the ticked rows x the ticked columns. Nothing applies until Apply; the count beside
+ * it is the forecast. Renders only its controls: the grid's bulk bar holds it beside
+ * StageBulkMenu.
  */
 
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import {
   AlertDialog,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/shared/components/ui/dropdown-menu";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useSetQcVerdictsApiV1CampaignsCampaignIdQcVerdictsPut } from "@/shared/lib/api/campaigns/campaigns";
@@ -37,13 +31,18 @@ import { campaignKeys } from "../hooks/use-campaigns";
 import { QC_LABEL, qcForecast } from "../lib/qc-verdicts";
 import { groupColumnsByStage } from "../lib/stage-column-groups";
 import type { CampaignMeasurementResponse, CampaignResponse } from "../types";
-import { type CampaignFilters, filtersActive, rowPassesFilters } from "./campaign-filter-bar";
+import { selectionText } from "./grid/selection-text";
 
 type Verdict = CampaignMeasurementResponse["qc_verdict"];
 
+const BUTTON: Record<Verdict, string> = {
+  verified: "Mark QC verified…",
+  failed: "Mark QC failed…",
+  not_tested: "Clear QC…",
+};
 const TITLE: Record<Verdict, string> = {
-  verified: "Mark verified",
-  failed: "Mark failed",
+  verified: "Mark QC verified",
+  failed: "Mark QC failed",
   not_tested: "Clear QC",
 };
 const cells = (n: number) => `${n} ${n === 1 ? "cell" : "cells"}`;
@@ -64,12 +63,21 @@ function toast(verdict: Verdict, r: QcVerdictCountsResponse) {
 
 interface QcBulkMenuProps {
   campaign: CampaignResponse;
-  filters: CampaignFilters;
+  /** The ticked rows: what the verdict reaches, times the ticked columns. */
+  resultIds: string[];
+  /** How many of them the filters hide, said in the window. */
+  hiddenCount: number;
   selectedStageId: string | null;
   readOnly: boolean;
 }
 
-export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcBulkMenuProps) {
+export function QcBulkMenu({
+  campaign,
+  resultIds,
+  hiddenCount,
+  selectedStageId,
+  readOnly,
+}: QcBulkMenuProps) {
   const qc = useQueryClient();
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [columns, setColumns] = useState<Set<string>>(new Set());
@@ -89,10 +97,10 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
 
   const channels = campaign.channels ?? [];
   const groups = groupColumnsByStage(channels, campaign.stages ?? []);
-  const rows = useMemo(
-    () => (campaign.results ?? []).filter((r) => rowPassesFilters(r, filters, selectedStageId)),
-    [campaign.results, filters, selectedStageId],
-  );
+  const rows = useMemo(() => {
+    const ids = new Set(resultIds);
+    return (campaign.results ?? []).filter((r) => ids.has(r.id));
+  }, [campaign.results, resultIds]);
   // A blank note names none, so cells already holding the verdict keep theirs.
   const sentNote = verdict !== "not_tested" && note.trim() ? note.trim() : undefined;
   const forecast = useMemo(
@@ -128,8 +136,8 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
       targets: [
         {
           channel_ids: channels.filter((c) => columns.has(c.id)).map((c) => c.id),
-          // No filter on: every row, without listing thousands of ids.
-          result_ids: filtersActive(filters, selectedStageId) ? rows.map((r) => r.id) : null,
+          // Always named: never "every row", which would reach rows nobody ticked.
+          result_ids: rows.map((r) => r.id),
         },
       ],
       overwrite,
@@ -148,23 +156,26 @@ export function QcBulkMenu({ campaign, filters, selectedStageId, readOnly }: QcB
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
-            QC <ChevronDown className="size-3" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem onSelect={() => open("verified")}>Mark verified…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => open("failed")}>Mark failed…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => open("not_tested")}>Clear QC…</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {(["verified", "failed", "not_tested"] as const).map((v) => (
+        <Button
+          key={v}
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          disabled={rows.length === 0 || mutation.isPending}
+          onClick={() => open(v)}
+        >
+          {BUTTON[v]}
+        </Button>
+      ))}
 
       <AlertDialog open={verdict !== null} onOpenChange={(o) => !o && setVerdict(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{verdict && TITLE[verdict]}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectionText(rows.length, hiddenCount)}
+            </AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="space-y-1">

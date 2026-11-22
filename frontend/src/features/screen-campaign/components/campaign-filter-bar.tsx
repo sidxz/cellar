@@ -11,29 +11,96 @@
  * - Audit: "Overridden" boolean toggle — a cell override, or an override on
  *   the selected stage
  *
+ * The grid's toolbar adds a compound search and readout conditions (min/max, QC) to the same
+ * state, so every gesture that acts on "the visible rows" sees what the grid shows.
+ *
  * The filter state lives in <CampaignBuilderV2> / <CampaignView> next to
- * `selectedStageId` and is consumed by this bar and the
+ * `selectedStageId` and is consumed by this bar, the bulk menus and the
  * AG Grid via its `isExternalFilterPresent` + `doesExternalFilterPass`.
  */
 
+import { sameUnit } from "@/features/research-organization/lib/assay-evidence";
+import type { MoleculeResponse } from "@/shared/lib/api/model";
+import { useCampaignMolecules } from "../hooks/use-campaign-molecules";
 import { outcomeFor, tallyStage } from "../lib/stage-outcomes";
-import type { CampaignResponse, CampaignResultResponse, StageOutcome } from "../types";
+import type {
+  CampaignMeasurementResponse,
+  CampaignResponse,
+  CampaignResultResponse,
+  StageOutcome,
+} from "../types";
+
+/** One readout condition: a range (inclusive) and/or a QC state. */
+export interface MeasurementFilter {
+  channelId: string;
+  minimum: number | null;
+  maximum: number | null;
+  /** The unit the bounds are in. A value stored in another unit never falls in the range. */
+  unit: string;
+  qc: "any" | "verified" | "failed" | "not_tested";
+}
 
 export interface CampaignFilters {
   /** Only applied when a stage is selected — see `rowPassesFilters`. */
   stageOutcomes: Set<StageOutcome>;
   overriddenOnly: boolean;
+  /** Registration number, name or any identifier; case-insensitive. "" = no search. */
+  search: string;
+  /** All must hold. */
+  measurements: MeasurementFilter[];
 }
 
 export function emptyFilters(): CampaignFilters {
   return {
     stageOutcomes: new Set(),
     overriddenOnly: false,
+    search: "",
+    measurements: [],
   };
 }
 
 export function filtersActive(f: CampaignFilters, selectedStageId: string | null): boolean {
-  return f.overriddenOnly || (selectedStageId != null && f.stageOutcomes.size > 0);
+  return (
+    f.overriddenOnly ||
+    (selectedStageId != null && f.stageOutcomes.size > 0) ||
+    f.search !== "" ||
+    f.measurements.length > 0
+  );
+}
+
+/** What a search can find a compound by. */
+export type SearchableMolecule = Pick<
+  MoleculeResponse,
+  "registration_number" | "name" | "identifiers"
+>;
+
+function moleculeMatches(m: SearchableMolecule | undefined, search: string): boolean {
+  if (!m) return false;
+  const q = search.toLocaleLowerCase();
+  return [m.registration_number, m.name, ...(m.identifiers ?? []).map((i) => i.identifier)].some(
+    (text) => !!text && text.toLocaleLowerCase().includes(q),
+  );
+}
+
+/** "-" is the server's "unit unknown", which it treats as matching any unit. */
+const unitMatches = (a: string, b: string) => a === "-" || b === "-" || sameUnit(a, b) || a === b;
+
+/** A range holds only exact values ("=" with a number): never a limit, ND or an excluded value. */
+export function measurementPasses(
+  m: CampaignMeasurementResponse | undefined,
+  f: MeasurementFilter,
+): boolean {
+  if (!m) return false;
+  if (f.minimum != null || f.maximum != null) {
+    if (m.value_qualifier !== "=" || m.value == null || !Number.isFinite(m.value)) return false;
+    if (!unitMatches(m.unit ?? "", f.unit)) return false;
+    if (f.minimum != null && m.value < f.minimum) return false;
+    if (f.maximum != null && m.value > f.maximum) return false;
+  }
+  if (f.qc === "verified" || f.qc === "failed") return m.qc_verdict === f.qc;
+  // Not tested: a value with a result nobody has checked yet.
+  if (f.qc === "not_tested") return !!m.holds_result && m.qc_verdict === "not_tested";
+  return true;
 }
 
 /** A row counts as overridden when any of its cells was manually overridden,
@@ -43,10 +110,13 @@ function rowIsOverridden(result: CampaignResultResponse, selectedStageId: string
   return selectedStageId != null && (outcomeFor(result, selectedStageId)?.overridden ?? false);
 }
 
+/** ``molecules`` resolves a search: while they are unknown, a search matches nothing, so no
+ *  bulk gesture reaches a row the grid would hide. */
 export function rowPassesFilters(
   result: CampaignResultResponse,
   filters: CampaignFilters,
   selectedStageId: string | null,
+  molecules?: ReadonlyMap<string, SearchableMolecule>,
 ): boolean {
   if (selectedStageId != null && filters.stageOutcomes.size > 0) {
     // A result carrying no entry for the stage was never evaluated against
@@ -56,7 +126,15 @@ export function rowPassesFilters(
     if (!filters.stageOutcomes.has(outcome)) return false;
   }
   if (filters.overriddenOnly && !rowIsOverridden(result, selectedStageId)) return false;
-  return true;
+  if (filters.search && !moleculeMatches(molecules?.get(result.molecule_id), filters.search)) {
+    return false;
+  }
+  return filters.measurements.every((f) =>
+    measurementPasses(
+      result.measurements?.find((m) => m.channel_id === f.channelId),
+      f,
+    ),
+  );
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
@@ -114,6 +192,7 @@ export function CampaignFilterBar({
   selectedStageId,
   resultCount,
 }: CampaignFilterBarProps) {
+  const molecules = useCampaignMolecules(campaign);
   const overridden = tallyOverridden(campaign.results, selectedStageId);
   const stageTally = selectedStageId ? tallyStage(campaign.results, selectedStageId) : null;
   const selectedStage = selectedStageId
@@ -138,6 +217,11 @@ export function CampaignFilterBar({
   }
 
   const active = filtersActive(filters, selectedStageId);
+  // The rows the grid shows and the bulk gestures act on: the same check.
+  const shown = active
+    ? campaign.results.filter((r) => rowPassesFilters(r, filters, selectedStageId, molecules))
+        .length
+    : resultCount;
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs">
@@ -185,6 +269,7 @@ export function CampaignFilterBar({
       )}
       {resultCount != null && (
         <span className="ml-auto text-muted-foreground tabular-nums">
+          {active && shown !== resultCount ? `${shown} of ` : ""}
           {resultCount} {resultCount === 1 ? "result" : "results"}
         </span>
       )}

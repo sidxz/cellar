@@ -4,7 +4,7 @@
  * StageOutcomeCell — the grid's "Stage" column, rendered only while a hit
  * stage is selected. Shows this result's outcome for that stage plus an OVR
  * marker when the outcome was forced; in draft the chip opens
- * <StageOverridePopover> so the chemist can promote/demote from the grid.
+ * <StageOverridePopover> so the chemist can mark a row hit or miss from the grid.
  */
 
 import { ChevronDown } from "lucide-react";

@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QcVerdictCountsResponse, SetQcVerdictsRequest } from "@/shared/lib/api/model";
 
 import type { CampaignResponse } from "../types";
-import { type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { QcBulkMenu } from "./qc-bulk-menu";
 
 type OnSuccess = (res: QcVerdictCountsResponse, vars: { data: SetQcVerdictsRequest }) => void;
@@ -61,12 +60,13 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function renderMenu(
-  opts: { stage?: string | null; readOnly?: boolean; filters?: CampaignFilters } = {},
+  opts: { stage?: string | null; readOnly?: boolean; ticked?: string[]; hidden?: number } = {},
 ) {
   return render(
     <QcBulkMenu
       campaign={campaign}
-      filters={opts.filters ?? emptyFilters()}
+      resultIds={opts.ticked ?? ["r1", "r2", "r3"]}
+      hiddenCount={opts.hidden ?? 0}
       selectedStageId={opts.stage === undefined ? "s1" : opts.stage}
       readOnly={opts.readOnly ?? false}
     />,
@@ -74,9 +74,10 @@ function renderMenu(
   );
 }
 
-function pick(item: string) {
-  fireEvent.keyDown(screen.getByRole("button", { name: "QC" }), { key: "Enter" });
-  fireEvent.click(screen.getByRole("menuitem", { name: item }));
+/** Open one verdict's window from its bulk-bar button. */
+function pick(item: "Mark verified…" | "Mark failed…" | "Clear QC…") {
+  const button = { "Mark verified…": "Mark QC verified…", "Mark failed…": "Mark QC failed…" };
+  fireEvent.click(screen.getByRole("button", { name: item === "Clear QC…" ? item : button[item] }));
 }
 
 beforeEach(() => {
@@ -89,7 +90,7 @@ describe("QcBulkMenu", () => {
     expect(renderMenu({ readOnly: true }).container).toBeEmptyDOMElement();
   });
 
-  it("forecasts the visible rows x the stage's columns, and the overwrite box adds marked cells", () => {
+  it("forecasts the ticked rows x the stage's columns, and the overwrite box adds marked cells", () => {
     renderMenu();
     pick("Mark verified…");
     expect(screen.getByText("2 cells")).toBeInTheDocument();
@@ -97,7 +98,7 @@ describe("QcBulkMenu", () => {
     expect(screen.getByText("3 cells")).toBeInTheDocument();
   });
 
-  it("applies to the stage's columns and every row when no filter is on", () => {
+  it("applies to the stage's columns and names the ticked rows", () => {
     renderMenu();
     pick("Mark verified…");
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -106,18 +107,26 @@ describe("QcBulkMenu", () => {
         campaignId: "c1",
         data: {
           verdict: "verified",
-          targets: [{ channel_ids: ["ca", "cb"], result_ids: null }],
+          targets: [{ channel_ids: ["ca", "cb"], result_ids: ["r1", "r2", "r3"] }],
           overwrite: false,
         },
       },
     ]);
   });
 
-  it("names the visible rows when a filter is on", () => {
-    renderMenu({ filters: { ...emptyFilters(), stageOutcomes: new Set(["not_in_stage"]) } });
+  it("reaches only the ticked rows, and says when filters hide some", () => {
+    renderMenu({ ticked: ["r2"], hidden: 1 });
     pick("Mark verified…");
+    expect(screen.getByText("1 selected row, 1 hidden by filters")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(mutate.mock.calls[0][0].data.targets[0].result_ids).toEqual(["r1", "r2", "r3"]);
+    expect(mutate.mock.calls[0][0].data.targets[0].result_ids).toEqual(["r2"]);
+  });
+
+  it("is off until rows are ticked", () => {
+    renderMenu({ ticked: [] });
+    for (const name of ["Mark QC verified…", "Mark QC failed…", "Clear QC…"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
   });
 
   it("a stage with no columns of its own ticks none, so Apply is off", () => {

@@ -33,8 +33,6 @@ import { CampaignView } from "./campaign-view";
 import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
-import { QcBulkMenu } from "./qc-bulk-menu";
-import { StageBulkMenu } from "./stage-bulk-menu";
 
 import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
@@ -183,36 +181,24 @@ function CampaignBuilderV2({
         onSelectStage={selectStage}
         readOnly={structureLocked}
       />
-      <CampaignFilterBar
-        campaign={campaign}
-        filters={filters}
-        onChange={setFilters}
-        selectedStageId={effectiveStageId}
-        resultCount={campaign.results?.length ?? 0}
-      />
-      {/* One bulk bar for both menus; hidden when neither renders anything. */}
-      <div className="flex items-center gap-1.5 border-b bg-muted/10 px-3 py-1.5 empty:hidden">
-        <StageBulkMenu
-          campaign={campaign}
-          filters={filters}
-          selectedStageId={effectiveStageId}
-          readOnly={curationLocked}
-        />
-        <QcBulkMenu
-          campaign={campaign}
-          filters={filters}
-          selectedStageId={effectiveStageId}
-          readOnly={qcReadOnly}
-        />
-      </div>
       <ResultsGridV2
         campaign={campaign}
         filters={filters}
+        onFiltersChange={setFilters}
         selectedStageId={effectiveStageId}
         readOnly={curationLocked}
         qcReadOnly={qcReadOnly}
         notesReadOnly={!canEditTags}
         rowsLocked={structureLocked}
+        header={
+          <CampaignFilterBar
+            campaign={campaign}
+            filters={filters}
+            onChange={setFilters}
+            selectedStageId={effectiveStageId}
+            resultCount={campaign.results?.length ?? 0}
+          />
+        }
       />
 
       <PreviewAsPublishedDialog

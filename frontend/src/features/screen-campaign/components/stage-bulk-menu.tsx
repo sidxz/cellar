@@ -1,22 +1,18 @@
 "use client";
 
 /**
- * StageBulkMenu — forces (or clears) one hit stage's verdict for every
- * currently-visible campaign result in a single save. Renders only its controls:
- * the builder's bulk bar above the grid holds it beside the QC menu.
+ * StageBulkMenu — forces (or clears) one hit stage's verdict for the ticked
+ * campaign results in a single save. Renders only its controls: the grid's
+ * bulk bar holds it beside the QC menu. The usual flow on a manual stage is:
+ * filter to Pending, tick the keepers (or select all visible), then Mark hit.
  *
- * "Visible" is whatever `rowPassesFilters` lets through for the selected
- * stage — the same predicate the grid's external filter uses, so what the
- * chemist sees is exactly what the gesture touches. The usual flow on a
- * manual stage is: filter to Pending, then Promote the keepers.
- *
- * Promote/demote carry a required reason (21 CFR-style: an override always
+ * Marking hit or miss carries a required reason (21 CFR-style: an override always
  * records its rationale); "Clear overrides" sends `outcome: null` and hands
  * the rows back to the evaluator, so it needs none.
  */
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import {
   AlertDialog,
@@ -35,26 +31,29 @@ import { showError, showSuccess } from "@/shared/lib/toast";
 
 import { campaignKeys } from "../hooks/use-campaigns";
 import type { CampaignResponse } from "../types";
-import { type CampaignFilters, rowPassesFilters } from "./campaign-filter-bar";
+import { selectionText } from "./grid/selection-text";
 
-type BulkAction = "promote" | "demote" | "clear";
+type BulkAction = "hit" | "miss" | "clear";
 
 const ACTION_LABEL: Record<BulkAction, string> = {
-  promote: "Promote",
-  demote: "Demote",
+  hit: "Mark hit…",
+  miss: "Mark miss…",
   clear: "Clear overrides",
 };
 
 /** The wire value each action sends — `null` clears the override. */
 const ACTION_OUTCOME: Record<BulkAction, "hit" | "miss" | null> = {
-  promote: "hit",
-  demote: "miss",
+  hit: "hit",
+  miss: "miss",
   clear: null,
 };
 
 interface StageBulkMenuProps {
   campaign: CampaignResponse;
-  filters: CampaignFilters;
+  /** The ticked rows: what every action acts on. */
+  resultIds: string[];
+  /** How many of them the filters hide, said in the confirmation. */
+  hiddenCount: number;
   /** Selected hit stage — the menu renders nothing for "All". */
   selectedStageId: string | null;
   readOnly: boolean;
@@ -62,22 +61,15 @@ interface StageBulkMenuProps {
 
 export function StageBulkMenu({
   campaign,
-  filters,
+  resultIds,
+  hiddenCount,
   selectedStageId,
   readOnly,
 }: StageBulkMenuProps) {
   const qc = useQueryClient();
   const [pending, setPending] = useState<BulkAction | null>(null);
   const [reason, setReason] = useState("");
-
-  const visibleIds = useMemo(
-    () =>
-      (campaign.results ?? [])
-        .filter((r) => rowPassesFilters(r, filters, selectedStageId))
-        .map((r) => r.id),
-    [campaign.results, filters, selectedStageId],
-  );
-  const count = visibleIds.length;
+  const count = resultIds.length;
 
   const mutation = useSetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut({
     mutation: {
@@ -87,7 +79,7 @@ export function StageBulkMenu({
         showSuccess(
           vars.data.outcome === null
             ? `Cleared overrides on ${n} ${n === 1 ? "row" : "rows"}`
-            : `${vars.data.outcome === "hit" ? "Promoted" : "Demoted"} ${n} ${n === 1 ? "row" : "rows"}`,
+            : `Marked ${n} ${n === 1 ? "row" : "rows"} ${vars.data.outcome}`,
         );
       },
       onError: (err) => {
@@ -98,12 +90,32 @@ export function StageBulkMenu({
 
   if (readOnly || !selectedStageId) return null;
 
-  const needsReason = pending === "promote" || pending === "demote";
-  const visibleScope = `${count} visible ${count === 1 ? "row" : "rows"}`;
+  const needsReason = pending === "hit" || pending === "miss";
+  const scope = `${count} selected ${count === 1 ? "row" : "rows"}`;
+  const stage = (campaign.stages ?? []).find((s) => s.id === selectedStageId);
+  // A hand-picked stage has no selection criteria to override.
+  const manual = stage?.kind === "manual";
+  const plural = pending === "hit" ? "hits" : "misses";
+  const title =
+    pending === "clear"
+      ? `Clear overrides for ${scope}?`
+      : manual
+        ? `Mark ${scope} ${pending}?`
+        : `Override the selection criteria for ${scope}?`;
+  const description =
+    pending === "clear"
+      ? manual
+        ? "They go back to pending at this hand-picked stage."
+        : "The selection criteria decide their outcomes again."
+      : manual
+        ? `They count as ${plural} at ${stage?.name ?? "this stage"} until you change them.`
+        : `Mark them ${pending} at ${stage?.name ?? "this stage"}, whatever its selection criteria say. They stay ${pending} until the override is cleared; you can still change a single row.`;
   const confirmationLabel =
     pending === "clear"
-      ? `Clear overrides for ${visibleScope}`
-      : `${pending ? ACTION_LABEL[pending] : ""} ${visibleScope}`;
+      ? `Clear ${count} ${count === 1 ? "override" : "overrides"}`
+      : manual
+        ? `Mark ${count} ${pending}`
+        : `Override and mark ${count} ${pending}`;
   const reasonOk = !needsReason || reason.trim().length > 0;
 
   function open(action: BulkAction) {
@@ -117,7 +129,7 @@ export function StageBulkMenu({
       campaignId: campaign.id,
       stageId: selectedStageId,
       data: {
-        result_ids: visibleIds,
+        result_ids: resultIds,
         outcome: ACTION_OUTCOME[pending],
         reason: needsReason ? reason.trim() : null,
       },
@@ -127,10 +139,7 @@ export function StageBulkMenu({
 
   return (
     <>
-      <span className="text-xs text-muted-foreground">
-        Bulk ({count} visible {count === 1 ? "row" : "rows"}):
-      </span>
-      {(["promote", "demote", "clear"] as BulkAction[]).map((a) => (
+      {(["hit", "miss", "clear"] as BulkAction[]).map((a) => (
         <Button
           key={a}
           size="sm"
@@ -146,11 +155,10 @@ export function StageBulkMenu({
       <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{pending && `${confirmationLabel}?`}</AlertDialogTitle>
+            <AlertDialogTitle>{pending && title}</AlertDialogTitle>
             <AlertDialogDescription>
-              {pending === "clear"
-                ? "Clear manual overrides for the visible rows. The stage will determine their outcomes."
-                : `Set the outcome to ${pending === "promote" ? "hit" : "miss"} for the visible rows. You can change individual outcomes later.`}
+              {pending && description}
+              {hiddenCount > 0 && ` ${selectionText(count, hiddenCount)}.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -164,9 +172,9 @@ export function StageBulkMenu({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder={
-                  pending === "promote"
-                    ? "Reason for marking these compounds as hits"
-                    : "Reason for marking these compounds as misses"
+                  manual
+                    ? `Why these compounds are ${plural}`
+                    : `Why these compounds are ${plural} despite the selection criteria`
                 }
                 rows={2}
                 className="text-sm"

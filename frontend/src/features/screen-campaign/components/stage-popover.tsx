@@ -68,7 +68,7 @@ export const ROOT_SENTINEL = "__root__";
 
 /** Shown wherever a manual stage would otherwise explain its criteria. */
 export const MANUAL_STAGE_HELP =
-  "Hand-picked: compounds start pending; promote the ones to take forward.";
+  "Hand-picked: compounds start pending; mark the ones to take forward as hits.";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
