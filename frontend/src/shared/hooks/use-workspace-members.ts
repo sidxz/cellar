@@ -1,16 +1,12 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { WorkspaceMemberResponse } from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
-export interface WorkspaceMember {
-  user_id: string;
-  email: string;
-  name: string;
-  avatar_url: string | null;
-  role: string;
-}
+/** A workspace member (with their Duar org, when Duar sends it). */
+export type WorkspaceMember = WorkspaceMemberResponse;
 
 const MEMBERS_KEY = ["workspace-members"];
 

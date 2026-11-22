@@ -17,26 +17,13 @@ export const DISCLOSURE_STATUS_LABELS: Record<DisclosureStatus, string> = {
   pending_confirmation: "Awaiting Confirmation",
 };
 
-export interface DisclosureRequest {
-  id: string;
-  bulk_disclosure_id: string | null;
-  molecule_id: string;
-  disclosed_smiles: string;
-  canonical_smiles: string | null;
-  inchi_key: string | null;
+/** A disclosure request, with its status narrowed. */
+export type DisclosureRequest = Omit<
+  import("@/shared/lib/api/model").DisclosureRequestResponse,
+  "status"
+> & {
   status: DisclosureStatus;
-  resolution_type: string | null;
-  resolved_to_molecule_id: string | null;
-  matched_molecule_id: string | null;
-  disclosing_org_id: string | null;
-  scientist_name: string | null;
-  requested_by: string;
-  requested_at: string;
-  resolved_at: string | null;
-  conflict_reason: string | null;
-  notes: string | null;
-  version: number;
-}
+};
 
 export interface DisclosureOutcome {
   disclosure_request: DisclosureRequest;

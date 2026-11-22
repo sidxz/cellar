@@ -70,35 +70,35 @@ export interface MoleculeIdentifier {
   registered_by: string;
 }
 
-export interface Molecule {
-  id: string;
-  workspace_id: string;
-  registration_number: string;
-  name: string;
+/** The molecule response, with the string fields the app treats as unions narrowed. */
+export type Molecule = Omit<
+  import("@/shared/lib/api/model").MoleculeResponse,
+  | "molecule_type"
+  | "structure"
+  | "descriptors"
+  | "structure_status"
+  | "lifecycle_stage"
+  | "molecular_formula"
+  | "stereochemistry"
+  | "invention_date"
+  | "disclosed_at"
+  | "merged_into_id"
+  | "custom_fields"
+  | "identifiers"
+> & {
   molecule_type: MoleculeType;
   structure: MoleculeStructure | null;
   descriptors: MoleculeDescriptors | null;
   molecular_formula: string | null;
   structure_status: StructureStatus;
-  registration_status: string;
-  synthesis_status: string;
   lifecycle_stage: LifecycleStage;
   stereochemistry: string | null;
   invention_date: string | null;
   disclosed_at: string | null;
   merged_into_id: string | null;
   custom_fields: Record<string, unknown> | null;
-  originating_org_id: string;
-  // Provenance: the person half (originating_org_id is the org half) and the
-  // declared disclosure date; disclosed_at stays the observed stamp.
-  scientist_name?: string | null;
-  disclosure_date?: string | null;
   identifiers: MoleculeIdentifier[];
-  version: number;
-  // Set by /api/v1/search/execute on similarity-search rows; null/absent
-  // for substructure/exact/property-only searches.
-  similarity_score?: number | null;
-}
+};
 
 export interface BatchInput {
   source: string;
