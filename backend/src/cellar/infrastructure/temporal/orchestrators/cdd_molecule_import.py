@@ -36,6 +36,10 @@ _TERMINAL_FAILURE_STATUSES = (
 )
 
 
+def _str(value: uuid.UUID | None) -> str | None:
+    return str(value) if value is not None else None
+
+
 class TemporalCddMoleculeImportOrchestrator:
     """Implements ``CddMoleculeImportOrchestrator`` against a Temporal client."""
 
@@ -58,6 +62,9 @@ class TemporalCddMoleculeImportOrchestrator:
                 entity_mappings=request.entity_mappings,
                 registration_mapping=request.registration_mapping,
                 create_batch_on_duplicate=request.create_batch_on_duplicate,
+                submitted_by_org_id=_str(request.submitted_by_org_id),
+                disclosed_by=_str(request.disclosed_by),
+                disclosed_by_org_id=_str(request.disclosed_by_org_id),
             ),
             id=workflow_id,
             task_queue=MAIN_TASK_QUEUE,
@@ -166,6 +173,9 @@ def _resume_input(
         cumulative_duplicate=request.duplicate_count,
         cumulative_error=request.error_count,
         cumulative_skipped=request.skipped_count,
+        submitted_by_org_id=_str(request.submitted_by_org_id),
+        disclosed_by=_str(request.disclosed_by),
+        disclosed_by_org_id=_str(request.disclosed_by_org_id),
     )
 
 

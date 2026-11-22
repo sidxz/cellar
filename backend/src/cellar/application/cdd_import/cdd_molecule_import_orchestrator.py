@@ -26,6 +26,10 @@ class StartCddMoleculeImportRequest:
     filter_criteria: dict | None = None
     max_molecules: int | None = None
     create_batch_on_duplicate: bool | None = None
+    # The starter's Duar org (their token) and the discloser pick (None = them).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -47,6 +51,10 @@ class ResumeCddMoleculeImportRequest:
     duplicate_count: int
     error_count: int
     skipped_count: int
+    # The resumer's Duar org (their token) and the discloser pick (stored on the import).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -59,6 +59,10 @@ class ChunkInput:
     chunk_index: int = 0
     create_batch_on_duplicate: bool | None = None
     project_ids: list[str] = field(default_factory=list)
+    # Who started it (their Duar org) and the discloser pick — workers have no token.
+    submitted_by_org_id: str | None = None
+    disclosed_by: str | None = None
+    disclosed_by_org_id: str | None = None
 
 
 @dataclass
@@ -179,6 +183,9 @@ class CreateCddImportInput:
     workflow_id: str | None = None
     filter_criteria: dict | None = None
     run_settings: dict | None = None  # what a resume restarts the run with
+    # The discloser pick, stored on the import so a resume keeps it.
+    disclosed_by: str | None = None
+    disclosed_by_org_id: str | None = None
 
 
 @dataclass

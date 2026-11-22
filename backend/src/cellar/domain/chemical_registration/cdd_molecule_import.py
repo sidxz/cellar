@@ -96,6 +96,8 @@ class CddMoleculeImport(AggregateRoot):
         cdd_export_id: int | None = None,
         run_settings: dict | None = None,
         submitted_by: uuid.UUID,
+        disclosed_by: uuid.UUID | None = None,
+        disclosed_by_org_id: uuid.UUID | None = None,
         submitted_at: datetime | None = None,
         completed_at: datetime | None = None,
         failure_reason: str | None = None,
@@ -126,6 +128,10 @@ class CddMoleculeImport(AggregateRoot):
         self.cdd_export_id = cdd_export_id
         self.run_settings = run_settings
         self.submitted_by = submitted_by
+        # The discloser pick for every compound this import registers (None = the
+        # person running it, and their Duar org). Kept so a resume uses it too.
+        self.disclosed_by = disclosed_by
+        self.disclosed_by_org_id = disclosed_by_org_id
         self.submitted_at = submitted_at or datetime.now(UTC)
         self.completed_at = completed_at
         self.failure_reason = failure_reason
@@ -146,6 +152,8 @@ class CddMoleculeImport(AggregateRoot):
         workflow_id: str | None = None,
         filter_criteria: dict | None = None,
         run_settings: dict | None = None,
+        disclosed_by: uuid.UUID | None = None,
+        disclosed_by_org_id: uuid.UUID | None = None,
     ) -> CddMoleculeImport:
         """Create a new import in PENDING status."""
         imp = cls(
@@ -157,6 +165,8 @@ class CddMoleculeImport(AggregateRoot):
             workflow_id=workflow_id,
             filter_criteria=filter_criteria,
             run_settings=run_settings,
+            disclosed_by=disclosed_by,
+            disclosed_by_org_id=disclosed_by_org_id,
         )
         imp.register_event(
             CddMoleculeImportStarted(

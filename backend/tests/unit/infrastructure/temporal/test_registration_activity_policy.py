@@ -342,3 +342,40 @@ async def test_chunk_forwards_project_ids_to_registration():
         )
 
     assert captured[0].project_ids == [project_id]
+
+
+async def test_bulk_chunk_carries_submitter_org_and_discloser_pick():
+    """Workers have no token: the starter's org and the discloser pick ride on the chunk."""
+    starter_org, discloser, discloser_org = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    outcome = _make_outcome(is_new=True, action=RegistrationAction.REGISTERED)
+    activity_instance = RegistrationActivities(
+        session_factory=AsyncMock(),
+        dispatcher=AsyncMock(),
+        structure_processor=AsyncMock(),
+        side_effect_registry=MagicMock(),
+        settings_repo_factory=MagicMock(
+            return_value=_make_ws_repo(create_batch_on_duplicate=False)
+        ),
+    )
+    chunk_input = _make_chunk_input()
+    chunk_input.submitted_by_org_id = str(starter_org)
+    chunk_input.disclosed_by = str(discloser)
+    chunk_input.disclosed_by_org_id = str(discloser_org)
+    captured: list = []
+
+    with patch.object(
+        registration_module,
+        "_create_batch",
+        AsyncMock(return_value=(BATCH_ID, "CVB-0001", False)),
+    ):
+        await _run_process_chunk_simple(
+            activity_instance, chunk_input, outcome=outcome, commands=captured
+        )
+
+    cmd = captured[0]
+    assert (cmd.registered_by_org_id, cmd.disclosed_by, cmd.disclosed_by_org_id) == (
+        starter_org,
+        discloser,
+        discloser_org,
+    )
+

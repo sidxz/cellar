@@ -12,6 +12,7 @@ from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.chemical_registration.discloser_pick import check_discloser_pick
 from cellar.application.chemical_registration.protocols import (
     DetectedSaltDTO,
     StructureProcessorProtocol,
@@ -30,6 +31,7 @@ from cellar.application.research_organization.project_links import (
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
@@ -110,6 +112,11 @@ class RegisterMoleculeCommand(Command):
     external_ids: list[ExternalId] = field(default_factory=list)
     originating_org_id: uuid.UUID
     registered_by: uuid.UUID
+    # The registrant's Duar org — from their token, or the job's starter in a worker.
+    registered_by_org_id: uuid.UUID | None = None
+    # Who disclosed it and for which Duar org; None = the registrant and their org.
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
     scientist_name: str | None = None
     # Declared (possibly historic) disclosure date; only meaningful with a structure.
     disclosure_date: date | None = None
@@ -120,6 +127,11 @@ class RegisterMoleculeCommand(Command):
     auto_approve: bool = True  # False from wizard — merge candidates need confirmation
     # Projects to put the surviving compound in (new, matched or disclosed).
     project_ids: list[uuid.UUID] = field(default_factory=list)
+
+
+def _discloser_org(input: RegisterMoleculeCommand) -> uuid.UUID | None:
+    """The Duar org the structure is disclosed for: the pick, else the registrant's."""
+    return input.disclosed_by_org_id or input.registered_by_org_id
 
 
 def _matched(forecast: RegistrationForecast) -> Molecule:
@@ -153,7 +165,9 @@ class RegisterMolecule:
         disclosure_service: DisclosureService | None = None,
         workspace_settings_repo: WorkspaceSettingsRepository | None = None,
         project_access: ProjectAccess | None = None,
+        org_directory: OrgDirectoryPort | None = None,
     ) -> None:
+        self._org_directory = org_directory
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
@@ -183,6 +197,13 @@ class RegisterMolecule:
         )
         if input.molecule_type not in MoleculeType:
             return Failure(ValidationError(f"Unknown molecule type '{input.molecule_type}'"))
+        if err := await check_discloser_pick(
+            auth,
+            self._org_directory,
+            disclosed_by=input.disclosed_by,
+            disclosed_by_org_id=input.disclosed_by_org_id,
+        ):
+            return Failure(err)
         if input.project_ids and self._project_access is not None and auth is not None:
             # Read-only: enter and leave the UoW without committing.
             async with self._uow:
@@ -329,7 +350,7 @@ class RegisterMolecule:
             molecule_id=molecule_id,
             disclosed_smiles=input.smiles,  # type: ignore[arg-type]
             requested_by=input.registered_by,
-            disclosing_org_id=input.originating_org_id,
+            disclosing_org_id=_discloser_org(input),
             scientist_name=input.scientist_name,
             notes="Auto-recorded during registration",
             disclosure_date=input.disclosure_date,
@@ -467,6 +488,10 @@ class RegisterMolecule:
                     scientist_name=input.scientist_name,
                     disclosure_date=input.disclosure_date,
                     stereochemistry=processed.stereochemistry,
+                    registered_by=input.registered_by,
+                    registered_by_org_id=input.registered_by_org_id,
+                    disclosed_by=input.disclosed_by,
+                    disclosed_by_org_id=input.disclosed_by_org_id,
                 )
                 mol.morgan_fp = processed.fingerprints.morgan
                 mol.bemis_murcko_smiles = processed.bemis_murcko_smiles
@@ -502,7 +527,7 @@ class RegisterMolecule:
                     molecule_id=delegate_to_disclosure.id,
                     disclosed_smiles=input.smiles,  # type: ignore[arg-type]
                     requested_by=input.registered_by,
-                    disclosing_org_id=input.originating_org_id,
+                    disclosing_org_id=_discloser_org(input),
                     scientist_name=input.scientist_name,
                     auto_approve=input.auto_approve,
                     notes="Auto-detected via identifier match during registration",
@@ -619,6 +644,8 @@ class RegisterMolecule:
                 originating_org_id=input.originating_org_id,
                 custom_fields=input.custom_fields,
                 scientist_name=input.scientist_name,
+                registered_by=input.registered_by,
+                registered_by_org_id=input.registered_by_org_id,
             )
             skipped, added = await self._add_name_and_ids(mol, input, source="name")
 

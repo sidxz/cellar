@@ -25,6 +25,10 @@ class StartBulkRegistrationRequest:
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
     project_ids: list[uuid.UUID] = field(default_factory=list)
     column_mapping: dict | None = None  # ColumnMapping.to_dict(); None = default headers
+    # The starter's Duar org (their token) and the discloser pick (None = them).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

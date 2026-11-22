@@ -101,6 +101,7 @@ from cellar.application.inventory.sync_batch_identifier_mirrors import (
     SyncBatchIdentifierMirrors,
 )
 from cellar.application.research_organization.project_links import ProjectAccess
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.messaging.merge_handlers import (
@@ -255,6 +256,7 @@ def register_chemical_registration(container: Container) -> None:
             project_access=ProjectAccess(
                 SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
             ),
+            org_directory=c[OrgDirectoryPort],
         )
 
     container.define(RegisterMolecule, _register_molecule)
@@ -585,6 +587,7 @@ def register_chemical_registration(container: Container) -> None:
             project_access=ProjectAccess(
                 SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
             ),
+            org_directory=c[OrgDirectoryPort],
         )
 
     container.define(StartBulkRegistration, _start_bulk_registration)

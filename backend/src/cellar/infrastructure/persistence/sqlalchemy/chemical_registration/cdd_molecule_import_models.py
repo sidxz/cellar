@@ -41,6 +41,8 @@ class CddMoleculeImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
     cdd_export_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     run_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    disclosed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    disclosed_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)  # Duar org, no FK
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

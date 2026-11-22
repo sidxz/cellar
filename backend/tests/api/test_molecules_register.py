@@ -9,7 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.api.conftest import _create_test_app
+from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -285,3 +285,45 @@ async def test_disclosing_an_undisclosed_compound_links_it(
     assert disclosed.status_code == 201, disclosed.text
     assert disclosed.json()["action"] == "disclosed"
     assert await _project_ids_of(client, undisclosed.json()["molecule"]["id"]) == {proj}
+
+
+@pytest.mark.asyncio
+async def test_register_stamps_registered_by_and_org_from_token(
+    client: AsyncClient, originating_org_id: str
+):
+    body = {"name": "Stamped-1", "smiles": "CCCO", "originating_org_id": originating_org_id}
+    resp = await client.post("/api/v1/molecules", json=body)
+    assert resp.status_code == 201, resp.text
+    mol = resp.json()["molecule"]
+    assert mol["registered_by_org_id"] == str(AUTH_ORG_ID)
+    assert (mol["disclosed_by"], mol["disclosed_by_org_id"]) == (
+        mol["registered_by"],
+        str(AUTH_ORG_ID),
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_with_picked_discloser_org(client: AsyncClient, originating_org_id: str):
+    body = {
+        "name": "Stamped-2",
+        "smiles": "CCCCO",
+        "originating_org_id": originating_org_id,
+        "disclosed_by_org_id": str(OTHER_ORG_ID),
+    }
+    resp = await client.post("/api/v1/molecules", json=body)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["molecule"]["disclosed_by_org_id"] == str(OTHER_ORG_ID)
+
+
+@pytest.mark.asyncio
+async def test_register_with_unknown_discloser_org_is_422(
+    client: AsyncClient, originating_org_id: str
+):
+    body = {
+        "name": "Stamped-3",
+        "smiles": "CCCCCO",
+        "originating_org_id": originating_org_id,
+        "disclosed_by_org_id": str(uuid.uuid4()),
+    }
+    assert (await client.post("/api/v1/molecules", json=body)).status_code == 422
+

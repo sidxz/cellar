@@ -48,6 +48,9 @@ class CddMoleculeImportFilter(BaseModel):
 
 class StartCddMoleculeImportBody(BaseModel):
     originating_org_id: uuid.UUID
+    # Who disclosed the structures and for which Duar org; omitted = you and your org.
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
     import_mode: str = "full_vault"
     filter_criteria: CddMoleculeImportFilter | None = None  # with import_mode "filtered"
     max_molecules: int | None = None  # limit for testing; None = import all
@@ -179,6 +182,9 @@ async def start_cdd_molecule_import(
         import_mode=body.import_mode,
         filter_criteria=body.filter_criteria.model_dump() if body.filter_criteria else None,
         max_molecules=body.max_molecules,
+        submitted_by_org_id=auth.org_id,
+        disclosed_by=body.disclosed_by,
+        disclosed_by_org_id=body.disclosed_by_org_id,
     )
     result = await use_case(cmd, auth=auth)
     outcome = result_to_response(result)

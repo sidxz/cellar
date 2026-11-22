@@ -251,3 +251,19 @@ async def test_a_poll_of_the_old_workflow_leaves_the_resumed_import_alone() -> N
 
     await sync.run(WS, str(imp.id), "wf-2")
     assert imp.status is CddMoleculeImportStatus.FAILED
+
+
+async def test_cdd_resume_uses_stored_discloser_pick() -> None:
+    """The discloser pick stays the starter's; the registrant's org is the resumer's."""
+    imp = _import()
+    jane, partner, resumer_org = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    imp.disclosed_by, imp.disclosed_by_org_id = jane, partner
+    repo, orch = _Repo(imp), _Orchestrator()
+    auth = FakeAuth(role="editor", user_id=RESUMER, workspace_id=WS, org_id=resumer_org)
+
+    await _use_case(repo, orch)(_cmd(imp), auth=auth)
+
+    (request,) = orch.requests
+    assert (request.disclosed_by, request.disclosed_by_org_id) == (jane, partner)
+    assert request.submitted_by_org_id == resumer_org
+

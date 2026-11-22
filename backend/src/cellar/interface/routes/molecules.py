@@ -441,6 +441,9 @@ class RegisterMoleculeBody(BaseModel):
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
     originating_org_id: uuid.UUID
+    # Who disclosed it and for which Duar org; omitted = you and your org.
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
     scientist_name: str | None = Field(default=None, max_length=200)
     disclosure_date: date | None = None  # declared; requires smiles
     custom_fields: dict | None = None
@@ -546,6 +549,9 @@ async def register_molecule(
         disclosure_date=body.disclosure_date,
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
+        registered_by_org_id=auth.org_id,
+        disclosed_by=body.disclosed_by,
+        disclosed_by_org_id=body.disclosed_by_org_id,
         auto_approve=body.auto_approve,
         project_ids=body.project_ids,
     )

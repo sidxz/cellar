@@ -13,7 +13,9 @@ from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     StartCddMoleculeImportRequest,
 )
 from cellar.application.cdd_import.molecule_identifiers import MAX_IDENTIFIERS, clean_identifiers
+from cellar.application.chemical_registration.discloser_pick import check_discloser_pick
 from cellar.application.shared.command import Command
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.workspace_config.get_data_source_for_import import (
     GetDataSourceForImport,
     GetDataSourceForImportQuery,
@@ -31,6 +33,10 @@ class StartCddMoleculeImportCommand(Command):
     # With import_mode "filtered": {"names": [...]}, molecule names or synonyms in the vault.
     filter_criteria: dict | None = None
     max_molecules: int | None = None  # limit for testing; None = import all
+    # The starter's Duar org (their token) and the discloser pick (None = them).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -52,9 +58,11 @@ class StartCddMoleculeImport:
         self,
         get_data_source: GetDataSourceForImport,
         orchestrator: CddMoleculeImportOrchestrator,
+        org_directory: OrgDirectoryPort | None = None,
     ) -> None:
         self._get_data_source = get_data_source
         self._orchestrator = orchestrator
+        self._org_directory = org_directory
 
     async def __call__(
         self,
@@ -66,6 +74,14 @@ class StartCddMoleculeImport:
 
         if input.import_mode not in ("full_vault", "filtered", "sync"):
             return Failure(ValidationError(f"Invalid import_mode: {input.import_mode}"))
+        # Checked once here: the worker registers every molecule with this pick.
+        if err := await check_discloser_pick(
+            auth,
+            self._org_directory,
+            disclosed_by=input.disclosed_by,
+            disclosed_by_org_id=input.disclosed_by_org_id,
+        ):
+            return Failure(err)
 
         # A filter that is not applied would import the whole vault, so the two go together.
         names: list[str] | None = None
@@ -115,6 +131,9 @@ class StartCddMoleculeImport:
             filter_criteria={"names": names} if names else None,
             max_molecules=input.max_molecules,
             create_batch_on_duplicate=config.data_source.create_batch_on_duplicate,
+            submitted_by_org_id=input.submitted_by_org_id,
+            disclosed_by=input.disclosed_by,
+            disclosed_by_org_id=input.disclosed_by_org_id,
         )
 
         workflow_id = await self._orchestrator.start(request)

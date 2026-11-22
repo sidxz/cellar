@@ -156,6 +156,9 @@ async def start_bulk_registration(
     file: UploadFile = File(...),
     originating_org_id: uuid.UUID = Form(...),
     file_format: str = Form(...),
+    # Who disclosed the structures and for which Duar org; omitted = you and your org.
+    disclosed_by: uuid.UUID | None = Form(None),
+    disclosed_by_org_id: uuid.UUID | None = Form(None),
     create_batch_on_duplicate: bool | None = Form(None),
     project_ids: list[uuid.UUID] = Form([]),
     column_mapping: str | None = Form(
@@ -181,6 +184,9 @@ async def start_bulk_registration(
         create_batch_on_duplicate=create_batch_on_duplicate,
         column_mapping=_parse_column_mapping(column_mapping),
         project_ids=project_ids,
+        submitted_by_org_id=auth.org_id,
+        disclosed_by=disclosed_by,
+        disclosed_by_org_id=disclosed_by_org_id,
     )
 
     result = await use_case(cmd, auth=auth)

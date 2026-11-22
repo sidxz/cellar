@@ -77,6 +77,10 @@ logger = structlog.get_logger(__name__)
 _PASSING = (ServiceUnavailableError, ConcurrencyConflictError)
 
 
+def _uuid(value: str | None) -> uuid.UUID | None:
+    return uuid.UUID(value) if value else None
+
+
 class RegistrationActivities:
     """Temporal activities for molecule registration."""
 
@@ -143,6 +147,9 @@ class RegistrationActivities:
         ws_id = uuid.UUID(input.workspace_id)
         org_id = uuid.UUID(input.originating_org_id)
         submitted_by = uuid.UUID(input.submitted_by)
+        submitted_by_org_id = _uuid(input.submitted_by_org_id)
+        disclosed_by = _uuid(input.disclosed_by)
+        disclosed_by_org_id = _uuid(input.disclosed_by_org_id)
 
         # Read workspace settings once per chunk to determine batch creation policy.
         ws_uow = AsyncUnitOfWork(session_factory)
@@ -184,6 +191,9 @@ class RegistrationActivities:
                 external_ids=external_ids(item.external_ids),
                 originating_org_id=org_id,
                 registered_by=submitted_by,
+                registered_by_org_id=submitted_by_org_id,
+                disclosed_by=disclosed_by,
+                disclosed_by_org_id=disclosed_by_org_id,
                 promote_name_as_identifier=has_explicit_name,
                 project_ids=[uuid.UUID(p) for p in input.project_ids],
             )
