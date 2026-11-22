@@ -8,7 +8,9 @@ import pytest
 
 from cellar.application.auth import (
     LOAN_APPROVE_ACTION,
+    is_workspace_member,
     require_admin,
+    require_admin_or_user,
     require_editor,
     require_loan_authority,
     require_same_user,
@@ -17,7 +19,6 @@ from cellar.application.auth import (
 )
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError
 from tests.fakes.fake_auth import FakeAuth
-
 
 
 class TestRequireWorkspaceRole:
@@ -117,3 +118,37 @@ class TestRequireLoanAuthority:
         auth = FakeAuth(role="viewer", org_id=org, granted_actions={LOAN_APPROVE_ACTION})
         with pytest.raises(AuthorizationError):
             await require_loan_authority(auth, org)
+
+
+class TestRequireAdminOrUser:
+    def test_admin_may_change_anyones_record(self) -> None:
+        require_admin_or_user(FakeAuth(role="admin"), uuid.uuid4())
+
+    def test_the_creator_may_change_their_record(self) -> None:
+        auth = FakeAuth(role="editor")
+        require_admin_or_user(auth, auth.user_id)
+
+    def test_another_editor_is_refused(self) -> None:
+        with pytest.raises(AuthorizationError):
+            require_admin_or_user(FakeAuth(role="editor"), uuid.uuid4())
+
+    def test_record_without_creator_only_admin(self) -> None:
+        with pytest.raises(AuthorizationError):
+            require_admin_or_user(FakeAuth(role="editor"), None)
+        require_admin_or_user(FakeAuth(role="admin"), None)
+
+    def test_workers_bypass(self) -> None:
+        require_admin_or_user(None, uuid.uuid4())
+
+
+class TestIsWorkspaceMember:
+    @pytest.mark.asyncio
+    async def test_listed_member_is_a_member(self) -> None:
+        member = uuid.uuid4()
+        auth = FakeAuth(members=[{"user_id": str(member)}])
+        assert await is_workspace_member(auth, member) is True
+
+    @pytest.mark.asyncio
+    async def test_unlisted_user_is_not(self) -> None:
+        auth = FakeAuth(members=[{"user_id": str(uuid.uuid4())}])
+        assert await is_workspace_member(auth, uuid.uuid4()) is False

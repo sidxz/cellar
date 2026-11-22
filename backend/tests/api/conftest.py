@@ -255,9 +255,10 @@ def _create_test_app(
     app.dependency_overrides[get_auth] = lambda: fake_auth
 
     # Stub the Duar org directory for the /api/v1/orgs route too.
-    from cellar.interface.dependencies import get_org_directory
+    from cellar.interface.dependencies import get_org_directory, get_org_directory_all
 
     app.dependency_overrides[get_org_directory] = lambda: STUB_ORG_DIRECTORY
+    app.dependency_overrides[get_org_directory_all] = lambda: STUB_ORG_DIRECTORY
 
     return app
 

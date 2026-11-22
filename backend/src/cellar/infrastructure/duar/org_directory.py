@@ -21,6 +21,7 @@ class OrgSummary:
     slug: str
     name: str
     is_public: bool
+    enabled: bool = True
 
 
 class OrgDirectory:
@@ -63,6 +64,7 @@ class OrgDirectory:
                 slug=o["slug"],
                 name=o["name"],
                 is_public=bool(o["is_public"]),
+                enabled=bool(o.get("enabled", True)),
             )
             for o in resp.json()
         ]

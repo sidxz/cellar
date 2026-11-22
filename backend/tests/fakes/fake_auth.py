@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 _ROLE_HIERARCHY: dict[str, int] = {
     "viewer": 0,
@@ -26,6 +27,7 @@ class FakeAuth:
         granted_actions: set[str] | None = None,
         email: str = "test@example.com",
         name: str = "Test User",
+        members: list[dict[str, Any]] | None = None,
     ) -> None:
         self._user_id = user_id or uuid.uuid4()
         self._workspace_id = workspace_id or uuid.uuid4()
@@ -35,6 +37,7 @@ class FakeAuth:
         self._granted_actions = granted_actions
         self.email = email
         self.name = name
+        self._members = members or []
 
     @property
     def user_id(self) -> uuid.UUID:
@@ -61,3 +64,6 @@ class FakeAuth:
         # None = permissive default (legacy fixtures never think about actions);
         # pass an explicit set to test denial paths.
         return True if self._granted_actions is None else action in self._granted_actions
+
+    async def list_members(self, limit: int | None = None) -> list[dict[str, Any]]:
+        return self._members if limit is None else self._members[:limit]
