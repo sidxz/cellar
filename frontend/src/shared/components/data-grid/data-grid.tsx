@@ -19,7 +19,7 @@ import {
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import { Search } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cellarTheme } from "./ag-grid-theme";
+import { cellarTheme, cellarThemeColumnBorders } from "./ag-grid-theme";
 import { focusFromBelow, tabThroughRows } from "./tab-through-rows";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -79,6 +79,10 @@ export interface DataGridProps<TData = unknown>
    * version whenever the parent wants to reset selection.
    */
   clearSelectionToken?: unknown;
+  /** Draw a line between every two columns. */
+  columnBorders?: boolean;
+  /** Fill the parent's height (a flex column with a definite height) instead of `height`. */
+  fill?: boolean;
 }
 
 export function DataGrid<TData = unknown>({
@@ -98,6 +102,8 @@ export function DataGrid<TData = unknown>({
   toolbarActions,
   toolbarLeft,
   clearSelectionToken,
+  columnBorders = false,
+  fill = false,
   ...rest
 }: DataGridProps<TData>) {
   const selectionEnabled = !!selectionToolbar || !!enableMultiSelect;
@@ -106,6 +112,7 @@ export function DataGrid<TData = unknown>({
     onSelectionChanged: consumerOnSelectionChanged,
     onRowSelected: consumerOnRowSelected,
     onModelUpdated: consumerOnModelUpdated,
+    onGridReady: consumerOnGridReady,
     rowSelection: _rowSelectionFromRest,
     ...restWithoutSelection
   } = rest;
@@ -223,8 +230,9 @@ export function DataGrid<TData = unknown>({
       } else {
         event.api.sizeColumnsToFit();
       }
+      consumerOnGridReady?.(event);
     },
-    [hasPrefs, prefs, gridRef],
+    [hasPrefs, prefs, gridRef, consumerOnGridReady],
   );
 
   const handleSelectionChanged = useCallback(
@@ -324,7 +332,7 @@ export function DataGrid<TData = unknown>({
   }
 
   return (
-    <div>
+    <div className={fill ? "flex h-full min-h-0 flex-col" : undefined}>
       {toolbar}
       {selectionToolbar && !enableMultiSelect && selectedRows.length > 0 ? (
         <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
@@ -333,14 +341,15 @@ export function DataGrid<TData = unknown>({
       ) : null}
       <div
         ref={wrapRef}
-        style={{ height, width: "100%" }}
+        className={fill ? "min-h-0 flex-1" : undefined}
+        style={fill ? { width: "100%" } : { height, width: "100%" }}
         onKeyDownCapture={
           cellFocus ? undefined : (e) => tabThroughRows(e, gridRef.current?.api ?? undefined)
         }
       >
         <AgGridReact<TData>
           ref={gridRef}
-          theme={cellarTheme}
+          theme={columnBorders ? cellarThemeColumnBorders : cellarTheme}
           // AG Grid's default `content-visibility: auto` lets Chrome skip the grid's
           // contents; a grid created during an in-app navigation (production build)
           // then stayed blank until a reload.
