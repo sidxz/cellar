@@ -41,7 +41,6 @@ const baseMol: Molecule = {
   disclosed_at: null,
   merged_into_id: null,
   custom_fields: null,
-  originating_org_id: "org-1",
   identifiers: [],
   version: 1,
 };

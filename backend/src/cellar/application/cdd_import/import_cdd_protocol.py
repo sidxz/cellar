@@ -173,6 +173,7 @@ class ImportCddProtocol:
                 protocol_type=protocol_type,
                 category=mapping.category,
                 created_by=auth.user_id,
+                created_by_org_id=auth.org_id,
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs,
             )

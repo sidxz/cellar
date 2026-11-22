@@ -42,6 +42,7 @@ __all__ = [
     "EventDispatcherDep",
     "FingerprintRegistryDep",
     "GetPreferencesDep",
+    "OrgDirectoryAllDep",
     "OrgDirectoryDep",
     "SaltMatcherUoWDep",
     "SessionFactoryDep",
@@ -53,6 +54,7 @@ __all__ = [
     "get_container",
     "get_event_dispatcher",
     "get_org_directory",
+    "get_org_directory_all",
     "get_preferences_command",
     "get_preferences_query",
     "get_salt_matcher_uow",
@@ -159,9 +161,14 @@ else:
 # Duar org directory (read-only list of orgs for pickers/labels) — same
 # "configured only if DUAR_SERVICE_KEY is set" guard as `_duar` above.
 _org_directory: OrgDirectory | None = None
+# Disabled orgs too, so a record whose org was disabled since still shows its name.
+_org_directory_all: OrgDirectory | None = None
 if _duar is not None:
     _settings = DuarSettings()
     _org_directory = OrgDirectory(base_url=_settings.url, service_key=_settings.service_key)
+    _org_directory_all = OrgDirectory(
+        base_url=_settings.url, service_key=_settings.service_key, include_disabled=True
+    )
 
 
 def get_org_directory() -> OrgDirectory:
@@ -173,6 +180,17 @@ def get_org_directory() -> OrgDirectory:
 
 
 OrgDirectoryDep = Annotated[OrgDirectory, Depends(get_org_directory)]
+
+
+def get_org_directory_all() -> OrgDirectory:
+    if _org_directory_all is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Duar auth not configured.")
+    return _org_directory_all
+
+
+OrgDirectoryAllDep = Annotated[OrgDirectory, Depends(get_org_directory_all)]
 
 
 async def get_auth(

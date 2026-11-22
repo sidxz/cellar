@@ -15,6 +15,7 @@ from cellar.application.chemical_registration.bulk_registration_mappings import 
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationService,
 )
+from cellar.application.chemical_registration.change_discloser import ChangeDiscloser
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from cellar.application.chemical_registration.create_relationship import CreateRelationship
 from cellar.application.chemical_registration.decide_merge_candidates import (
@@ -71,6 +72,7 @@ __all__ = [
     "AddIdentifierDep",
     # Bulk registration
     "BulkRegistrationServiceDep",
+    "ChangeDiscloserDep",
     "ConfirmDisclosureDep",
     "CreateBulkRegistrationMappingDep",
     "CreateRelationshipDep",
@@ -118,6 +120,7 @@ GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
 ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules))]
 ListMoleculesByIdsDep = Annotated[ListMoleculesByIds, Depends(_get_use_case(ListMoleculesByIds))]
 UpdateMoleculeDep = Annotated[UpdateMolecule, Depends(_get_use_case(UpdateMolecule))]
+ChangeDiscloserDep = Annotated[ChangeDiscloser, Depends(_get_use_case(ChangeDiscloser))]
 SearchMoleculesDep = Annotated[SearchMolecules, Depends(_get_use_case(SearchMolecules))]
 DepictMoleculesDep = Annotated[DepictMolecules, Depends(_get_use_case(DepictMolecules))]
 ExportMoleculesSDFDep = Annotated[ExportMoleculesSDF, Depends(_get_use_case(ExportMoleculesSDF))]

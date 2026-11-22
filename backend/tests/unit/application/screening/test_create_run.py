@@ -62,6 +62,7 @@ class FakeAuth:
     workspace_id: uuid.UUID = field(default_factory=uuid.uuid4)
     workspace_role: str = "editor"
     is_admin: bool = False
+    org_id: uuid.UUID | None = None
 
     def has_role(self, minimum_role: str) -> bool:
         roles = ["viewer", "editor", "admin"]
@@ -223,3 +224,14 @@ class TestCreateRunFixedConditions:
         uc, _, _ = _build_uc()
         result = await uc(_cmd(auth, []), auth=auth)
         assert result.unwrap().conditions is None
+
+
+class TestCreateRunOperatorOrg:
+    """The run keeps the org its operator belonged to when it was created."""
+
+    @pytest.mark.asyncio
+    async def test_the_run_records_the_operators_org(self) -> None:
+        auth = FakeAuth(org_id=uuid.uuid4())
+        uc, _, _ = _build_uc()
+        result = await uc(_cmd(auth, []), auth=auth)
+        assert result.unwrap().performed_at_org_id == auth.org_id

@@ -33,9 +33,9 @@ N = 20_000
 _INSERT_MOLECULES = sa.text(
     "INSERT INTO molecules (id, workspace_id, name, molecule_type, structure_status, "
     "registration_status, synthesis_status, lifecycle_stage, registration_number, "
-    "originating_org_id, version) "
+    "version) "
     "SELECT gen_random_uuid(), :ws, 'm' || g, 'small_molecule', 'undisclosed', 'approved', "
-    "'virtual', 'registered', :tag || g, :org, 1 "
+    "'virtual', 'registered', :tag || g, 1 "
     "FROM generate_series(1, :n) g RETURNING id"
 )
 

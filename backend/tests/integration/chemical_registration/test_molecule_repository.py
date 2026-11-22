@@ -49,9 +49,9 @@ async def _insert_molecule_raw(
             "INSERT INTO molecules "
             "(id, workspace_id, name, molecule_type, structure_status, "
             "registration_status, synthesis_status, lifecycle_stage, "
-            "registration_number, originating_org_id, merged_into_id, inchi_key, version) "
+            "registration_number, merged_into_id, inchi_key, version) "
             "VALUES (:id, :ws, :name, 'small_molecule', :ss, "
-            "'approved', 'virtual', 'registered', :reg, :org, :merged, :inchi_key, 1)"
+            "'approved', 'virtual', 'registered', :reg, :merged, :inchi_key, 1)"
         ),
         {
             "id": mol_id,

@@ -4,7 +4,11 @@ import uuid
 
 import pytest
 
-from cellar.domain.research_organization.events import ProjectArchived, ProjectCreated
+from cellar.domain.research_organization.events import (
+    ProjectArchived,
+    ProjectCreated,
+    ProjectOwnerChanged,
+)
 from cellar.domain.research_organization.project import Project, ProjectStatus
 from cellar.domain.shared.errors import ValidationError
 
@@ -120,3 +124,25 @@ class TestProjectArchive:
         project.archive(archived_by=user_id)
         with pytest.raises(ValidationError, match="already archived"):
             project.archive(archived_by=user_id)
+
+
+class TestProjectOwner:
+    def test_owner_change_records_old_and_new(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        old, new = uuid.uuid4(), uuid.uuid4()
+        p = Project.create(
+            workspace_id=ws_id, name="TB", created_by=user_id, created_by_org_id=old
+        )
+        assert p.owner_org_id == old
+        p.clear_events()
+        p.change_owner(new)
+        (event,) = p.collect_events()
+        assert isinstance(event, ProjectOwnerChanged)
+        assert event.audit_changes() == [("owner_org_id", str(old), str(new))]
+
+    def test_archived_project_owner_change_refused(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        p = Project.create(workspace_id=ws_id, name="TB", created_by=user_id)
+        p.archive(archived_by=user_id)
+        with pytest.raises(ValidationError):
+            p.change_owner(uuid.uuid4())

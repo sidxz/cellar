@@ -442,3 +442,16 @@ class TestPendingConfirmation:
                 canonical_smiles="CCO",
                 inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
             )
+
+
+def test_request_org_defaults_to_requester_org() -> None:
+    requester_org = uuid.uuid4()
+    dr = DisclosureRequest.create(
+        workspace_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+        disclosed_smiles="CCO",
+        requested_by=uuid.uuid4(),
+        requested_by_org_id=requester_org,
+    )
+    assert (dr.requested_by_org_id, dr.disclosing_org_id) == (requester_org, requester_org)
+

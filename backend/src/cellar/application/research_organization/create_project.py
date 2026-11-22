@@ -57,6 +57,7 @@ class CreateProject:
                 name=input.name,
                 description=input.description,
                 created_by=input.created_by,
+                created_by_org_id=auth.org_id if auth else None,
             )
             await self._repo.save(project)
 

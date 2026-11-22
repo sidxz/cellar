@@ -255,9 +255,10 @@ def _create_test_app(
     app.dependency_overrides[get_auth] = lambda: fake_auth
 
     # Stub the Duar org directory for the /api/v1/orgs route too.
-    from cellar.interface.dependencies import get_org_directory
+    from cellar.interface.dependencies import get_org_directory, get_org_directory_all
 
     app.dependency_overrides[get_org_directory] = lambda: STUB_ORG_DIRECTORY
+    app.dependency_overrides[get_org_directory_all] = lambda: STUB_ORG_DIRECTORY
 
     return app
 
@@ -422,6 +423,23 @@ async def editor_client_other_org(
         role="editor", workspace_id=workspace_id, user_id=user_id, org_id=OTHER_ORG_ID
     )
     app = _create_test_app(database_url, editor_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
+
+
+@pytest.fixture
+async def other_editor_client(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """An editor in the same workspace who is a *different person* from ``client``'s
+    user — for "only the creator or an admin" rules."""
+    auth = FakeAuth(
+        role="editor", workspace_id=workspace_id, user_id=uuid.uuid4(), org_id=OTHER_ORG_ID
+    )
+    app = _create_test_app(database_url, auth)
     transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

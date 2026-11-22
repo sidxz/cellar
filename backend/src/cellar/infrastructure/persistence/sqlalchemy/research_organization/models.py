@@ -92,6 +92,9 @@ class ProjectModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    # Duar org ids (no FK — orgs live in Duar).
+    created_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    owner_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     archived_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -108,10 +111,10 @@ class CollectionModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("projects.id", ondelete="SET NULL")
     )
-    owned_by_org_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("organizations.id", ondelete="SET NULL")
-    )
+    # Duar org ids (no FK — orgs live in Duar).
+    owner_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    created_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, server_default="private")
     type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="generic")
     is_frozen: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))

@@ -58,7 +58,6 @@ def _disclosed(name: str = "Known-001") -> Molecule:
         molecule_type=MoleculeType.SMALL_MOLECULE,
         structure=_STRUCTURE,
         descriptors=_DESCRIPTORS,
-        originating_org_id=ORG_ID,
     )
 
 
@@ -68,7 +67,6 @@ def _undisclosed(name: str = "Partner-001") -> Molecule:
         registration_number=RegistrationNumber(value="CC-000002"),
         name=name,
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
 
 

@@ -40,7 +40,6 @@ class CreateRunCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     run_date: date
-    performed_at_org_id: uuid.UUID | None = None
     parent_run_id: uuid.UUID | None = None
     run_relationship_type: str | None = None
     plate_format: str | None = None
@@ -101,7 +100,9 @@ class CreateRun:
                 protocol_id=input.protocol_id,
                 run_date=input.run_date,
                 operator=auth.user_id,
-                performed_at_org_id=input.performed_at_org_id,
+                # The operator's Duar org as of now: a user who later moves org
+                # keeps this run under the org they ran it for.
+                performed_at_org_id=auth.org_id,
                 parent_run_id=input.parent_run_id,
                 run_relationship_type=(
                     RunRelationshipType(input.run_relationship_type)

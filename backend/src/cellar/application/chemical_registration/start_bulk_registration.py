@@ -31,6 +31,7 @@ from cellar.application.chemical_registration.bulk_registration_service import (
 from cellar.application.chemical_registration.bulk_registration_service import (
     StartBulkRegistrationCommand as SyncStartBulkRegistrationCommand,
 )
+from cellar.application.chemical_registration.discloser_pick import check_discloser_pick
 from cellar.application.chemical_registration.preview_bulk_registration_file import (
     BulkFileParserProtocol,
 )
@@ -39,6 +40,7 @@ from cellar.application.orchestration.workflow_status import (
 )
 from cellar.application.research_organization.project_links import ProjectAccess
 from cellar.application.shared.command import Command
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.domain.shared.errors import DomainError, ValidationError
@@ -49,7 +51,6 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 @dataclass(frozen=True, kw_only=True)
 class StartBulkRegistrationFromFileCommand(Command):
     workspace_id: uuid.UUID
-    originating_org_id: uuid.UUID
     submitted_by: uuid.UUID
     filename: str
     file_format: str
@@ -57,6 +58,10 @@ class StartBulkRegistrationFromFileCommand(Command):
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
     project_ids: list[uuid.UUID] = field(default_factory=list)
     column_mapping: ColumnMapping | None = None  # None = the file's headers as named
+    # The starter's Duar org (their token) and the discloser pick (None = them).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -83,7 +88,9 @@ class StartBulkRegistration:
         parser: BulkFileParserProtocol,
         uow: UnitOfWork,
         project_access: ProjectAccess,
+        org_directory: OrgDirectoryPort | None = None,
     ) -> None:
+        self._org_directory = org_directory
         self._orchestrator = orchestrator
         self._sync_service = sync_service
         self._parser = parser
@@ -100,6 +107,14 @@ class StartBulkRegistration:
 
         if not input.content:
             return Failure(ValidationError("file is empty"))
+        # Checked once here: the worker registers every row with this pick and no token.
+        if err := await check_discloser_pick(
+            auth,
+            self._org_directory,
+            disclosed_by=input.disclosed_by,
+            disclosed_by_org_id=input.disclosed_by_org_id,
+        ):
+            return Failure(err)
         if len(input.content) > _MAX_UPLOAD_BYTES:
             return Failure(
                 ValidationError(f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB)")
@@ -141,13 +156,15 @@ class StartBulkRegistration:
 
         request = StartBulkRegistrationRequest(
             workspace_id=input.workspace_id,
-            originating_org_id=input.originating_org_id,
             submitted_by=input.submitted_by,
             filename=input.filename,
             file_format=input.file_format,
             content=input.content,
             create_batch_on_duplicate=input.create_batch_on_duplicate,
             project_ids=input.project_ids,
+            submitted_by_org_id=input.submitted_by_org_id,
+            disclosed_by=input.disclosed_by,
+            disclosed_by_org_id=input.disclosed_by_org_id,
             column_mapping=input.column_mapping.to_dict() if input.column_mapping else None,
         )
 
@@ -198,9 +215,11 @@ class StartBulkRegistration:
                 file_format=input.file_format,
                 items=items,
                 submitted_by=input.submitted_by,
-                originating_org_id=input.originating_org_id,
                 create_batch_on_duplicate=input.create_batch_on_duplicate,
                 project_ids=input.project_ids,
+                submitted_by_org_id=input.submitted_by_org_id,
+                disclosed_by=input.disclosed_by,
+                disclosed_by_org_id=input.disclosed_by_org_id,
             ),
             auth=auth,
         )

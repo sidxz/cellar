@@ -21,6 +21,7 @@ from cellar.application.chemical_registration.merge_service import MergeCommand,
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.org_directory import OrgDirectoryPort, unpickable_org
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
 from cellar.domain.chemical_registration.enums import MergeReason, StructureStatus
@@ -43,7 +44,10 @@ class SubmitDisclosureCommand(Command):
     molecule_id: uuid.UUID
     disclosed_smiles: str
     requested_by: uuid.UUID
-    disclosing_org_id: uuid.UUID | None = None
+    requested_by_org_id: uuid.UUID | None = None  # the requester's Duar org
+    # Who disclosed it, when a registrant named someone else; None = the requester.
+    disclosed_by: uuid.UUID | None = None
+    disclosing_org_id: uuid.UUID | None = None  # Duar org; None = the requester's
     scientist_name: str | None = None
     auto_approve: bool = True
     notes: str | None = None
@@ -86,7 +90,9 @@ class DisclosureService:
         structure_processor: StructureProcessorProtocol,
         merge_service: MergeService,
         dispatcher: EventDispatcherProtocol,
+        org_directory: OrgDirectoryPort | None = None,
     ) -> None:
+        self._org_directory = org_directory
         self._uow = uow
         self._molecule_repo = molecule_repo
         self._disclosure_repo = disclosure_repo
@@ -106,6 +112,13 @@ class DisclosureService:
         """
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+        if (
+            input.disclosing_org_id is not None
+            and input.disclosing_org_id != input.requested_by_org_id
+            and self._org_directory is not None
+            and (err := await unpickable_org(self._org_directory, input.disclosing_org_id))
+        ):
+            return Failure(err)
 
         # --- Process SMILES before opening the UoW (pure computation) ---
         process_result = self._structure_processor.process(input.disclosed_smiles)
@@ -136,6 +149,7 @@ class DisclosureService:
                 molecule_id=input.molecule_id,
                 disclosed_smiles=input.disclosed_smiles,
                 requested_by=input.requested_by,
+                requested_by_org_id=input.requested_by_org_id,
                 disclosing_org_id=input.disclosing_org_id,
                 scientist_name=input.scientist_name,
                 notes=input.notes,
@@ -166,7 +180,8 @@ class DisclosureService:
                     molecule.disclose(
                         structure=processed.structure,
                         descriptors=processed.descriptors,
-                        disclosed_by=input.requested_by,
+                        disclosed_by=input.disclosed_by or dr.requested_by,
+                        disclosed_by_org_id=dr.disclosing_org_id,
                         stereochemistry=processed.stereochemistry,
                         disclosure_date=dr.disclosure_date,
                     )

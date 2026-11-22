@@ -26,6 +26,10 @@ from cellar.application.research_organization.campaign_collection_coverage impor
     GetCampaignCollectionCoverage,
     GetCampaignCollectionGap,
 )
+from cellar.application.research_organization.change_owner import (
+    ChangeCollectionOwner,
+    ChangeProjectOwner,
+)
 from cellar.application.research_organization.close_campaign import CloseCampaign
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
@@ -156,6 +160,8 @@ __all__ = [
     "ArchiveProjectDep",
     "BulkAddToCollectionDep",
     "CampaignRepositoryDep",
+    "ChangeCollectionOwnerDep",
+    "ChangeProjectOwnerDep",
     "CloseCampaignDep",
     "CollectionRepoUoWDep",
     # Collections
@@ -243,6 +249,10 @@ GetProjectScopeStatsDep = Annotated[
 ComposeCollectionsDep = Annotated[ComposeCollections, Depends(_get_use_case(ComposeCollections))]
 CreateCollectionDep = Annotated[CreateCollection, Depends(_get_use_case(CreateCollection))]
 UpdateCollectionDep = Annotated[UpdateCollection, Depends(_get_use_case(UpdateCollection))]
+ChangeCollectionOwnerDep = Annotated[
+    ChangeCollectionOwner, Depends(_get_use_case(ChangeCollectionOwner))
+]
+ChangeProjectOwnerDep = Annotated[ChangeProjectOwner, Depends(_get_use_case(ChangeProjectOwner))]
 DeleteCollectionDep = Annotated[DeleteCollection, Depends(_get_use_case(DeleteCollection))]
 GetCollectionDep = Annotated[GetCollection, Depends(_get_use_case(GetCollection))]
 ListCollectionsDep = Annotated[ListCollections, Depends(_get_use_case(ListCollections))]

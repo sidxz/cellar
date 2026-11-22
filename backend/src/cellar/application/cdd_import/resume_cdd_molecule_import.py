@@ -76,7 +76,9 @@ class ResumeCddMoleculeImport:
         if imp.workflow_id:
             await self._orchestrator.terminate(imp.workflow_id, "Superseded by a resume")
         try:
-            workflow_id = await self._orchestrator.resume(_request(imp, input.resumed_by))
+            workflow_id = await self._orchestrator.resume(
+                _request(imp, input.resumed_by, auth.org_id if auth else None)
+            )
         except DomainError as exc:
             return Failure(exc)
 
@@ -115,7 +117,9 @@ def _refusal(imp: CddMoleculeImport, imports: list[CddMoleculeImport]) -> str | 
     return None
 
 
-def _request(imp: CddMoleculeImport, resumed_by: uuid.UUID) -> ResumeCddMoleculeImportRequest:
+def _request(
+    imp: CddMoleculeImport, resumed_by: uuid.UUID, resumed_by_org_id: uuid.UUID | None
+) -> ResumeCddMoleculeImportRequest:
     assert imp.cdd_export_id is not None and imp.run_settings is not None  # resumable
     return ResumeCddMoleculeImportRequest(
         workspace_id=imp.workspace_id,
@@ -123,7 +127,6 @@ def _request(imp: CddMoleculeImport, resumed_by: uuid.UUID) -> ResumeCddMolecule
         cdd_vault_id=imp.cdd_vault_id,
         import_mode=imp.import_mode.value,
         submitted_by=resumed_by,
-        originating_org_id=imp.originating_org_id,
         filter_criteria=imp.filter_criteria,
         run_settings=imp.run_settings,
         cdd_export_id=imp.cdd_export_id,
@@ -133,4 +136,7 @@ def _request(imp: CddMoleculeImport, resumed_by: uuid.UUID) -> ResumeCddMolecule
         duplicate_count=imp.duplicate_count,
         error_count=imp.error_count,
         skipped_count=imp.skipped_count,
+        submitted_by_org_id=resumed_by_org_id,
+        disclosed_by=imp.disclosed_by,
+        disclosed_by_org_id=imp.disclosed_by_org_id,
     )

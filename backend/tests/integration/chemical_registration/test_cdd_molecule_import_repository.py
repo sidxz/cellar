@@ -42,7 +42,6 @@ async def test_export_id_and_run_settings_round_trip(session_factory) -> None:  
         workspace_id=ws_id,
         cdd_vault_id="4443",
         import_mode=CddImportMode.FULL_VAULT,
-        originating_org_id=ws_id,
         submitted_by=uuid.uuid4(),
         workflow_id="wf-1",
         run_settings=SETTINGS,

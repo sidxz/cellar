@@ -19,7 +19,6 @@ export {
   useResolveDisclosureConflict,
   useMergeHistory,
 } from "./hooks/use-disclosures";
-export { useBulkRegistration } from "./hooks/use-bulk-registration";
 export { DataImportPage } from "./components/data-import-page";
 export {
   useStartCddMoleculeImport,

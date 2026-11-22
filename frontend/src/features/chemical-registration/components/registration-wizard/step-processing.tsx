@@ -16,11 +16,23 @@ import {
 import type { RegisterMoleculeInput } from "../../types";
 import type { SubmitDisclosureInput } from "../../types/disclosure";
 import { bulkStepIndex } from "../../types/registration-wizard";
+import type { DiscloserChoice } from "../discloser-pick";
 import { ProjectNames } from "./project-names";
 
 // ---------------------------------------------------------------------------
 // StepProcessing
 // ---------------------------------------------------------------------------
+
+/** The discloser pick as request fields; omitted when it is "you" and "your org". */
+function discloserFields(d: DiscloserChoice): {
+  disclosed_by?: string;
+  disclosed_by_org_id?: string;
+} {
+  return {
+    ...(d.userId ? { disclosed_by: d.userId } : {}),
+    ...(d.orgId ? { disclosed_by_org_id: d.orgId } : {}),
+  };
+}
 
 export function StepProcessing() {
   const mode = useRegistrationWizard((s) => s.mode);
@@ -110,7 +122,7 @@ function SingleProcessing() {
           identifier: e.identifier,
           identifier_type: e.identifier_type,
         })),
-        originating_org_id: singleInput.originatingOrgId!,
+        ...discloserFields(singleInput.discloser),
         custom_fields: singleInput.customFields,
         project_ids: singleInput.projectIds,
       };
@@ -266,14 +278,14 @@ function BulkProcessing() {
   // Kick off the bulk job on mount
   // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the bulk job once on mount (guarded by hasStarted ref); the captured bulkInput/startMutation must not re-trigger the job.
   useEffect(() => {
-    if (workflowId || hasStarted.current || !bulkInput.file || !bulkInput.originatingOrgId) return;
+    if (workflowId || hasStarted.current || !bulkInput.file) return;
     hasStarted.current = true;
 
     startMutation
       .mutateAsync({
         file: bulkInput.file,
         file_format: bulkInput.fileFormat,
-        originating_org_id: bulkInput.originatingOrgId,
+        ...discloserFields(bulkInput.discloser),
         create_batch_on_duplicate: bulkInput.createBatchOnDuplicate,
         project_ids: bulkInput.projectIds,
         column_mapping: bulkMapping ? JSON.stringify(bulkMapping) : null,

@@ -48,6 +48,7 @@ vi.mock("./detail-tabs", () => ({
     <div>Curves for {runIds.join(",") || "none"}</div>
   ),
 }));
+vi.mock("@/shared/hooks/use-orgs", () => ({ useOrgName: () => () => "Texas A&M University" }));
 vi.mock("./correct-protocol-dialog", () => ({ CorrectProtocolDialog: () => null }));
 vi.mock("./create-run-dialog", () => ({ CreateRunDialog: () => null }));
 vi.mock("./protocol-category-input", () => ({ ProtocolCategoryInput: () => null }));
@@ -240,5 +241,18 @@ describe("ProtocolDetail navigation", () => {
       "true",
     );
     expect(screen.getByText("Curves for r1,r3")).toBeVisible();
+  });
+});
+
+describe("ProtocolDetail owner", () => {
+  beforeEach(() => {
+    state.canCreate = true;
+    state.hash = "";
+    state.protocol = protocol({ owner_org_id: "org-tamu" } as Partial<Protocol>);
+  });
+
+  it("shows who owns the protocol in the header", () => {
+    render();
+    expect(screen.getByText(/Owned by/)).toHaveTextContent("Texas A&M University");
   });
 });

@@ -4,7 +4,6 @@ import { ProjectFilter } from "@/features/research-organization/components/searc
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import {
   type FieldOverride,
   useRegistrationForms,
@@ -13,6 +12,7 @@ import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-work
 import type { RegistrationRules } from "@/features/workspace-config/types";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { CsvDropzone } from "@/shared/components/csv-dropzone";
+import { DuarOrgSelect } from "@/shared/components/duar-org-select";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -52,6 +52,7 @@ import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { MOLECULE_TYPE_LABELS } from "../../types";
 import type { BulkInput } from "../../types/registration-wizard";
 import type { ExternalIdentifierInput } from "../../types/registration-wizard";
+import { DiscloserPick } from "../discloser-pick";
 import { BulkUploadSummary } from "./bulk-upload-summary";
 
 // ─── CSV template ───────────────────────────────────────────────────────────
@@ -209,7 +210,6 @@ function SingleInputForm() {
   const updateSingleInput = useRegistrationWizard((s) => s.updateSingleInput);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
 
-  const { data: orgs } = useOrganizations();
   const { data: settings } = useWorkspaceSettings();
   const { data: registrationForms } = useRegistrationForms("molecule");
   const { data: customFieldDefs } = useCustomFields("molecule", true);
@@ -265,10 +265,6 @@ function SingleInputForm() {
     if (!singleInput.disclosureMode) {
       if (!singleInput.name.trim()) {
         setError("Name is required");
-        return;
-      }
-      if (!singleInput.originatingOrgId) {
-        setError("Originating organization is required");
         return;
       }
     } else {
@@ -413,22 +409,13 @@ function SingleInputForm() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="wiz-disc-org">Disclosing Organization</Label>
-            <Select
-              value={singleInput.disclosingOrgId ?? ""}
-              onValueChange={(v) => updateSingleInput({ disclosingOrgId: v || null })}
-            >
-              <SelectTrigger id="wiz-disc-org">
-                <SelectValue placeholder="Select organization" />
-              </SelectTrigger>
-              <SelectContent>
-                {orgs?.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="wiz-disc-org">Disclosing organization</Label>
+            <DuarOrgSelect
+              id="wiz-disc-org"
+              value={singleInput.disclosingOrgId}
+              onValueChange={(v) => updateSingleInput({ disclosingOrgId: v })}
+              placeholder="Your org"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="wiz-notes">Notes</Label>
@@ -465,28 +452,12 @@ function SingleInputForm() {
         </div>
       )}
 
-      {/* Originating organization — hidden in disclosure mode */}
-      {!singleInput.disclosureMode && (
-        <div className="grid gap-2">
-          <Label htmlFor="wiz-org">
-            Originating Organization <span className="text-destructive">*</span>
-          </Label>
-          <Select
-            value={singleInput.originatingOrgId ?? ""}
-            onValueChange={(v) => updateSingleInput({ originatingOrgId: v })}
-          >
-            <SelectTrigger id="wiz-org">
-              <SelectValue placeholder="Select organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {orgs?.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Who disclosed the structure — only when one is given */}
+      {!singleInput.disclosureMode && !!singleInput.smiles?.trim() && (
+        <DiscloserPick
+          value={singleInput.discloser}
+          onChange={(discloser) => updateSingleInput({ discloser })}
+        />
       )}
 
       {/* Projects — optional; hidden in disclosure mode */}
@@ -598,12 +569,6 @@ function BulkInputForm() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
   const updateBulkInput = useRegistrationWizard((s) => s.updateBulkInput);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
-  const {
-    data: orgs,
-    isLoading: organizationsLoading,
-    isError: organizationsError,
-    refetch: retryOrganizations,
-  } = useOrganizations();
   const { data: settings } = useWorkspaceSettings();
   const [error, setError] = useState<string | null>(null);
   const defaultApplied = useRef(false);
@@ -630,11 +595,7 @@ function BulkInputForm() {
     },
     [updateBulkInput],
   );
-  const prerequisite = !bulkInput.file
-    ? "Choose a file to continue."
-    : !bulkInput.originatingOrgId
-      ? "Choose an originating organization to continue."
-      : null;
+  const prerequisite = !bulkInput.file ? "Choose a file to continue." : null;
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
@@ -684,46 +645,13 @@ function BulkInputForm() {
           )}
           <div className="grid gap-5 md:grid-cols-2">
             <div className="grid content-start gap-2">
-              <Label htmlFor="bulk-org">
-                Originating organization{" "}
-                <span className="font-normal text-foreground/70">(required)</span>
-              </Label>
-              <Select
-                value={bulkInput.originatingOrgId ?? ""}
-                onValueChange={(value) => updateBulkInput({ originatingOrgId: value })}
-                disabled={organizationsLoading}
-              >
-                <SelectTrigger id="bulk-org" className="w-full" aria-describedby="bulk-org-help">
-                  <SelectValue
-                    placeholder={
-                      organizationsLoading ? "Loading organizations…" : "Choose an organization"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgs?.map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p id="bulk-org-help" className="text-sm text-foreground/70">
-                The source organization for newly registered compounds.
+              <DiscloserPick
+                value={bulkInput.discloser}
+                onChange={(discloser) => updateBulkInput({ discloser })}
+              />
+              <p className="text-sm text-foreground/70">
+                Who disclosed the structures in this file, and for which org.
               </p>
-              {organizationsError && (
-                <p role="alert" className="text-sm text-destructive">
-                  Could not load organizations.{" "}
-                  <Button variant="link" size="sm" onClick={() => retryOrganizations()}>
-                    Try again
-                  </Button>
-                </p>
-              )}
-              {!organizationsLoading && orgs?.length === 0 && (
-                <p className="text-sm text-destructive">
-                  Ask an administrator to add an organization before registering compounds.
-                </p>
-              )}
             </div>
             <div className="grid content-start gap-2">
               <Label>

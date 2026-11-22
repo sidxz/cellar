@@ -940,3 +940,34 @@ class TestProtocolVersioning:
         # Mutate the clone's pick_list_values
         new_version.condition_definitions[0].pick_list_values.append("HeLa")
         assert cd.pick_list_values == ["HEK293", "CHO"]  # original unchanged
+
+
+class TestProtocolOwner:
+    def test_locked_protocol_owner_can_change(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        old, new = uuid.uuid4(), uuid.uuid4()
+        protocol = _make_protocol(workspace_id, user_id, created_by_org_id=old)
+        assert protocol.owner_org_id == old
+        protocol.lock(locked_by=user_id, reason="QA")
+        protocol.clear_events()
+        protocol.change_owner(new)
+        (event,) = protocol.collect_events()
+        assert event.audit_changes() == [("owner_org_id", str(old), str(new))]
+
+    def test_same_owner_raises_no_event(self, workspace_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        org = uuid.uuid4()
+        protocol = _make_protocol(workspace_id, user_id, created_by_org_id=org)
+        protocol.clear_events()
+        protocol.change_owner(org)
+        assert protocol.collect_events() == []
+
+    def test_new_version_keeps_owner_and_creator_org(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        creator_org, owner = uuid.uuid4(), uuid.uuid4()
+        protocol = _make_protocol(workspace_id, user_id, created_by_org_id=creator_org)
+        protocol.change_owner(owner)
+        protocol.publish()
+        v2 = ProtocolVersioningService().create_new_version(protocol)
+        assert (v2.created_by_org_id, v2.owner_org_id) == (creator_org, owner)

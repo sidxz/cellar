@@ -82,7 +82,6 @@ class CddMoleculeImport(AggregateRoot):
         workspace_id: uuid.UUID,
         cdd_vault_id: str,
         import_mode: CddImportMode,
-        originating_org_id: uuid.UUID,
         filter_criteria: dict | None = None,
         status: CddMoleculeImportStatus = CddMoleculeImportStatus.PENDING,
         workflow_id: str | None = None,
@@ -96,6 +95,8 @@ class CddMoleculeImport(AggregateRoot):
         cdd_export_id: int | None = None,
         run_settings: dict | None = None,
         submitted_by: uuid.UUID,
+        disclosed_by: uuid.UUID | None = None,
+        disclosed_by_org_id: uuid.UUID | None = None,
         submitted_at: datetime | None = None,
         completed_at: datetime | None = None,
         failure_reason: str | None = None,
@@ -111,7 +112,6 @@ class CddMoleculeImport(AggregateRoot):
         self.workspace_id = workspace_id
         self.cdd_vault_id = cdd_vault_id.strip()
         self.import_mode = import_mode
-        self.originating_org_id = originating_org_id
         self.filter_criteria = filter_criteria
         self.status = status
         self.workflow_id = workflow_id
@@ -126,6 +126,10 @@ class CddMoleculeImport(AggregateRoot):
         self.cdd_export_id = cdd_export_id
         self.run_settings = run_settings
         self.submitted_by = submitted_by
+        # The discloser pick for every compound this import registers (None = the
+        # person running it, and their Duar org). Kept so a resume uses it too.
+        self.disclosed_by = disclosed_by
+        self.disclosed_by_org_id = disclosed_by_org_id
         self.submitted_at = submitted_at or datetime.now(UTC)
         self.completed_at = completed_at
         self.failure_reason = failure_reason
@@ -141,22 +145,24 @@ class CddMoleculeImport(AggregateRoot):
         workspace_id: uuid.UUID,
         cdd_vault_id: str,
         import_mode: CddImportMode,
-        originating_org_id: uuid.UUID,
         submitted_by: uuid.UUID,
         workflow_id: str | None = None,
         filter_criteria: dict | None = None,
         run_settings: dict | None = None,
+        disclosed_by: uuid.UUID | None = None,
+        disclosed_by_org_id: uuid.UUID | None = None,
     ) -> CddMoleculeImport:
         """Create a new import in PENDING status."""
         imp = cls(
             workspace_id=workspace_id,
             cdd_vault_id=cdd_vault_id,
             import_mode=import_mode,
-            originating_org_id=originating_org_id,
             submitted_by=submitted_by,
             workflow_id=workflow_id,
             filter_criteria=filter_criteria,
             run_settings=run_settings,
+            disclosed_by=disclosed_by,
+            disclosed_by_org_id=disclosed_by_org_id,
         )
         imp.register_event(
             CddMoleculeImportStarted(

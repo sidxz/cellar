@@ -38,8 +38,8 @@ async def _seed_molecule(uow, ws, org, *, reg, smiles, mw=None, logp=None, tpsa=
     await uow.session.execute(
         text(
             "INSERT INTO molecules (id, workspace_id, registration_number, name, molecule_type, "
-            "smiles, molecular_weight, logp, tpsa, version, originating_org_id, merged_into_id) "
-            "VALUES (:id, :ws, :r, :r, 'small_molecule', :smi, :mw, :logp, :tpsa, 1, :org, :merged)"
+            "smiles, molecular_weight, logp, tpsa, version, merged_into_id) "
+            "VALUES (:id, :ws, :r, :r, 'small_molecule', :smi, :mw, :logp, :tpsa, 1, :merged)"
         ),
         {"id": mol_id, "ws": ws, "r": reg, "smi": smiles, "mw": mw, "logp": logp,
          "tpsa": tpsa, "org": org, "merged": merged},

@@ -16,7 +16,7 @@ from cellar.domain.research_organization.events import (
 )
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-from tests.api.conftest import _create_test_app
+from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -52,7 +52,7 @@ class TestCreateCollection:
         data = resp.json()
         assert data["description"] is None
         assert data["project_id"] is None
-        assert data["owned_by_org_id"] is None
+        assert data["owner_org_id"] == str(AUTH_ORG_ID)
 
 
 class TestGetCollection:
@@ -287,3 +287,54 @@ class TestCreateCollectionWithMolecules:
             resp = await client.post("/api/v1/collections", json=body)
             assert resp.status_code == 201, resp.text
             assert resp.json()["molecule_count"] == 0
+
+
+class TestCollectionOwner:
+    async def test_create_stamps_creator_org_and_owner_from_token(
+        self, client: AsyncClient
+    ) -> None:
+        data = (await client.post("/api/v1/collections", json={"name": "Stamped"})).json()
+        assert (data["created_by_org_id"], data["owner_org_id"]) == (str(AUTH_ORG_ID),) * 2
+
+    async def test_create_without_token_org_leaves_both_null(
+        self, editor_client: AsyncClient
+    ) -> None:
+        data = (await editor_client.post("/api/v1/collections", json={"name": "No org"})).json()
+        assert (data["created_by_org_id"], data["owner_org_id"]) == (None, None)
+
+    async def test_create_with_picked_owner(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/collections", json={"name": "For partner", "owner_org_id": str(OTHER_ORG_ID)}
+        )
+        assert resp.status_code == 201
+        assert resp.json()["owner_org_id"] == str(OTHER_ORG_ID)
+
+    async def test_create_with_unknown_owner_is_422(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/collections", json={"name": "Nowhere", "owner_org_id": str(uuid.uuid4())}
+        )
+        assert resp.status_code == 422
+
+    async def test_creator_puts_owner(self, client: AsyncClient) -> None:
+        cid = (await client.post("/api/v1/collections", json={"name": "Move me"})).json()["id"]
+        resp = await client.put(
+            f"/api/v1/collections/{cid}/owner", json={"owner_org_id": str(OTHER_ORG_ID)}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["owner_org_id"] == str(OTHER_ORG_ID)
+
+    async def test_put_owner_by_non_creator_editor_is_403(
+        self, client: AsyncClient, other_editor_client: AsyncClient
+    ) -> None:
+        cid = (await client.post("/api/v1/collections", json={"name": "Not yours"})).json()["id"]
+        resp = await other_editor_client.put(
+            f"/api/v1/collections/{cid}/owner", json={"owner_org_id": str(OTHER_ORG_ID)}
+        )
+        assert resp.status_code == 403
+
+    async def test_patch_no_longer_takes_the_org(self, client: AsyncClient) -> None:
+        cid = (await client.post("/api/v1/collections", json={"name": "Patch"})).json()["id"]
+        resp = await client.patch(
+            f"/api/v1/collections/{cid}", json={"owned_by_org_id": str(OTHER_ORG_ID)}
+        )
+        assert resp.status_code == 422

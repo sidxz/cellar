@@ -128,8 +128,8 @@ async def test_conversion_and_backfill(session_factory, workspace_id) -> None:
         await session.execute(
             sa.text(
                 "INSERT INTO molecules (id, workspace_id, registration_number, name, "
-                "molecule_type, originating_org_id, version) "
-                "VALUES (:id, :ws, :rn, 'm', 'small_molecule', :org, 1)"
+                "molecule_type, version) "
+                "VALUES (:id, :ws, :rn, 'm', 'small_molecule', 1)"
             ),
             {"id": mol_id, "ws": workspace_id, "rn": f"T-{uuid.uuid4().hex[:8]}", "org": actor},
         )

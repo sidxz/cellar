@@ -148,7 +148,6 @@ async def _run_service(
                 BulkRegistrationItem(row_index=i, file_row=i + 2, **r) for i, r in enumerate(rows)
             ],
             submitted_by=ws.actor,
-            originating_org_id=ws.org_id,
             create_batch_on_duplicate=create_batch_on_duplicate,
         ),
         auth=FakeAuth(role="editor", workspace_id=ws.id, user_id=ws.actor),
@@ -189,7 +188,6 @@ async def _run_worker(
         activities.process_chunk,
         ChunkInput(
             workspace_id=str(ws.id),
-            originating_org_id=str(ws.org_id),
             submitted_by=str(ws.actor),
             items=[ChunkItem(row_index=i, file_row=i + 2, **r) for i, r in enumerate(rows)],
             create_batch_on_duplicate=create_batch_on_duplicate,
@@ -533,7 +531,6 @@ async def test_worker_records_a_parse_error_row_and_registers_nothing(
         activities.process_chunk,
         ChunkInput(
             workspace_id=str(ws.id),
-            originating_org_id=str(ws.org_id),
             submitted_by=str(ws.actor),
             items=[
                 ChunkItem(row_index=2, file_row=4, error="Row 4: no name or structure"),

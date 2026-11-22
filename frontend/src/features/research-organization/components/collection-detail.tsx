@@ -24,6 +24,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
+import { canChangeOwner, useChangeOwner } from "@/shared/hooks/use-change-owner";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { ChevronDown, Download, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
@@ -53,6 +55,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const router = useRouter();
   const isAdmin = useAuthzHasRole("admin");
   const canEditTags = useAuthzHasRole("editor");
+  const { data: me } = useCurrentUser();
+  const changeOwner = useChangeOwner("collections", collectionId);
   const query = useCollection(collectionId);
   const { data: project } = useProject(query.data?.project_id ?? undefined);
   const { data: allProjects } = useProjects();
@@ -228,8 +232,9 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                 name: collection.name,
                 description: collection.description,
                 project_id: collection.project_id,
-                owned_by_org_id: collection.owned_by_org_id,
+                owner_org_id: collection.owner_org_id,
                 created_by: collection.created_by,
+                created_by_org_id: collection.created_by_org_id,
                 visibility: collection.visibility,
                 molecule_count: collection.molecule_count,
                 is_frozen: collection.is_frozen ?? false,
@@ -237,6 +242,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                 derived_from_campaign_id: collection.derived_from_campaign_id,
               }}
               projectName={project?.name}
+              canChangeOwner={canChangeOwner(me, collection.created_by)}
+              onChangeOwner={changeOwner.mutateAsync}
               rightSlot={
                 <>
                   {selectionToolbar}

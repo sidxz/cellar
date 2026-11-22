@@ -154,9 +154,9 @@ async def _insert_org_and_molecule(
             sa.text(
                 "INSERT INTO molecules (id, workspace_id, name, molecule_type, "
                 "structure_status, registration_status, synthesis_status, "
-                "lifecycle_stage, registration_number, originating_org_id, version) "
+                "lifecycle_stage, registration_number, version) "
                 "VALUES (:id, :ws, 'ContractMol', 'small_molecule', 'undisclosed', "
-                "'approved', 'virtual', 'registered', :reg, :org, 1)"
+                "'approved', 'virtual', 'registered', :reg, 1)"
             ),
             {"id": mol_id, "ws": ws_id, "reg": f"CV-{mol_id.hex[:6]}", "org": ws_id},
         )

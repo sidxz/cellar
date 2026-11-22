@@ -19,6 +19,7 @@ from cellar.application.shared.molecule_resolver import (
     MoleculeResolver,
     RefType,
 )
+from cellar.application.shared.org_directory import OrgDirectoryPort, unpickable_org
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.collection import Collection, CollectionVisibility
 from cellar.domain.research_organization.enums import CollectionType
@@ -33,7 +34,8 @@ class CreateCollectionCommand(Command):
     name: str
     description: str | None = None
     project_id: uuid.UUID | None = None
-    owned_by_org_id: uuid.UUID | None = None
+    # A Duar org the creator picked; None = the creator's own org.
+    owner_org_id: uuid.UUID | None = None
     created_by: uuid.UUID
     visibility: str = "private"
     type: str = "generic"
@@ -47,17 +49,28 @@ class CreateCollection:
         repo: CollectionRepository,
         dispatcher: EventDispatcherProtocol,
         resolver: MoleculeResolver,
+        org_directory: OrgDirectoryPort | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._resolver = resolver
+        self._org_directory = org_directory
 
     async def __call__(
         self, input: CreateCollectionCommand, auth: AuthContext | None = None
     ) -> Result[Collection, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+
+        creator_org_id = auth.org_id if auth else None
+        if (
+            input.owner_org_id is not None
+            and input.owner_org_id != creator_org_id
+            and self._org_directory is not None
+            and (err := await unpickable_org(self._org_directory, input.owner_org_id))
+        ):
+            return Failure(err)
 
         molecule_ids = list(dict.fromkeys(input.molecule_ids))
         async with self._uow:
@@ -77,8 +90,9 @@ class CreateCollection:
                 name=input.name,
                 description=input.description,
                 project_id=input.project_id,
-                owned_by_org_id=input.owned_by_org_id,
+                owner_org_id=input.owner_org_id,
                 created_by=input.created_by,
+                created_by_org_id=creator_org_id,
                 visibility=CollectionVisibility(input.visibility),
                 type=CollectionType(input.type),
             )

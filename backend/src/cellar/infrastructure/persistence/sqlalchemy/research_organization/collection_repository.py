@@ -39,8 +39,9 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
             name=model.name,
             description=model.description,
             project_id=model.project_id,
-            owned_by_org_id=model.owned_by_org_id,
+            owner_org_id=model.owner_org_id,
             created_by=model.created_by,
+            created_by_org_id=model.created_by_org_id,
             molecule_count=0,
             visibility=CollectionVisibility(model.visibility),
             type=CollectionType(model.type),
@@ -64,8 +65,9 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
             name=aggregate.name,
             description=aggregate.description,
             project_id=aggregate.project_id,
-            owned_by_org_id=aggregate.owned_by_org_id,
+            owner_org_id=aggregate.owner_org_id,
             created_by=aggregate.created_by,
+            created_by_org_id=aggregate.created_by_org_id,
             visibility=aggregate.visibility.value,
             type=aggregate.type.value,
             is_frozen=aggregate.is_frozen,
@@ -77,7 +79,7 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         model.name = aggregate.name
         model.description = aggregate.description
         model.project_id = aggregate.project_id
-        model.owned_by_org_id = aggregate.owned_by_org_id
+        model.owner_org_id = aggregate.owner_org_id
         model.visibility = aggregate.visibility.value
         model.type = aggregate.type.value
         model.is_frozen = aggregate.is_frozen

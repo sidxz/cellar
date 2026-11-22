@@ -32,7 +32,7 @@ const DEFAULT_SINGLE_INPUT: SingleInput = {
   name: "",
   smiles: null,
   moleculeType: "small_molecule",
-  originatingOrgId: null,
+  discloser: { userId: null, orgId: null },
   externalIds: [],
   customFields: {},
   disclosureMode: false,
@@ -47,7 +47,7 @@ const DEFAULT_BULK_INPUT: BulkInput = {
   file: null,
   fileFormat: "csv",
   parsedRows: [],
-  originatingOrgId: null,
+  discloser: { userId: null, orgId: null },
   createBatchOnDuplicate: false,
   projectIds: [],
 };

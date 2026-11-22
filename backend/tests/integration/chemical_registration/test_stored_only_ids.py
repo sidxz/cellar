@@ -200,7 +200,7 @@ def test_chunk_item_with_decides_survives_temporal_serialization() -> None:
     rejects a bool where the type hint says str."""
     row = cdd_row("SER-1", stored_ids=[("A", "S")], stored_batch=[("B", "S")])
     item = ChunkItem(row_index=0, **row)
-    chunk = ChunkInput(workspace_id="w", originating_org_id="o", submitted_by="u", items=[item])
+    chunk = ChunkInput(workspace_id="w", submitted_by="u", items=[item])
     conv = DataConverter.default.payload_converter
 
     (back,) = conv.from_payloads(conv.to_payloads([chunk]), [ChunkInput])

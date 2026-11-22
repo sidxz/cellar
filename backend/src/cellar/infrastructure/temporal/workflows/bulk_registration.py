@@ -39,7 +39,6 @@ class BulkRegistrationWorkflowInput:
     """Input for starting a bulk registration workflow."""
 
     workspace_id: str
-    originating_org_id: str
     submitted_by: str
     source_file: str
     file_format: str
@@ -60,6 +59,10 @@ class BulkRegistrationWorkflowInput:
     resume_conflict: int = 0
     resume_merge_candidates_list: list[dict] = field(default_factory=list)
     resume_chunks: list[list[dict]] | None = None
+    # Who started it (their Duar org) and the discloser pick — workers have no token.
+    submitted_by_org_id: str | None = None
+    disclosed_by: str | None = None
+    disclosed_by_org_id: str | None = None
 
 
 @dataclass
@@ -193,12 +196,14 @@ class BulkRegistrationWorkflow:
                 RegistrationActivities.process_chunk,
                 ChunkInput(
                     workspace_id=input.workspace_id,
-                    originating_org_id=input.originating_org_id,
                     submitted_by=input.submitted_by,
                     items=items,
                     chunk_index=i,
                     create_batch_on_duplicate=input.create_batch_on_duplicate,
                     project_ids=input.project_ids,
+                    submitted_by_org_id=input.submitted_by_org_id,
+                    disclosed_by=input.disclosed_by,
+                    disclosed_by_org_id=input.disclosed_by_org_id,
                 ),
                 start_to_close_timeout=timedelta(minutes=5),
                 heartbeat_timeout=timedelta(seconds=120),

@@ -130,7 +130,6 @@ def _make_undisclosed_molecule(
         registration_number=RegistrationNumber(value="CV-00001"),
         name=name,
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
     if mol_id is not None:
         object.__setattr__(mol, "_id", mol_id)
@@ -188,7 +187,6 @@ def _make_command(
         workspace_id=WS_ID,
         name=name,
         smiles=smiles,
-        originating_org_id=ORG_ID,
         registered_by=USER_ID,
         auto_approve=auto_approve,
         external_ids=external_ids or [],
@@ -202,6 +200,7 @@ def _make_use_case(
     disclosure_service: AsyncMock | None = None,
     uow: FakeUnitOfWork | None = None,
     disclosure_repo: AsyncMock | None = None,
+    org_directory: object | None = None,
 ) -> RegisterMolecule:
     return RegisterMolecule(
         uow=uow or FakeUnitOfWork(),
@@ -210,6 +209,7 @@ def _make_use_case(
         structure_processor=_make_processor(),
         disclosure_service=disclosure_service,
         disclosure_repo=disclosure_repo,
+        org_directory=org_directory,
     )
 
 
@@ -221,7 +221,6 @@ def _make_disclosed_molecule(name: str = "Known-001") -> Molecule:
         molecule_type=MoleculeType.SMALL_MOLECULE,
         structure=_STRUCTURE,
         descriptors=_DESCRIPTORS,
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol
@@ -471,7 +470,6 @@ class TestDisclosureDetection:
             molecule_type=MoleculeType.SMALL_MOLECULE,
             structure=_STRUCTURE,
             descriptors=_DESCRIPTORS,
-            originating_org_id=ORG_ID,
         )
         existing_disclosed.clear_events()
 
@@ -618,3 +616,87 @@ async def test_unknown_molecule_type_is_a_validation_failure() -> None:
 
     result = await _make_use_case()(replace(_make_command(), molecule_type="drug"))
     assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
+
+
+# ---------------------------------------------------------------------------
+# Tests — who registered it, and who disclosed it, with their Duar orgs
+# ---------------------------------------------------------------------------
+
+DUAR_ORG = uuid.uuid4()
+
+
+class _Org:
+    def __init__(self, org_id: uuid.UUID) -> None:
+        self.id = org_id
+        self.enabled = True
+
+
+class _Directory:
+    async def list_orgs(self) -> list[_Org]:
+        return [_Org(DUAR_ORG)]
+
+
+def _attributed(**fields) -> RegisterMoleculeCommand:
+    return RegisterMoleculeCommand(
+        workspace_id=WS_ID,
+        name="Attributed",
+        smiles="c1ccccc1",
+        registered_by=USER_ID,
+        **fields,
+    )
+
+
+class TestRegistrantAndDiscloserPick:
+    async def test_register_stamps_registrant_org_from_command(self) -> None:
+        uc = _make_use_case(org_directory=_Directory())
+        result = await uc(_attributed(registered_by_org_id=DUAR_ORG))
+        mol = result.unwrap().molecule
+        assert (mol.registered_by, mol.registered_by_org_id) == (USER_ID, DUAR_ORG)
+        assert (mol.disclosed_by, mol.disclosed_by_org_id) == (USER_ID, DUAR_ORG)
+
+    async def test_register_with_unknown_discloser_org_refused(self) -> None:
+        auth = FakeAuth(workspace_id=WS_ID, user_id=USER_ID)
+        uc = _make_use_case(org_directory=_Directory())
+        result = await uc(_attributed(disclosed_by_org_id=uuid.uuid4()), auth=auth)
+        assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
+
+    async def test_register_with_non_member_discloser_refused(self) -> None:
+        auth = FakeAuth(workspace_id=WS_ID, user_id=USER_ID, members=[{"user_id": str(USER_ID)}])
+        uc = _make_use_case(org_directory=_Directory())
+        result = await uc(_attributed(disclosed_by=uuid.uuid4()), auth=auth)
+        assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
+
+    async def test_register_with_self_as_discloser_needs_no_member_lookup(self) -> None:
+        auth = FakeAuth(workspace_id=WS_ID, user_id=USER_ID, members=[])
+        uc = _make_use_case(org_directory=_Directory())
+        result = await uc(_attributed(disclosed_by=USER_ID, disclosed_by_org_id=DUAR_ORG), auth=auth)
+        assert isinstance(result, Success)
+        assert result.unwrap().molecule.disclosed_by_org_id == DUAR_ORG
+
+
+class TestDiscloserPickReachesTheDelegate:
+    async def test_identifier_match_delegate_carries_the_picked_discloser(self) -> None:
+        """A structure matched to an undisclosed compound by identifier is disclosed through
+        the disclosure service; the registrant's pick goes with it."""
+        undisclosed = _make_undisclosed_molecule(name="Partner-7")
+        repo = _make_repo(find_undisclosed_by_identifiers=undisclosed)
+        disclosure_service = AsyncMock(
+            return_value=Success(
+                DisclosureOutcome(
+                    disclosure_request=_make_disclosure_request(undisclosed.id),
+                    was_merged=False,
+                )
+            )
+        )
+        uc = _make_use_case(repo=repo, disclosure_service=disclosure_service)
+        picked, picked_org = uuid.uuid4(), uuid.uuid4()
+        await uc(
+            RegisterMoleculeCommand(
+                workspace_id=WS_ID, name="Partner-7", smiles="c1ccccc1",
+                registered_by=USER_ID,
+                disclosed_by=picked, disclosed_by_org_id=picked_org,
+            )
+        )
+        (cmd,), _ = disclosure_service.await_args
+        assert (cmd.disclosed_by, cmd.disclosing_org_id) == (picked, picked_org)
+

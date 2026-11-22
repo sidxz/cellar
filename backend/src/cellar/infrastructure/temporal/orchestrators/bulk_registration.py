@@ -28,6 +28,10 @@ from cellar.infrastructure.temporal.workflows.bulk_registration import (
 )
 
 
+def _str(value: uuid.UUID | None) -> str | None:
+    return str(value) if value is not None else None
+
+
 class TemporalBulkRegistrationOrchestrator:
     """Implements ``BulkRegistrationOrchestrator`` against a Temporal client."""
 
@@ -42,7 +46,6 @@ class TemporalBulkRegistrationOrchestrator:
             BulkRegistrationWorkflow.run,
             BulkRegistrationWorkflowInput(
                 workspace_id=str(request.workspace_id),
-                originating_org_id=str(request.originating_org_id),
                 submitted_by=str(request.submitted_by),
                 source_file=request.filename,
                 file_format=request.file_format,
@@ -51,6 +54,9 @@ class TemporalBulkRegistrationOrchestrator:
                 create_batch_on_duplicate=request.create_batch_on_duplicate,
                 project_ids=[str(p) for p in request.project_ids],
                 column_mapping=request.column_mapping,
+                submitted_by_org_id=_str(request.submitted_by_org_id),
+                disclosed_by=_str(request.disclosed_by),
+                disclosed_by_org_id=_str(request.disclosed_by_org_id),
             ),
             id=workflow_id,
             task_queue=MAIN_TASK_QUEUE,

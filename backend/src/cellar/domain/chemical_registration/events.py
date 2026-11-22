@@ -12,7 +12,17 @@ from cellar.domain.shared.events import DomainEvent
 class MoleculeRegistered(DomainEvent):
     registration_number: str
     molecule_type: str
-    originating_org_id: uuid.UUID
+    registered_by_org_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class MoleculeDiscloserChanged(DomainEvent):
+    """Old and new value per changed field (``disclosed_by``, ``disclosed_by_org_id``)."""
+
+    changes: tuple[tuple[str, str | None, str | None], ...]
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return list(self.changes)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -999,6 +999,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             parent_protocol_id=model.parent_protocol_id,
             status=ProtocolStatus(model.status),
             created_by=model.created_by,
+            created_by_org_id=model.created_by_org_id,
+            owner_org_id=model.owner_org_id,
             dose_unit=ConcentrationUnit(model.dose_unit),
             pos_control_signal=PosControlSignal(model.pos_control_signal),
             readout_definitions=readout_defs,
@@ -1075,6 +1077,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             parent_protocol_id=aggregate.parent_protocol_id,
             status=aggregate.status.value,
             created_by=aggregate.created_by,
+            created_by_org_id=aggregate.created_by_org_id,
+            owner_org_id=aggregate.owner_org_id,
             dose_unit=aggregate.dose_unit.value,
             pos_control_signal=aggregate.pos_control_signal.value,
             version=aggregate.version,
@@ -1110,6 +1114,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.description = aggregate.description
         model.protocol_type = aggregate.protocol_type.value
         model.category = aggregate.category
+        model.owner_org_id = aggregate.owner_org_id
         model.protocol_version = aggregate.protocol_version
         model.parent_protocol_id = aggregate.parent_protocol_id
         model.status = aggregate.status.value

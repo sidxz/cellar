@@ -44,6 +44,8 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
             description=model.description,
             status=ProjectStatus(model.status),
             created_by=model.created_by,
+            created_by_org_id=model.created_by_org_id,
+            owner_org_id=model.owner_org_id,
             archived_by=model.archived_by,
             archived_at=model.archived_at,
             created_at=model.created_at,
@@ -59,6 +61,8 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
             description=aggregate.description,
             status=aggregate.status.value,
             created_by=aggregate.created_by,
+            created_by_org_id=aggregate.created_by_org_id,
+            owner_org_id=aggregate.owner_org_id,
             archived_by=aggregate.archived_by,
             archived_at=aggregate.archived_at,
             version=aggregate.version,
@@ -68,6 +72,7 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
         model.name = aggregate.name
         model.description = aggregate.description
         model.status = aggregate.status.value
+        model.owner_org_id = aggregate.owner_org_id
         model.archived_by = aggregate.archived_by
         model.archived_at = aggregate.archived_at
 

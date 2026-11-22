@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
+from cellar.application.screening.change_protocol_owner import ChangeProtocolOwner
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
 from cellar.application.screening.correct_protocol import CorrectProtocol
@@ -162,6 +163,7 @@ __all__ = [
     "AddTemperatureWindowDep",
     "ApproveRunDep",
     "BulkCreateReadoutDataDep",
+    "ChangeProtocolOwnerDep",
     "ClassifyDoseResponseCurveDep",
     "CompleteRunDep",
     # Runs
@@ -320,6 +322,9 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+ChangeProtocolOwnerDep = Annotated[
+    ChangeProtocolOwner, Depends(_get_use_case(ChangeProtocolOwner))
+]
 ListNameFlagsDep = Annotated[ListNameFlags, Depends(_get_use_case(ListNameFlags))]
 SuggestFromMethodDep = Annotated[SuggestFromMethod, Depends(_get_use_case(SuggestFromMethod))]
 RederiveAllProtocolNamesDep = Annotated[

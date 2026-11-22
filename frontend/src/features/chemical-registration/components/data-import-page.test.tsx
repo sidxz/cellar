@@ -51,14 +51,20 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/admin/data-import/cdd" 
 vi.mock("@/features/screening-assay/hooks/use-cdd-enabled", () => ({
   useCddEnabled: () => ({ enabled: true, loading: false }),
 }));
-vi.mock("@/features/workspace-config/hooks/use-organizations", () => ({
-  useOrganizations: () => ({
-    data: [
-      { id: "org-1", name: "Chemistry Core" },
-      { id: "org-2", name: "Biology Core" },
-    ],
-  }),
+vi.mock("./discloser-pick", () => ({
+  DiscloserPick: ({
+    onChange,
+  }: {
+    onChange: (v: { userId: string | null; orgId: string | null }) => void;
+  }) => (
+    <button type="button" onClick={() => onChange({ userId: "u-jane", orgId: "org-partner" })}>
+      Pick J. Ortiz
+    </button>
+  ),
 }));
+vi.mock("@/shared/hooks/use-current-user", () => ({ useCurrentUser: () => ({ data: undefined }) }));
+vi.mock("@/shared/hooks/use-orgs", () => ({ useOrgName: () => () => "" }));
+vi.mock("@/shared/hooks/use-workspace-members", () => ({ useMemberNames: () => () => "" }));
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
   customInstance: h.request,
@@ -89,11 +95,7 @@ vi.mock("@/shared/components/ui/select", () => ({
     onValueChange: (v: string) => void;
     children: ReactNode;
   }) => (
-    <select
-      aria-label="Originating Organization"
-      value={value}
-      onChange={(e) => onValueChange(e.target.value)}
-    >
+    <select aria-label="Choice" value={value} onChange={(e) => onValueChange(e.target.value)}>
       <option value="" />
       {children}
     </select>
@@ -161,8 +163,6 @@ const HINT =
   "Enter one name per line or separate names with commas. Duplicate entries are ignored.";
 const PASTED = "SACC-0001, SACC-0002\nSACC-0099";
 
-const chooseOrg = (id: string) =>
-  fireEvent.change(screen.getByLabelText("Originating Organization"), { target: { value: id } });
 const chooseMode = (name: string) => fireEvent.click(screen.getByRole("radio", { name }));
 const paste = (text: string) =>
   fireEvent.change(screen.getByLabelText("CDD molecule names or synonyms"), {
@@ -238,10 +238,8 @@ describe("DataImportPage: import modes", () => {
   });
 
   describe("Full Vault and Sync, as before", () => {
-    it("can start as soon as an organization is chosen, with no check", () => {
+    it("can start straight away, with no check", () => {
       renderAs(false);
-      expect(startButton()).toBeDisabled();
-      chooseOrg("org-1");
       expect(startButton()).toBeEnabled();
       chooseMode("New and changed molecules");
       expect(startButton()).toBeEnabled();
@@ -251,24 +249,30 @@ describe("DataImportPage: import modes", () => {
 
     it("Full Vault sends the full_vault mode and no filter", async () => {
       renderAs(false);
-      chooseOrg("org-1");
       fireEvent.click(startButton());
       expect(await sentBody()).toEqual({
-        originating_org_id: "org-1",
         import_mode: "full_vault",
         filter_criteria: null,
         max_molecules: null,
       });
     });
 
+    it("cdd import sends the discloser pick", async () => {
+      renderAs(false);
+      fireEvent.click(screen.getByRole("button", { name: "Pick J. Ortiz" }));
+      fireEvent.click(startButton());
+      expect(await sentBody()).toMatchObject({
+        disclosed_by: "u-jane",
+        disclosed_by_org_id: "org-partner",
+      });
+    });
+
     it("Sync sends the sync mode, with Max molecules when one is given", async () => {
       renderAs(false);
-      chooseOrg("org-2");
       chooseMode("New and changed molecules");
       fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: "5" } });
       fireEvent.click(startButton());
       expect(await sentBody()).toEqual({
-        originating_org_id: "org-2",
         import_mode: "sync",
         filter_criteria: null,
         max_molecules: 5,
@@ -277,7 +281,6 @@ describe("DataImportPage: import modes", () => {
 
     it("does not send a list checked in the specific mode", async () => {
       renderAs(false);
-      chooseOrg("org-1");
       chooseMode(SPECIFIC);
       paste(PASTED);
       pressCheck();
@@ -291,7 +294,6 @@ describe("DataImportPage: import modes", () => {
   describe("Selected molecules", () => {
     it("starts only after a check that found molecules, with the count beside the button", async () => {
       renderAs(false);
-      chooseOrg("org-1");
       chooseMode(SPECIFIC);
       expect(startButton()).toBeDisabled();
       paste(PASTED);
@@ -310,7 +312,6 @@ describe("DataImportPage: import modes", () => {
 
     it("asks for a new check once the list is edited", async () => {
       renderAs(false);
-      chooseOrg("org-1");
       chooseMode(SPECIFIC);
       paste(PASTED);
       pressCheck();
@@ -322,23 +323,8 @@ describe("DataImportPage: import modes", () => {
       expect(screen.queryByText("2 found")).toBeNull();
     });
 
-    it("asks for a new check once the organization is changed", async () => {
-      renderAs(false);
-      chooseOrg("org-1");
-      chooseMode(SPECIFIC);
-      paste(PASTED);
-      pressCheck();
-      await screen.findByText(CHECK_RESULT);
-      expect(startButton()).toBeEnabled();
-
-      chooseOrg("org-2");
-      expect(startButton()).toBeDisabled();
-      expect(screen.queryByText(CHECK_RESULT)).toBeNull();
-    });
-
     it("keeps a check that still stands when the mode is switched away and back", async () => {
       renderAs(false);
-      chooseOrg("org-1");
       chooseMode(SPECIFIC);
       paste(PASTED);
       pressCheck();
@@ -353,7 +339,6 @@ describe("DataImportPage: import modes", () => {
     it("will not start when nothing was found", async () => {
       h.check.mutateAsync.mockResolvedValue({ found: [], not_found: ["SACC-0099"] });
       renderAs(false);
-      chooseOrg("org-1");
       chooseMode(SPECIFIC);
       paste("SACC-0099");
       pressCheck();
@@ -361,21 +346,8 @@ describe("DataImportPage: import modes", () => {
       expect(startButton()).toBeDisabled();
     });
 
-    it("will not start before an organization is chosen, and says what to do", async () => {
-      renderAs(false);
-      chooseMode(SPECIFIC);
-      paste(PASTED);
-      pressCheck();
-      await screen.findByText(CHECK_RESULT);
-      expect(startButton()).toBeDisabled();
-      expect(
-        screen.getByText("Choose an originating organization to start the import."),
-      ).toBeInTheDocument();
-    });
-
     it("sends the filtered mode with the names the check returned, and never Max molecules", async () => {
       renderAs(false);
-      chooseOrg("org-1");
       fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: "5" } });
       chooseMode(SPECIFIC);
       paste(PASTED);
@@ -384,7 +356,6 @@ describe("DataImportPage: import modes", () => {
 
       fireEvent.click(startButton());
       expect(await sentBody()).toEqual({
-        originating_org_id: "org-1",
         import_mode: "filtered",
         filter_criteria: { names: ["SACC-0001", "SACC-0002"] },
         max_molecules: null,
@@ -405,7 +376,6 @@ describe("DataImportPage: import modes", () => {
         pages_processed: 1,
       };
       renderAs(false);
-      chooseOrg("org-1");
       chooseMode(SPECIFIC);
       paste(PASTED);
       pressCheck();
@@ -449,7 +419,6 @@ describe("DataImportPage: import modes", () => {
       },
     };
     renderAs(false);
-    chooseOrg("org-1");
     fireEvent.click(startButton());
 
     await screen.findByText(/2 molecules imported;/);
@@ -538,7 +507,6 @@ describe("DataImportPage: Preview", () => {
           : { items: [] },
       );
     renderAs(false);
-    chooseOrg("org-1");
     fireEvent.click(screen.getByRole("button", { name: "Preview sample" }));
 
     expect(await screen.findByText("SACC-1")).toBeVisible();
@@ -587,7 +555,6 @@ describe("DataImportPage: Preview", () => {
           },
     );
     renderAs(false);
-    chooseOrg("org-1");
     fireEvent.click(screen.getByRole("button", { name: "Preview sample" }));
 
     expect(await screen.findByText(held)).toBeVisible();
@@ -756,7 +723,6 @@ describe("DataImportPage: outcome and preview safeguards", () => {
       pages_processed: 1,
     };
     renderAs(false);
-    chooseOrg("org-1");
     fireEvent.click(startButton());
     await screen.findByText(/2 molecules imported;/);
     const notice = screen.getByRole("status");
@@ -787,7 +753,6 @@ describe("DataImportPage: outcome and preview safeguards", () => {
 
   it("rejects zero and fractional limits instead of truncating or ignoring them", () => {
     renderAs(false);
-    chooseOrg("org-1");
     fireEvent.click(screen.getByText("Advanced options"));
     for (const limit of ["0", "-1", "1.5"]) {
       fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: limit } });

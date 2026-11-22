@@ -44,7 +44,6 @@ class CddVaultImportWorkflowInput:
     cdd_vault_id: str
     import_mode: str
     submitted_by: str
-    originating_org_id: str
     secret_ref: str
     filter_criteria: dict | None = None  # filtered mode: {"names": [...]}
     max_molecules: int | None = None
@@ -62,6 +61,10 @@ class CddVaultImportWorkflowInput:
     cumulative_duplicate: int = 0
     cumulative_error: int = 0
     cumulative_skipped: int = 0
+    # Who started it (their Duar org) and the discloser pick — workers have no token.
+    submitted_by_org_id: str | None = None
+    disclosed_by: str | None = None
+    disclosed_by_org_id: str | None = None
 
 
 @dataclass
@@ -191,11 +194,12 @@ class CddVaultImportWorkflow:
                     workspace_id=input.workspace_id,
                     cdd_vault_id=input.cdd_vault_id,
                     import_mode=input.import_mode,
-                    originating_org_id=input.originating_org_id,
                     submitted_by=input.submitted_by,
                     workflow_id=workflow.info().workflow_id,
                     filter_criteria=input.filter_criteria,
                     run_settings=_run_settings(input),
+                    disclosed_by=input.disclosed_by,
+                    disclosed_by_org_id=input.disclosed_by_org_id,
                 ),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_RETRY,
@@ -255,11 +259,13 @@ class CddVaultImportWorkflow:
                     RegistrationActivities.process_chunk,
                     ChunkInput(
                         workspace_id=input.workspace_id,
-                        originating_org_id=input.originating_org_id,
                         submitted_by=input.submitted_by,
                         items=items,
                         chunk_index=chunk_index,
                         create_batch_on_duplicate=input.create_batch_on_duplicate,
+                        submitted_by_org_id=input.submitted_by_org_id,
+                        disclosed_by=input.disclosed_by,
+                        disclosed_by_org_id=input.disclosed_by_org_id,
                     ),
                     start_to_close_timeout=timedelta(minutes=5),
                     heartbeat_timeout=timedelta(seconds=120),

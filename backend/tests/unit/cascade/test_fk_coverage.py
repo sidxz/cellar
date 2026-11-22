@@ -85,12 +85,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # append-only and never admin-deleted; cascade handled by ORM relationship.
     ("audit_entries", "operation_id", "audit_operations"),
     ("electronic_signatures", "operation_id", "audit_operations"),
-    # -------------------------------------------------------------------------
-    # Organizations — referenced as provenance (no admin delete cascade needed)
-    # -------------------------------------------------------------------------
-    # cdd_molecule_imports.originating_org_id is import provenance metadata;
-    # deleting an org doesn't require cascading import records.
-    ("cdd_molecule_imports", "originating_org_id", "organizations"),
     # collections.organization_id is a loose scope reference (SET NULL in schema);
     # the FK is to organizations which is a Tier-1 entity — RESTRICT surfaces it.
     # The cascade rule is declared in research_organization/cascade.py (SET_NULL).
@@ -211,22 +205,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # -------------------------------------------------------------------------
     # Already covered by a Tier-2 SET_NULL cascade rule in research_organization/cascade.py.
     # Listed here to document that the FK to organizations is intentional.
-    # -------------------------------------------------------------------------
-    # molecules → organizations: provenance, not cascade-deletable via org delete
-    # -------------------------------------------------------------------------
-    # molecules.originating_org_id is the organization that registered the molecule
-    # (provenance/attribution). Deleting an organization should not cascade-delete
-    # all molecules it registered — that would be catastrophic data loss.
-    # Organizations are reference entities; admin deletion is rare and requires
-    # manual molecule reassignment beforehand.
-    ("molecules", "originating_org_id", "organizations"),
-    # -------------------------------------------------------------------------
-    # collections → organizations (owned_by_org_id): SET NULL on org delete
-    # -------------------------------------------------------------------------
-    # collections.owned_by_org_id is a nullable org ownership reference
-    # (ondelete=SET NULL). If the org is deleted the collection's org link is
-    # cleared automatically by the DB; no cascade rule needed.
-    ("collections", "owned_by_org_id", "organizations"),
     # -------------------------------------------------------------------------
     # Campaign aggregate — owned children, ORM + DB cascade handles them
     # -------------------------------------------------------------------------
@@ -489,6 +467,8 @@ _VIEW = "a saved view names what it shows by id; opening it lists what no longer
 
 LEFT_ALONE: dict[str, str] = {
     "attachments.uploaded_by": _USER,
+    "molecules.registered_by": _USER,
+    "cdd_molecule_imports.disclosed_by": _USER,
     "audit_operations.user_id": _USER,
     "batch_identifiers.registered_by": _USER,
     "batch_tags.assigned_by": _USER,
@@ -548,6 +528,17 @@ LEFT_ALONE: dict[str, str] = {
     "plate_loans.owner_org_id": _ORG,
     "registered_plates.owner_org_id": _ORG,
     "runs.performed_at_org_id": _ORG,
+    "collections.owner_org_id": _ORG,
+    "collections.created_by_org_id": _ORG,
+    "projects.owner_org_id": _ORG,
+    "projects.created_by_org_id": _ORG,
+    "protocols.owner_org_id": _ORG,
+    "protocols.created_by_org_id": _ORG,
+    "molecules.registered_by_org_id": _ORG,
+    "molecules.disclosed_by_org_id": _ORG,
+    "cdd_molecule_imports.disclosed_by_org_id": _ORG,
+    "disclosure_requests.requested_by_org_id": _ORG,
+    "bulk_disclosures.submitted_by_org_id": _ORG,
     "shipments.destination_org_id": _ORG,
     "synthesis_requests.assigned_org_id": _ORG,
     "audit_entries.entity_id": _AUDIT,

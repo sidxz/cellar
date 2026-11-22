@@ -195,6 +195,9 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     parent_protocol_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("protocols.id"))
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="draft")
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    # Duar org ids (no FK — orgs live in Duar).
+    created_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    owner_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     # Canonical dose unit for this assay. All wells of all runs of this
     # protocol use this unit; IC50 fits are reported in this unit.
     dose_unit: Mapped[str] = mapped_column(String(10), nullable=False, server_default="uM")

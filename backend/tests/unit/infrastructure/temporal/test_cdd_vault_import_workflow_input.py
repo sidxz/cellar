@@ -22,7 +22,6 @@ def _input(**overrides) -> CddVaultImportWorkflowInput:
         "cdd_vault_id": "4443",
         "import_mode": "filtered",
         "submitted_by": "u",
-        "originating_org_id": "org",
         "secret_ref": "ws:cdd_vault",
         "filter_criteria": {"names": NAMES},
         "entity_mappings": [{"entity_type": "molecule"}],
@@ -123,3 +122,30 @@ def test_run_settings_are_what_a_resumed_run_needs() -> None:
     assert set(settings) == set(RUN_SETTINGS_KEYS)
     restarted = CddVaultImportWorkflowInput(**{**_input().__dict__, **settings})
     assert _run_settings(restarted) == settings
+
+
+def test_old_cdd_workflow_payload_still_decodes() -> None:
+    """A run started before this release has none of the new keys; it must still decode."""
+    from temporalio.converter import DataConverter
+
+    old = {
+        "workspace_id": "ws", "cdd_vault_id": "4443", "import_mode": "full_vault",
+        "submitted_by": "u", "originating_org_id": "org", "secret_ref": "ws:cdd_vault",
+        "entity_mappings": [],
+    }
+    converter = DataConverter.default.payload_converter
+    (payload,) = converter.to_payloads([old])
+    (decoded,) = converter.from_payloads([payload], [CddVaultImportWorkflowInput])
+    assert decoded.submitted_by_org_id is None and decoded.disclosed_by_org_id is None
+
+
+def test_continue_input_carries_submitter_org_and_discloser_pick() -> None:
+    first = _input(submitted_by_org_id="duar", disclosed_by="jane", disclosed_by_org_id="partner")
+    nxt = _continue_input(
+        first, import_id="imp", storage_path=None, offset=0, chunk_index=0,
+        progress=CddVaultImportProgress(),
+    )
+    assert (nxt.submitted_by_org_id, nxt.disclosed_by, nxt.disclosed_by_org_id) == (
+        "duar", "jane", "partner",
+    )
+

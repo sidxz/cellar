@@ -58,8 +58,8 @@ async def _seed_molecules(session_factory, ws: uuid.UUID, n: int) -> list[uuid.U
             await session.execute(
                 text(
                     "INSERT INTO molecules (id, workspace_id, registration_number, name, "
-                    "molecule_type, smiles, version, originating_org_id) VALUES "
-                    "(:id, :ws, :r, :r, 'small_molecule', :smi, 1, :org)"
+                    "molecule_type, smiles, version) VALUES "
+                    "(:id, :ws, :r, :r, 'small_molecule', :smi, 1)"
                 ),
                 {"id": mid, "ws": ws, "r": f"E2E-{i}", "smi": "Fc1ccccc1", "org": org_id},
             )

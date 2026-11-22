@@ -20,7 +20,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 # Force screening_assay models so protocol_projects / runs join targets resolve.
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
-from tests.api.conftest import _create_test_app
+from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -432,3 +432,26 @@ async def test_molecule_merge_carries_project_links(
         linked = await c.get(f"/api/v1/molecules/{tgt['id']}/projects")
         assert proj in set(linked.json())
     await container[AsyncEngine].dispose()
+
+
+class TestProjectOwner:
+    async def test_create_stamps_creator_org_and_owner(self, client: AsyncClient) -> None:
+        data = (await client.post("/api/v1/projects", json={"name": "Owned"})).json()
+        assert (data["created_by_org_id"], data["owner_org_id"]) == (str(AUTH_ORG_ID),) * 2
+
+    async def test_creator_puts_owner(self, client: AsyncClient) -> None:
+        pid = (await client.post("/api/v1/projects", json={"name": "Move"})).json()["id"]
+        resp = await client.put(
+            f"/api/v1/projects/{pid}/owner", json={"owner_org_id": str(OTHER_ORG_ID)}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["owner_org_id"] == str(OTHER_ORG_ID)
+
+    async def test_put_owner_by_non_creator_editor_is_403(
+        self, client: AsyncClient, other_editor_client: AsyncClient
+    ) -> None:
+        pid = (await client.post("/api/v1/projects", json={"name": "Mine"})).json()["id"]
+        resp = await other_editor_client.put(
+            f"/api/v1/projects/{pid}/owner", json={"owner_org_id": str(OTHER_ORG_ID)}
+        )
+        assert resp.status_code == 403

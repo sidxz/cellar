@@ -9,6 +9,7 @@ import type {
   PreviewRegistrationItemResponse as GeneratedPreviewRegistrationItemResponse,
   PreviewRegistrationResponse as GeneratedPreviewRegistrationResponse,
 } from "@/shared/lib/api/model";
+import type { DiscloserChoice } from "../components/discloser-pick";
 import type { BatchInput, Molecule } from "./index";
 
 export type WizardMode = "single" | "bulk";
@@ -29,7 +30,8 @@ export interface SingleInput {
   name: string;
   smiles: string | null;
   moleculeType: string;
-  originatingOrgId: string | null;
+  /** Who disclosed the structure and for which Duar org; nulls = you / your org. */
+  discloser: DiscloserChoice;
   externalIds: ExternalIdentifierInput[];
   customFields: Record<string, unknown>;
   disclosureMode: boolean;
@@ -61,7 +63,8 @@ export interface BulkInput {
   file: File | null;
   fileFormat: "csv" | "xlsx" | "sdf";
   parsedRows: BulkRow[];
-  originatingOrgId: string | null;
+  /** Who disclosed the structures in the file; nulls = you / your org. */
+  discloser: DiscloserChoice;
   createBatchOnDuplicate: boolean;
   /** Projects every compound in the file is added to (optional). */
   projectIds: string[];

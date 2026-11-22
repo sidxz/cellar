@@ -5,6 +5,7 @@ import { ProtocolList } from "@/features/screening-assay";
 import { TagTable } from "@/features/tagging/components/tag-table";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { MemberName } from "@/shared/components/entity-name";
+import { OwnerOrgLine } from "@/shared/components/owner-org-line";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +19,10 @@ import {
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { canChangeOwner, useChangeOwner } from "@/shared/hooks/use-change-owner";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { useOrgName } from "@/shared/hooks/use-orgs";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
 import { useState } from "react";
@@ -37,6 +41,9 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
   const query = useProject(projectId);
   const archiveMutation = useArchiveProject();
   const canEditTags = useAuthzHasRole("editor");
+  const { data: me } = useCurrentUser();
+  const changeOwner = useChangeOwner("projects", projectId);
+  const orgName = useOrgName();
 
   const [tab, setTab] = useHashTab("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -50,6 +57,13 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
         backHref="/projects"
         backLabel="Back to Projects"
         title={(p) => p.name}
+        subtitle={(p) => (
+          <OwnerOrgLine
+            ownerOrgId={p.owner_org_id}
+            canChange={p.status !== "archived" && canChangeOwner(me, p.created_by)}
+            onSave={changeOwner.mutateAsync}
+          />
+        )}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Project not found."
         actions={(p) =>
@@ -104,6 +118,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                       <p className="text-sm text-muted-foreground">Created By</p>
                       <p className="text-sm font-medium">
                         <MemberName id={project.created_by} />
+                        {project.created_by_org_id && <> · {orgName(project.created_by_org_id)}</>}
                       </p>
                     </div>
                   </div>

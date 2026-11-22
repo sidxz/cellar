@@ -9,6 +9,7 @@ from typing import Any, Literal
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from cellar.application.chemical_registration.change_discloser import ChangeDiscloserCommand
 from cellar.application.chemical_registration.depict_molecules import (
     DepictMoleculesQuery,
 )
@@ -50,6 +51,7 @@ from cellar.domain.chemical_registration.molecule_identifier import MoleculeIden
 from cellar.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
+    ChangeDiscloserDep,
     CreateBatchDep,
     DepictMoleculesDep,
     GetMoleculeByIdentifierDep,
@@ -177,7 +179,12 @@ class MoleculeResponse(BaseModel):
     disclosure_date: date | None = None
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
-    originating_org_id: uuid.UUID
+    # When it was registered; who registered it and who disclosed it, with their Duar orgs.
+    created_at: datetime | None = None
+    registered_by: uuid.UUID | None = None
+    registered_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
     scientist_name: str | None = None
     identifiers: list[IdentifierResponse]
     version: int
@@ -229,7 +236,11 @@ class MoleculeResponse(BaseModel):
             disclosure_date=mol.disclosure_date,
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
-            originating_org_id=mol.originating_org_id,
+            created_at=mol.created_at,
+            registered_by=mol.registered_by,
+            registered_by_org_id=mol.registered_by_org_id,
+            disclosed_by=mol.disclosed_by,
+            disclosed_by_org_id=mol.disclosed_by_org_id,
             scientist_name=mol.scientist_name,
             identifiers=identifiers,
             version=mol.version,
@@ -431,7 +442,9 @@ class RegisterMoleculeBody(BaseModel):
     smiles: str | None = None
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
-    originating_org_id: uuid.UUID
+    # Who disclosed it and for which Duar org; omitted = you and your org.
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
     scientist_name: str | None = Field(default=None, max_length=200)
     disclosure_date: date | None = None  # declared; requires smiles
     custom_fields: dict | None = None
@@ -451,7 +464,7 @@ class PreviewBatchIdBody(BaseModel):
 
 class PreviewRegistrationItemBody(BaseModel):
     """Mirrors RegisterMoleculeBody so a caller can preview the exact payload it will
-    POST; keys the forecast does not use (originating_org_id, batch, …) are ignored."""
+    POST; keys the forecast does not use (batch, …) are ignored."""
 
     name: str | None = None
     smiles: str | None = None  # None = intends an undisclosed registration
@@ -532,11 +545,13 @@ async def register_molecule(
             )
             for e in body.external_ids
         ],
-        originating_org_id=body.originating_org_id,
         scientist_name=body.scientist_name,
         disclosure_date=body.disclosure_date,
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
+        registered_by_org_id=auth.org_id,
+        disclosed_by=body.disclosed_by,
+        disclosed_by_org_id=body.disclosed_by_org_id,
         auto_approve=body.auto_approve,
         project_ids=body.project_ids,
     )
@@ -915,6 +930,33 @@ async def update_molecule(
     )
     mol = result_to_response(await use_case(command, auth=auth))
     return MoleculeResponse.from_domain(mol)
+
+
+class ChangeDiscloserBody(BaseModel):
+    """Send what changes; an omitted field keeps its value."""
+
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
+
+
+@router.put("/{molecule_id}/discloser", response_model=MoleculeResponse)
+async def change_discloser(
+    molecule_id: uuid.UUID,
+    body: ChangeDiscloserBody,
+    auth: AuthDep,
+    use_case: ChangeDiscloserDep,
+) -> MoleculeResponse:
+    """Correct who disclosed the compound and for which Duar org (an admin or its registrant)."""
+    provided = body.model_fields_set
+    command = ChangeDiscloserCommand(
+        workspace_id=auth.workspace_id,
+        molecule_id=molecule_id,
+        disclosed_by=body.disclosed_by if "disclosed_by" in provided else UNSET,
+        disclosed_by_org_id=(
+            body.disclosed_by_org_id if "disclosed_by_org_id" in provided else UNSET
+        ),
+    )
+    return MoleculeResponse.from_domain(result_to_response(await use_case(command, auth=auth)))
 
 
 @router.get("/{molecule_id}/activity", response_model=ActivitySummaryResponse)

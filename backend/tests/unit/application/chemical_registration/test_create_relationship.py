@@ -94,7 +94,6 @@ def _make_mol(name: str = "Test") -> Molecule:
         registration_number=RegistrationNumber(value=f"CV-{uuid.uuid4().hex[:5]}"),
         name=name,
         molecule_type=MoleculeType.SMALL_MOLECULE,
-        originating_org_id=ORG_ID,
     )
     mol.clear_events()
     return mol

@@ -224,11 +224,14 @@ class BulkTrackingActivities:
                 workspace_id=uuid.UUID(input.workspace_id),
                 cdd_vault_id=input.cdd_vault_id,
                 import_mode=CddImportMode(input.import_mode),
-                originating_org_id=uuid.UUID(input.originating_org_id),
                 submitted_by=uuid.UUID(input.submitted_by),
                 workflow_id=input.workflow_id,
                 filter_criteria=input.filter_criteria,
                 run_settings=input.run_settings,
+                disclosed_by=uuid.UUID(input.disclosed_by) if input.disclosed_by else None,
+                disclosed_by_org_id=(
+                    uuid.UUID(input.disclosed_by_org_id) if input.disclosed_by_org_id else None
+                ),
             )
             imp.start_discovery()
             await repo.save(imp)

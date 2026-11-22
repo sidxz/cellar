@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 from cellar.domain.research_organization.enums import CollectionType, CollectionVisibility
-from cellar.domain.research_organization.events import CollectionCreated
+from cellar.domain.research_organization.events import CollectionCreated, CollectionOwnerChanged
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import CollectionFrozenError, ValidationError
 
@@ -29,8 +29,9 @@ class Collection(AggregateRoot):
         name: str,
         description: str | None = None,
         project_id: uuid.UUID | None = None,
-        owned_by_org_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
+        created_by_org_id: uuid.UUID | None = None,
         molecule_count: int = 0,
         visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
         type: CollectionType = CollectionType.GENERIC,
@@ -47,8 +48,10 @@ class Collection(AggregateRoot):
         self.name = name.strip()
         self.description = description
         self.project_id = project_id
-        self.owned_by_org_id = owned_by_org_id
+        # Duar org ids. The creator's org is fixed at creation; the owner can change.
+        self.owner_org_id = owner_org_id
         self.created_by = created_by
+        self.created_by_org_id = created_by_org_id
         self.molecule_count = molecule_count
         self.visibility = visibility
         self.type = type
@@ -63,18 +66,21 @@ class Collection(AggregateRoot):
         name: str,
         description: str | None = None,
         project_id: uuid.UUID | None = None,
-        owned_by_org_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
+        created_by_org_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
         visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
         type: CollectionType = CollectionType.GENERIC,
     ) -> Collection:
+        """The owner defaults to the creator's org."""
         collection = cls(
             workspace_id=workspace_id,
             name=name,
             description=description,
             project_id=project_id,
-            owned_by_org_id=owned_by_org_id,
+            owner_org_id=owner_org_id if owner_org_id is not None else created_by_org_id,
             created_by=created_by,
+            created_by_org_id=created_by_org_id,
             visibility=visibility,
             type=type,
         )
@@ -95,7 +101,6 @@ class Collection(AggregateRoot):
         name: str | None = None,
         description: str | None = ...,  # type: ignore[assignment]
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
-        owned_by_org_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         visibility: CollectionVisibility | None = None,
         type: CollectionType | None = None,
     ) -> None:
@@ -114,13 +119,28 @@ class Collection(AggregateRoot):
             self.description = description
         if project_id is not ...:
             self.project_id = project_id
-        if owned_by_org_id is not ...:
-            self.owned_by_org_id = owned_by_org_id
         if visibility is not None:
             self.visibility = visibility
         if type is not None:
             self.type = type
         self.updated_at = datetime.now(UTC)
+
+    def change_owner(self, owner_org_id: uuid.UUID) -> None:
+        """Hand the collection to another org. Ownership isn't content, so a frozen
+        collection takes it too."""
+        if owner_org_id == self.owner_org_id:
+            return
+        old, self.owner_org_id = self.owner_org_id, owner_org_id
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            CollectionOwnerChanged(
+                aggregate_id=self.id,
+                aggregate_type="Collection",
+                workspace_id=self.workspace_id,
+                old_owner_org_id=old,
+                new_owner_org_id=owner_org_id,
+            )
+        )
 
     def freeze(self, *, derived_from_campaign_id: uuid.UUID) -> None:
         """Mark the collection as frozen — origin campaign owns it forever.

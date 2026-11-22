@@ -31,7 +31,6 @@ async def test_worker_dispatcher_writes_audit_row_for_set_actor(
         workspace_id=uuid.uuid4(),
         registration_number="CV-000001",
         molecule_type="small_molecule",
-        originating_org_id=uuid.uuid4(),
     )
     set_current_actor(actor)
     try:

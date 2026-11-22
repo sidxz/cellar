@@ -116,7 +116,6 @@ class TestBulkRegistrationService:
             file_format="xyz",
             items=_items("A"),
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         result = await service(cmd)
@@ -134,7 +133,6 @@ class TestBulkRegistrationService:
             file_format="csv",
             items=[],
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         result = await service(cmd)
@@ -153,7 +151,6 @@ class TestBulkRegistrationService:
             file_format="csv",
             items=_items("Aspirin", "Caffeine"),
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         mock_mol = MagicMock()
@@ -191,7 +188,6 @@ class TestBulkRegistrationService:
             file_format="csv",
             items=_items("Good", "Bad"),
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         call_count = 0
@@ -237,7 +233,6 @@ class TestBulkRegistrationService:
             file_format="csv",
             items=_items("Aspirin", "Aspirin2"),
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         call_count = 0
@@ -278,7 +273,6 @@ class TestBulkRegistrationService:
             file_format="csv",
             items=_items("A"),
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         from cellar.domain.shared.errors import AuthorizationError
@@ -323,7 +317,6 @@ class TestBulkRegistrationBatchCreation:
             file_format="csv",
             items=items,
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         mock_mol = MagicMock()
@@ -401,7 +394,6 @@ class TestBulkRegistrationBatchCreation:
             file_format="csv",
             items=items,
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         mock_mol = MagicMock()
@@ -471,7 +463,6 @@ class TestBulkRegistrationBatchCreation:
             file_format="csv",
             items=items,
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         mock_mol = MagicMock()
@@ -530,7 +521,6 @@ class TestBulkRegistrationBatchCreation:
             file_format="csv",
             items=_items("Aspirin"),
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         mock_mol = MagicMock()
@@ -601,7 +591,6 @@ class TestBulkRegistrationBatchPolicy:
                 ),
             ],
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         call_count = 0
@@ -676,7 +665,6 @@ class TestBulkRegistrationBatchPolicy:
                 BulkRegistrationItem(row_index=1, name="mol-1", smiles="CC"),
             ],
             submitted_by=user_id,
-            originating_org_id=org_id,
         )
 
         with (
@@ -732,7 +720,6 @@ class TestBulkRegistrationBatchPolicy:
                 BulkRegistrationItem(row_index=1, name="mol-1", smiles="CC"),
             ],
             submitted_by=user_id,
-            originating_org_id=org_id,
             create_batch_on_duplicate=False,  # override wins
         )
 

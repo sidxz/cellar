@@ -142,7 +142,10 @@ class ResolveDisclosureConflict:
         molecule.disclose(
             structure=processed.structure,
             descriptors=processed.descriptors,
-            disclosed_by=input.resolved_by,
+            # The person who brought the structure is credited, not the admin who
+            # resolved the conflict (History records the resolution).
+            disclosed_by=dr.requested_by,
+            disclosed_by_org_id=dr.disclosing_org_id,
             stereochemistry=processed.stereochemistry,
             disclosure_date=dr.disclosure_date,
         )

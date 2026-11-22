@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { StepInput } from "./step-input";
 
-vi.mock("@/features/workspace-config/hooks/use-organizations", () => ({
-  useOrganizations: () => ({ data: [{ id: "org-1", name: "Chemistry" }] }),
-}));
+vi.mock("../discloser-pick", () => ({ DiscloserPick: () => <span>Disclosed by</span> }));
+vi.mock("@/shared/hooks/use-current-user", () => ({ useCurrentUser: () => ({ data: undefined }) }));
+vi.mock("@/shared/hooks/use-orgs", () => ({ useOrgName: () => () => "" }));
+vi.mock("@/shared/hooks/use-workspace-members", () => ({ useMemberNames: () => () => "" }));
 vi.mock("@/features/workspace-config/hooks/use-workspace-settings", () => ({
   useWorkspaceSettings: () => ({ data: { registration_rules: {} } }),
 }));
@@ -18,7 +19,7 @@ function renderUpload(file: File | null = null) {
   const state = useRegistrationWizard.getState();
   useRegistrationWizard.setState({
     mode: "bulk",
-    bulkInput: { ...state.bulkInput, file, originatingOrgId: "org-1" },
+    bulkInput: { ...state.bulkInput, file },
   });
   render(
     <QueryClientProvider client={new QueryClient()}>

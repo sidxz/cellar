@@ -98,6 +98,8 @@ class ProtocolVersioningService:
             parent_protocol_id=parent.id,
             status=ProtocolStatus.DRAFT,
             created_by=parent.created_by,
+            created_by_org_id=parent.created_by_org_id,
+            owner_org_id=parent.owner_org_id,
             dose_unit=parent.dose_unit,
             pos_control_signal=parent.pos_control_signal,
             readout_definitions=cloned_readouts,

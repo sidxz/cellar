@@ -9,7 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.api.conftest import _create_test_app
+from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -34,7 +34,6 @@ async def test_re_register_same_compound_does_not_create_second_batch_by_default
     body = {
         "name": "Ethanol-A",
         "smiles": ETHANOL_SMILES,
-        "originating_org_id": originating_org_id,
         "batch": {"source": "synthesized", "amount_value": 100, "amount_unit": "mg"},
     }
     first = await client.post("/api/v1/molecules", json=body)
@@ -58,7 +57,6 @@ async def test_re_register_with_create_batch_on_duplicate_true_creates_second_ba
     body = {
         "name": "Acetone-A",
         "smiles": "CC(=O)C",
-        "originating_org_id": originating_org_id,
         "batch": {"source": "synthesized", "amount_value": 50, "amount_unit": "mg"},
     }
     first = await client.post("/api/v1/molecules", json=body)
@@ -82,7 +80,6 @@ async def test_scientist_name_round_trips(
     body = {
         "name": f"Prov-{smiles or 'undisclosed'}",
         "smiles": smiles,
-        "originating_org_id": originating_org_id,
         "scientist_name": "A. Chemist",
     }
     created = await client.post("/api/v1/molecules", json=body)
@@ -102,7 +99,6 @@ async def test_declared_disclosure_date_round_trips_on_registration(
     body = {
         "name": "Declared-1",
         "smiles": "CCN",
-        "originating_org_id": originating_org_id,
         "disclosure_date": "2024-03-15",
     }
     created = await client.post("/api/v1/molecules", json=body)
@@ -120,7 +116,6 @@ async def test_future_disclosure_date_on_registration_is_rejected(
     body = {
         "name": "Declared-future",
         "smiles": "CCCN",
-        "originating_org_id": originating_org_id,
         "disclosure_date": (datetime.now(UTC).date() + timedelta(days=1)).isoformat(),
     }
     resp = await client.post("/api/v1/molecules", json=body)
@@ -154,7 +149,6 @@ async def test_register_links_new_compound_to_projects(
         json={
             "name": "RegLinked",
             "smiles": "CCCCCCCCCCCCCCN",
-            "originating_org_id": originating_org_id,
             "project_ids": [p1, p2, p1],
         },
     )
@@ -171,7 +165,6 @@ async def test_register_duplicate_links_existing_compound(
         json={
             "name": "DupA",
             "smiles": "CCCCCCCCCCCCCCCN",
-            "originating_org_id": originating_org_id,
         },
     )
     proj = await _project(client, "Dup P")
@@ -180,7 +173,6 @@ async def test_register_duplicate_links_existing_compound(
         json={
             "name": "DupB",
             "smiles": "CCCCCCCCCCCCCCCN",
-            "originating_org_id": originating_org_id,
             "project_ids": [proj],
         },
     )
@@ -200,7 +192,6 @@ async def test_register_with_archived_project_registers_nothing(
         json={
             "name": "NeverRegistered",
             "smiles": "CCCCCCCCCCCCCCCCN",
-            "originating_org_id": originating_org_id,
             "project_ids": [proj],
         },
     )
@@ -226,7 +217,6 @@ async def test_register_into_project_without_editor_role_is_403(
             json={
                 "name": "StrangerCmpd",
                 "smiles": "CCCCCCCCCCCCCCCCCCCO",
-                "originating_org_id": originating_org_id,
                 "project_ids": [proj],
             },
         )
@@ -244,7 +234,6 @@ async def test_identifier_conflict_links_nothing(client: AsyncClient, originatin
         json={
             "name": "Taken",
             "smiles": "CCCCCCCCCCCCCCCCCN",
-            "originating_org_id": originating_org_id,
         },
     )
     proj = await _project(client, "Conflict P")
@@ -253,7 +242,6 @@ async def test_identifier_conflict_links_nothing(client: AsyncClient, originatin
         json={
             "name": "Taken",
             "smiles": "c1ccccc1CCCCCCCCN",
-            "originating_org_id": originating_org_id,
             "project_ids": [proj],
         },
     )
@@ -278,10 +266,64 @@ async def test_disclosing_an_undisclosed_compound_links_it(
         json={
             "name": "UND-PROJ-1",
             "smiles": "CCCCCCCCCCCCCCCCCCCCN",
-            "originating_org_id": originating_org_id,
             "project_ids": [proj],
         },
     )
     assert disclosed.status_code == 201, disclosed.text
     assert disclosed.json()["action"] == "disclosed"
     assert await _project_ids_of(client, undisclosed.json()["molecule"]["id"]) == {proj}
+
+
+@pytest.mark.asyncio
+async def test_register_stamps_registered_by_and_org_from_token(
+    client: AsyncClient, originating_org_id: str
+):
+    body = {"name": "Stamped-1", "smiles": "CCCO", "originating_org_id": originating_org_id}
+    resp = await client.post("/api/v1/molecules", json=body)
+    assert resp.status_code == 201, resp.text
+    mol = resp.json()["molecule"]
+    assert mol["registered_by_org_id"] == str(AUTH_ORG_ID)
+    assert (mol["disclosed_by"], mol["disclosed_by_org_id"]) == (
+        mol["registered_by"],
+        str(AUTH_ORG_ID),
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_with_picked_discloser_org(client: AsyncClient, originating_org_id: str):
+    body = {
+        "name": "Stamped-2",
+        "smiles": "CCCCO",
+        "disclosed_by_org_id": str(OTHER_ORG_ID),
+    }
+    resp = await client.post("/api/v1/molecules", json=body)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["molecule"]["disclosed_by_org_id"] == str(OTHER_ORG_ID)
+
+
+@pytest.mark.asyncio
+async def test_register_with_unknown_discloser_org_is_422(
+    client: AsyncClient, originating_org_id: str
+):
+    body = {
+        "name": "Stamped-3",
+        "smiles": "CCCCCO",
+        "disclosed_by_org_id": str(uuid.uuid4()),
+    }
+    assert (await client.post("/api/v1/molecules", json=body)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_body_with_originating_org_id_is_accepted_and_ignored(client: AsyncClient):
+    """Clients that still send the retired local-org id (DAIKON) are not refused."""
+    body = {"name": "Legacy-1", "smiles": "OCCCO", "originating_org_id": str(uuid.uuid4())}
+    resp = await client.post("/api/v1/molecules", json=body)
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.asyncio
+async def test_molecule_response_has_no_originating_org_id(client: AsyncClient):
+    resp = await client.post("/api/v1/molecules", json={"name": "Legacy-2", "smiles": "OCCCCO"})
+    assert resp.status_code == 201, resp.text
+    assert "originating_org_id" not in resp.json()["molecule"]
+

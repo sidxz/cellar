@@ -27,6 +27,7 @@ from cellar.application.research_organization.manage_project_members import (
     UpdateProjectMemberRoleCommand,
 )
 from cellar.application.research_organization.update_project import UpdateProjectCommand
+from cellar.application.shared.change_owner import ChangeOwnerCommand
 from cellar.application.shared.molecule_resolver import MoleculeReference, RefType
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.research_organization.project import Project, ProjectStatus
@@ -36,6 +37,7 @@ from cellar.interface.dependencies import (
     AddProjectMemberDep,
     ArchiveProjectDep,
     AuthDep,
+    ChangeProjectOwnerDep,
     CreateProjectDep,
     GetProjectDep,
     GetProjectScopeStatsDep,
@@ -50,6 +52,7 @@ from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
 from cellar.interface.routes.collections import (
     AddMoleculesBody,
+    ChangeOwnerBody,
     MembershipResultResponse,
     UnresolvedMoleculeResponse,
 )
@@ -64,6 +67,9 @@ class ProjectResponse(BaseModel):
     description: str | None = None
     status: ProjectStatus
     created_by: uuid.UUID
+    # Duar org ids: the creator's org when it was made, and who owns it now.
+    created_by_org_id: uuid.UUID | None = None
+    owner_org_id: uuid.UUID | None = None
     version: int
 
     @classmethod
@@ -75,6 +81,8 @@ class ProjectResponse(BaseModel):
             description=project.description,
             status=project.status,
             created_by=project.created_by,
+            created_by_org_id=project.created_by_org_id,
+            owner_org_id=project.owner_org_id,
             version=project.version,
         )
 
@@ -195,6 +203,20 @@ async def update_project(
     )
     project = result_to_response(await use_case(command, auth=auth))
     return ProjectResponse.from_domain(project)
+
+
+@router.put("/{project_id}/owner", response_model=ProjectResponse)
+async def change_project_owner(
+    project_id: uuid.UUID,
+    body: ChangeOwnerBody,
+    auth: AuthDep,
+    use_case: ChangeProjectOwnerDep,
+) -> ProjectResponse:
+    """Hand the project to another Duar org (an admin or its creator)."""
+    command = ChangeOwnerCommand(
+        workspace_id=auth.workspace_id, entity_id=project_id, owner_org_id=body.owner_org_id
+    )
+    return ProjectResponse.from_domain(result_to_response(await use_case(command, auth=auth)))
 
 
 @router.post("/{project_id}/archive", response_model=ProjectResponse)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { DuarOrgSelect } from "@/shared/components/duar-org-select";
 import { SearchableSelect } from "@/shared/components/searchable-select";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -63,7 +64,7 @@ function toFormValues(collection: Collection, defaultProjectId?: string): FormVa
     visibility: collection.visibility ?? "private",
     type: collection.type ?? "generic",
     project_id: collection.project_id ?? defaultProjectId ?? null,
-    org_id: collection.owned_by_org_id ?? null,
+    org_id: collection.owner_org_id ?? null,
   };
 }
 
@@ -91,7 +92,7 @@ export function CreateCollectionDialog({
   const updateMutation = useUpdateCollection(collection?.id ?? "");
 
   const { data: projects } = useProjects();
-  const { data: orgs } = useOrganizations();
+  const { data: me } = useCurrentUser();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -116,7 +117,8 @@ export function CreateCollectionDialog({
       name: values.name.trim(),
       description: values.description?.trim() || null,
       project_id: values.project_id,
-      owned_by_org_id: values.org_id,
+      // Owner is picked when creating; afterwards it changes from the page header.
+      ...(isEdit ? {} : { owner_org_id: values.org_id ?? me?.org_id ?? null }),
       visibility: values.visibility,
       type: values.type,
     };
@@ -230,22 +232,23 @@ export function CreateCollectionDialog({
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label>Organization (optional)</Label>
-              <Controller
-                name="org_id"
-                control={form.control}
-                render={({ field }) => (
-                  <SearchableSelect
-                    options={orgs?.map((o) => ({ value: o.id, label: o.name })) ?? []}
-                    value={field.value}
-                    onValueChange={(v) => field.onChange(v ?? null)}
-                    placeholder="No organization"
-                    searchPlaceholder="Search organizations..."
-                  />
-                )}
-              />
-            </div>
+            {!isEdit && (
+              <div className="grid gap-2">
+                <Label htmlFor="collection-owner">Owned by</Label>
+                <Controller
+                  name="org_id"
+                  control={form.control}
+                  render={({ field }) => (
+                    <DuarOrgSelect
+                      id="collection-owner"
+                      value={field.value ?? me?.org_id ?? null}
+                      onValueChange={(v) => field.onChange(v ?? null)}
+                      placeholder="Your org"
+                    />
+                  )}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>

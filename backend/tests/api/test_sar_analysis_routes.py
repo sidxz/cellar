@@ -80,12 +80,12 @@ async def _seed_two_molecules(api_app, ws: uuid.UUID) -> list[uuid.UUID]:
                     "molecule_type, smiles, cxsmiles, inchi, inchi_key, molfile, "
                     "molecular_formula, molecular_weight, exact_mass, logp, tpsa, "
                     "hbd, hba, rotatable_bonds, aromatic_rings, ring_count, "
-                    "heavy_atom_count, ro5_violations, version, originating_org_id) VALUES "
+                    "heavy_atom_count, ro5_violations, version) VALUES "
                     "(:id, :ws, :r, :r, 'small_molecule', :smiles, :cxsmiles, :inchi, "
                     ":inchi_key, :molfile, :molecular_formula, :molecular_weight, "
                     ":exact_mass, :logp, :tpsa, :hbd, :hba, :rotatable_bonds, "
                     ":aromatic_rings, :ring_count, :heavy_atom_count, :ro5_violations, "
-                    "1, :org)"
+                    "1)"
                 ),
                 {"id": mid, "ws": ws, "r": mol["reg"], "org": org_id, **mol},
             )

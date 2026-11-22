@@ -274,6 +274,7 @@ class CreateProtocol:
                     protocol_type=ProtocolType(input.protocol_type),
                     category=input.category,
                     created_by=auth.user_id,
+                    created_by_org_id=auth.org_id,
                     dose_unit=ConcentrationUnit(input.dose_unit),
                     pos_control_signal=PosControlSignal(input.pos_control_signal),
                     readout_definitions=readout_defs,

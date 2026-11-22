@@ -19,13 +19,16 @@ class StartCddMoleculeImportRequest:
     cdd_vault_id: str
     import_mode: str
     submitted_by: uuid.UUID
-    originating_org_id: uuid.UUID
     secret_ref: str
     entity_mappings: list[dict]
     registration_mapping: list[dict] | None = None  # vault field → target, see data source
     filter_criteria: dict | None = None
     max_molecules: int | None = None
     create_batch_on_duplicate: bool | None = None
+    # The starter's Duar org (their token) and the discloser pick (None = them).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -37,7 +40,6 @@ class ResumeCddMoleculeImportRequest:
     cdd_vault_id: str
     import_mode: str
     submitted_by: uuid.UUID  # who resumed it: the actor of what the run registers now
-    originating_org_id: uuid.UUID
     filter_criteria: dict | None
     run_settings: dict  # the options the run started with
     cdd_export_id: int
@@ -47,6 +49,10 @@ class ResumeCddMoleculeImportRequest:
     duplicate_count: int
     error_count: int
     skipped_count: int
+    # The resumer's Duar org (their token) and the discloser pick (stored on the import).
+    submitted_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

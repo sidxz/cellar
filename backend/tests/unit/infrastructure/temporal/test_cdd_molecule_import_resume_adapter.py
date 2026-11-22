@@ -36,7 +36,6 @@ def _request() -> ResumeCddMoleculeImportRequest:
         cdd_vault_id="4443",
         import_mode="full_vault",
         submitted_by=uuid.uuid4(),
-        originating_org_id=uuid.uuid4(),
         filter_criteria=None,
         run_settings=SETTINGS,
         cdd_export_id=82939461,

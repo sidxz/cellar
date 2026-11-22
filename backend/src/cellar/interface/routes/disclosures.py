@@ -55,6 +55,7 @@ class DisclosureRequestResponse(BaseModel):
     disclosing_org_id: uuid.UUID | None = None
     scientist_name: str | None = None
     requested_by: uuid.UUID
+    requested_by_org_id: uuid.UUID | None = None  # the requester's Duar org
     requested_at: datetime
     resolved_at: datetime | None = None
     disclosure_date: date | None = None
@@ -78,6 +79,7 @@ class DisclosureRequestResponse(BaseModel):
             disclosing_org_id=dr.disclosing_org_id,
             scientist_name=dr.scientist_name,
             requested_by=dr.requested_by,
+            requested_by_org_id=dr.requested_by_org_id,
             requested_at=dr.requested_at,
             resolved_at=dr.resolved_at,
             disclosure_date=dr.disclosure_date,
@@ -131,6 +133,7 @@ async def submit_disclosure(
         molecule_id=body.molecule_id,
         disclosed_smiles=body.disclosed_smiles,
         requested_by=auth.user_id,
+        requested_by_org_id=auth.org_id,
         disclosing_org_id=body.disclosing_org_id,
         scientist_name=body.scientist_name,
         auto_approve=body.auto_approve,

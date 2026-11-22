@@ -36,7 +36,6 @@ async def _make_molecule(client: AsyncClient, org_id: str, *, name: str, smiles:
             "name": name,
             "smiles": smiles,
             "molecule_type": "small_molecule",
-            "originating_org_id": org_id,
         },
     )
     assert resp.status_code in (200, 201), resp.text

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, Index, Integer, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,9 +24,6 @@ class CddMoleculeImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
 
     cdd_vault_id: Mapped[str] = mapped_column(String(50), nullable=False)
     import_mode: Mapped[str] = mapped_column(String(30), nullable=False)
-    originating_org_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id"), nullable=False
-    )
     filter_criteria: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, server_default="pending")
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -41,6 +38,8 @@ class CddMoleculeImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
     cdd_export_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     run_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    disclosed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    disclosed_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)  # Duar org, no FK
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

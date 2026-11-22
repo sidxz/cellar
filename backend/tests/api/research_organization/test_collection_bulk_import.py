@@ -30,7 +30,6 @@ async def client_with_collection(
         json={
             "name": "BulkImportTestMol",
             "smiles": "CCN",  # ethylamine — simple, deterministic
-            "originating_org_id": org_id,
         },
     )
     assert mol.status_code == 201

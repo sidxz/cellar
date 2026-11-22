@@ -157,7 +157,6 @@ def run_cdd(session_factory, ws: Ws, tmp_path: Path):  # type: ignore[no-untyped
             activities.process_chunk,
             ChunkInput(
                 workspace_id=str(ws.id),
-                originating_org_id=str(ws.org_id),
                 submitted_by=str(ws.actor),
                 items=[ChunkItem(**d) for d in chunk.items],
             ),

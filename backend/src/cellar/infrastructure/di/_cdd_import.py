@@ -47,6 +47,7 @@ from cellar.application.cdd_import.preview_cdd_protocol_import import PreviewCdd
 from cellar.application.cdd_import.resume_cdd_molecule_import import ResumeCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.workspace_config.get_data_source_for_import import (
     GetDataSourceForImport,
 )
@@ -137,6 +138,7 @@ def register_cdd_import(container: Container) -> None:
         return StartCddMoleculeImport(
             get_data_source=get_ds,
             orchestrator=c[CddMoleculeImportOrchestrator],
+            org_directory=c[OrgDirectoryPort],
         )
 
     def _list_cdd_mol_imports(c: Container):

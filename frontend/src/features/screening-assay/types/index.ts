@@ -8,6 +8,7 @@ import type {
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
   CreateProtocolRequest,
+  CreateRunRequest,
   CurvePositionsResponse,
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
@@ -422,7 +423,10 @@ export type ProtocolTargetRef = ProtocolTargetRefResponse;
 
 /** `has_measured_curves` (whether any run has measured curves) is filled only by
  *  GET /protocols and GET /protocols/{id}; null or absent elsewhere. Typed off the DTO. */
-export interface Protocol extends Partial<Pick<ProtocolResponse, "has_measured_curves">> {
+export interface Protocol
+  extends Partial<
+    Pick<ProtocolResponse, "has_measured_curves" | "created_by_org_id" | "owner_org_id">
+  > {
   /** Enriched from the workspace run summary; undefined means not available yet. */
   last_run_date?: ProtocolSummaryResponse["last_run_date"];
   created_at?: ProtocolResponse["created_at"];
@@ -644,19 +648,7 @@ export interface CreateProtocolInput
   ontology_annotations?: Record<string, OntologyTerm[]>;
 }
 
-export interface CreateRunInput {
-  protocol_id: string;
-  run_date: string;
-  plate_format?: PlateFormat | null;
-  plate_template_id?: string | null;
-  performed_at_org_id?: string | null;
-  parent_run_id?: string | null;
-  run_relationship_type?: RunRelationshipType | null;
-  notes?: string | null;
-  conditions?: Record<string, unknown> | null;
-  /** Biological targets to link to the run on create. */
-  target_ids?: string[];
-}
+export type CreateRunInput = CreateRunRequest;
 
 export interface CreateReadoutDataInput {
   run_id: string;
