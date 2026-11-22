@@ -4,6 +4,7 @@ export { ActivityTab } from "./activity-tab";
 export { CollectionsTab } from "./collections-tab";
 export { PlatesTab } from "./plates-tab";
 export { RelationshipsTab } from "./relationships-tab";
+export { DisclosureTab } from "./disclosure-tab";
 export { HistoryTab } from "./history-tab";
 export { FilesTab } from "./files-tab";
 export { ProjectsTab } from "./projects-tab";

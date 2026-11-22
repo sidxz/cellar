@@ -28,6 +28,7 @@ export interface MoleculeResponse {
   disclosure_date?: string | null;
   merged_into_id?: string | null;
   custom_fields?: MoleculeResponseCustomFields;
+  created_at?: string | null;
   registered_by?: string | null;
   registered_by_org_id?: string | null;
   disclosed_by?: string | null;

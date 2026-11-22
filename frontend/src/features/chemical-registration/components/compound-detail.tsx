@@ -18,6 +18,7 @@ import {
   Link2,
   Paperclip,
   ShieldAlert,
+  ShieldCheck,
   TestTubes,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -34,6 +35,7 @@ import {
   AdminOperationsTab,
   BatchesTab,
   CollectionsTab,
+  DisclosureTab,
   FilesTab,
   HistoryTab,
   OverviewTab,
@@ -154,6 +156,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
                   <Link2 className="mr-1.5 h-4 w-4" />
                   Relationships
                 </TabsTrigger>
+                <TabsTrigger value="disclosure">
+                  <ShieldCheck className="mr-1.5 h-4 w-4" />
+                  Disclosure
+                </TabsTrigger>
                 <TabsTrigger value="files">
                   <Paperclip className="mr-1.5 h-4 w-4" />
                   Files
@@ -199,6 +205,10 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
 
               <TabsContent value="relationships">
                 <RelationshipsTab moleculeId={compoundId} />
+              </TabsContent>
+
+              <TabsContent value="disclosure">
+                <DisclosureTab molecule={mol} />
               </TabsContent>
 
               <TabsContent value="files">

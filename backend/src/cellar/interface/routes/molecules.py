@@ -179,7 +179,8 @@ class MoleculeResponse(BaseModel):
     disclosure_date: date | None = None
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
-    # Who registered it and who disclosed it, each with their Duar org.
+    # When it was registered; who registered it and who disclosed it, with their Duar orgs.
+    created_at: datetime | None = None
     registered_by: uuid.UUID | None = None
     registered_by_org_id: uuid.UUID | None = None
     disclosed_by: uuid.UUID | None = None
@@ -235,6 +236,7 @@ class MoleculeResponse(BaseModel):
             disclosure_date=mol.disclosure_date,
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
+            created_at=mol.created_at,
             registered_by=mol.registered_by,
             registered_by_org_id=mol.registered_by_org_id,
             disclosed_by=mol.disclosed_by,
