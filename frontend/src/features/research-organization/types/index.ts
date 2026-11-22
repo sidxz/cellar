@@ -105,15 +105,9 @@ export type SavedSearch = SavedSearchResponse;
 
 // ─── Create / Update Input Types ─────────────────────────────────────────────
 
-export interface CreateProjectInput {
-  name: string;
-  description?: string | null;
-}
+export type CreateProjectInput = import("@/shared/lib/api/model").CreateProjectBody;
 
-export interface UpdateProjectInput {
-  name?: string;
-  description?: string | null;
-}
+export type UpdateProjectInput = import("@/shared/lib/api/model").UpdateProjectBody;
 
 // ─── Project Membership ─────────────────────────────────────────────────────
 
@@ -145,14 +139,13 @@ export type CreateCollectionInput = Omit<CreateCollectionBody, "visibility"> & {
   visibility?: "private" | "shared";
 };
 
-export interface UpdateCollectionInput {
-  name?: string;
-  description?: string | null;
-  project_id?: string | null;
-  owned_by_org_id?: string | null;
+/** The generated body, with `visibility` re-narrowed to the values the BE accepts. */
+export type UpdateCollectionInput = Omit<
+  import("@/shared/lib/api/model").UpdateCollectionBody,
+  "visibility"
+> & {
   visibility?: "private" | "shared";
-  type?: CollectionType;
-}
+};
 
 export interface CreateSavedSearchInput {
   name: string;

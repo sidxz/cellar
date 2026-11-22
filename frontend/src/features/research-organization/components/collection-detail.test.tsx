@@ -85,7 +85,7 @@ const baseCollection = {
   name: "Frozen Set",
   description: null,
   project_id: null,
-  owned_by_org_id: null,
+  owner_org_id: null,
   created_by: "u1",
   visibility: "private" as const,
   molecule_count: 5,

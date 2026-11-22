@@ -10,7 +10,17 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/shared/components/entity-name", () => ({
   MemberName: ({ id }: { id: string }) => <span data-testid="member">{id}</span>,
-  OrgName: ({ id }: { id: string }) => <span data-testid="org">{id}</span>,
+}));
+vi.mock("@/shared/hooks/use-orgs", () => ({
+  useOrgName: () => (id: string | null | undefined) =>
+    ({ o1: "TAMU", o2: "Partner Lab" })[id ?? ""] ?? "",
+}));
+vi.mock("@/shared/components/owner-org-line", () => ({
+  OwnerOrgLine: ({ ownerOrgId, canChange }: { ownerOrgId: string; canChange: boolean }) => (
+    <span data-testid="owner" data-can-change={String(canChange)}>
+      {ownerOrgId}
+    </span>
+  ),
 }));
 
 const baseCollection = {
@@ -18,7 +28,8 @@ const baseCollection = {
   name: "Mtb Q1 Hits",
   description: "Round 1 hits from Mtb_WCA",
   project_id: "p1",
-  owned_by_org_id: "o1",
+  owner_org_id: "o2",
+  created_by_org_id: "o1",
   created_by: "u1",
   visibility: "shared" as const,
   molecule_count: 30,
@@ -50,5 +61,21 @@ describe("CollectionHeader", () => {
     );
     const link = screen.getByRole("link", { name: /from campaign/i });
     expect(link).toHaveAttribute("href", "/campaigns/camp-7");
+  });
+
+  it("shows the owner and lets the creator change it", () => {
+    render(<CollectionHeader collection={baseCollection} canChangeOwner onChangeOwner={vi.fn()} />);
+    expect(screen.getByTestId("owner")).toHaveTextContent("o2");
+    expect(screen.getByTestId("owner")).toHaveAttribute("data-can-change", "true");
+  });
+
+  it("another editor sees the owner without a change control", () => {
+    render(<CollectionHeader collection={baseCollection} />);
+    expect(screen.getByTestId("owner")).toHaveAttribute("data-can-change", "false");
+  });
+
+  it("names the creator's org next to the creator", () => {
+    render(<CollectionHeader collection={baseCollection} />);
+    expect(screen.getByText(/Created by/)).toHaveTextContent("TAMU");
   });
 });

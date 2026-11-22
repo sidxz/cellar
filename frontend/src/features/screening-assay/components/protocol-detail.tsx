@@ -4,6 +4,7 @@ import { VisualizeButton } from "@/features/visualization/components/visualize-b
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { DetailTabsContent, DetailTabsList } from "@/shared/components/detail-tabs";
+import { OwnerOrgLine } from "@/shared/components/owner-org-line";
 import { ReturnToBarFromUrl } from "@/shared/components/return-to-bar";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -25,6 +26,8 @@ import {
 import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { canChangeOwner, useChangeOwner } from "@/shared/hooks/use-change-owner";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import {
@@ -81,6 +84,8 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const isAdmin = useAuthzHasRole("admin");
   const canCreate = useAuthzHasRole("editor");
   const { data: protocol, isLoading } = useProtocol(protocolId);
+  const { data: me } = useCurrentUser();
+  const changeOwner = useChangeOwner("protocols", protocolId);
   const publishMutation = usePublishProtocol();
   const retireMutation = useRetireProtocol();
   const versionMutation = useVersionProtocol();
@@ -187,7 +192,16 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
-        subtitle={(p) => (p.code ? <span className="tabular-nums">{p.code}</span> : null)}
+        subtitle={(p) => (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {p.code && <span className="tabular-nums">{p.code}</span>}
+            <OwnerOrgLine
+              ownerOrgId={p.owner_org_id}
+              canChange={canChangeOwner(me, p.created_by)}
+              onSave={changeOwner.mutateAsync}
+            />
+          </span>
+        )}
         breadcrumbTrail={() => [{ label: "Protocols", href: "/assays" }]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
