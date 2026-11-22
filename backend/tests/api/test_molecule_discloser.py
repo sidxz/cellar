@@ -56,3 +56,16 @@ async def test_put_discloser_non_registrant_editor_403(
         json={"disclosed_by": molecule["registered_by"], "disclosed_by_org_id": str(OTHER_ORG_ID)},
     )
     assert resp.status_code == 403
+
+
+async def test_put_discloser_org_only_keeps_the_person(client: AsyncClient, molecule: dict) -> None:
+    resp = await client.put(
+        f"/api/v1/molecules/{molecule['id']}/discloser",
+        json={"disclosed_by_org_id": str(OTHER_ORG_ID)},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["disclosed_by"], resp.json()["disclosed_by_org_id"]) == (
+        molecule["disclosed_by"],
+        str(OTHER_ORG_ID),
+    )
+

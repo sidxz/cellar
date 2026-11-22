@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -18,6 +19,7 @@ from cellar.application.chemical_registration.discloser_pick import check_disclo
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.org_directory import OrgDirectoryPort
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -28,8 +30,9 @@ from cellar.domain.shared.errors import DomainError, NotFoundError
 class ChangeDiscloserCommand(Command):
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
-    disclosed_by: uuid.UUID
-    disclosed_by_org_id: uuid.UUID | None
+    # UNSET = keep as is (an org-only correction keeps the person, and vice versa).
+    disclosed_by: uuid.UUID | object = UNSET
+    disclosed_by_org_id: uuid.UUID | object | None = UNSET
 
 
 class ChangeDiscloser:
@@ -57,18 +60,23 @@ class ChangeDiscloser:
             if mol is None:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
             require_admin_or_user(auth, mol.registered_by)
+            fields: dict[str, Any] = {}
+            if input.disclosed_by is not UNSET:
+                fields["disclosed_by"] = input.disclosed_by
+            if input.disclosed_by_org_id is not UNSET:
+                fields["disclosed_by_org_id"] = input.disclosed_by_org_id
+            # Only what changes is checked: a discloser who has since left keeps their
+            # credit through an org correction.
+            new_person = fields.get("disclosed_by")
             if err := await check_discloser_pick(
                 auth,
                 self._org_directory,
-                disclosed_by=input.disclosed_by,
-                disclosed_by_org_id=input.disclosed_by_org_id,
+                disclosed_by=new_person if new_person != mol.disclosed_by else None,
+                disclosed_by_org_id=fields.get("disclosed_by_org_id"),
             ):
                 return Failure(err)
             try:
-                mol.change_discloser(
-                    disclosed_by=input.disclosed_by,
-                    disclosed_by_org_id=input.disclosed_by_org_id,
-                )
+                mol.change_discloser(**fields)
             except DomainError as e:
                 return Failure(e)
             await self._repo.save(mol)

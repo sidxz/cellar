@@ -933,7 +933,9 @@ async def update_molecule(
 
 
 class ChangeDiscloserBody(BaseModel):
-    disclosed_by: uuid.UUID
+    """Send what changes; an omitted field keeps its value."""
+
+    disclosed_by: uuid.UUID | None = None
     disclosed_by_org_id: uuid.UUID | None = None
 
 
@@ -945,11 +947,14 @@ async def change_discloser(
     use_case: ChangeDiscloserDep,
 ) -> MoleculeResponse:
     """Correct who disclosed the compound and for which Duar org (an admin or its registrant)."""
+    provided = body.model_fields_set
     command = ChangeDiscloserCommand(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
-        disclosed_by=body.disclosed_by,
-        disclosed_by_org_id=body.disclosed_by_org_id,
+        disclosed_by=body.disclosed_by if "disclosed_by" in provided else UNSET,
+        disclosed_by_org_id=(
+            body.disclosed_by_org_id if "disclosed_by_org_id" in provided else UNSET
+        ),
     )
     return MoleculeResponse.from_domain(result_to_response(await use_case(command, auth=auth)))
 

@@ -17,10 +17,22 @@ vi.mock("@/shared/hooks/use-workspace-members", () => ({
     ({ "u-jane": "J. Ortiz" })[id ?? ""] ?? "",
 }));
 vi.mock("@/shared/components/member-selector", () => ({
-  MemberSelector: ({ onSelect }: { onSelect: (id: string | null) => void }) => (
-    <button type="button" onClick={() => onSelect("u-jane")}>
-      pick J. Ortiz
-    </button>
+  MemberSelector: ({
+    onSelect,
+  }: {
+    onSelect: (id: string | null, member?: { user_id: string; org_id: string }) => void;
+  }) => (
+    <>
+      <button type="button" onClick={() => onSelect("u-jane")}>
+        pick J. Ortiz
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect("u-far", { user_id: "u-far", org_id: "org-far" })}
+      >
+        pick a member beyond the first page
+      </button>
+    </>
   ),
 }));
 vi.mock("@/shared/components/duar-org-select", () => ({
@@ -39,5 +51,13 @@ describe("DiscloserPick", () => {
     fireEvent.click(screen.getByRole("button", { name: /change/i }));
     fireEvent.click(screen.getByRole("button", { name: "pick J. Ortiz" }));
     expect(onChange).toHaveBeenCalledWith({ userId: "u-jane", orgId: "org-partner" });
+  });
+
+  it("picking a member outside the first page still sets their org", () => {
+    const onChange = vi.fn();
+    render(<DiscloserPick value={{ userId: null, orgId: null }} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /change/i }));
+    fireEvent.click(screen.getByRole("button", { name: "pick a member beyond the first page" }));
+    expect(onChange).toHaveBeenCalledWith({ userId: "u-far", orgId: "org-far" });
   });
 });

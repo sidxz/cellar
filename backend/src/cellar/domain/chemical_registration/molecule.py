@@ -411,12 +411,20 @@ class Molecule(AggregateRoot):
         )
 
     def change_discloser(
-        self, *, disclosed_by: uuid.UUID, disclosed_by_org_id: uuid.UUID | None
+        self,
+        *,
+        disclosed_by: uuid.UUID | None = ...,  # type: ignore[assignment]
+        disclosed_by_org_id: uuid.UUID | None = ...,  # type: ignore[assignment]
     ) -> None:
-        """Correct who disclosed it and for which Duar org. History records each change."""
+        """Correct who disclosed it and/or for which Duar org; an omitted field (``...``)
+        keeps its value. History records each change."""
         self._guard_tombstone()
         if self.structure_status != StructureStatus.DISCLOSED:
             raise ValidationError("Only a disclosed molecule has a discloser to change")
+        if disclosed_by is ...:
+            disclosed_by = self.disclosed_by
+        if disclosed_by_org_id is ...:
+            disclosed_by_org_id = self.disclosed_by_org_id
         changes = tuple(
             (field, str(old) if old else None, str(new) if new else None)
             for field, old, new in (

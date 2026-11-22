@@ -45,6 +45,8 @@ class SubmitDisclosureCommand(Command):
     disclosed_smiles: str
     requested_by: uuid.UUID
     requested_by_org_id: uuid.UUID | None = None  # the requester's Duar org
+    # Who disclosed it, when a registrant named someone else; None = the requester.
+    disclosed_by: uuid.UUID | None = None
     disclosing_org_id: uuid.UUID | None = None  # Duar org; None = the requester's
     scientist_name: str | None = None
     auto_approve: bool = True
@@ -178,7 +180,7 @@ class DisclosureService:
                     molecule.disclose(
                         structure=processed.structure,
                         descriptors=processed.descriptors,
-                        disclosed_by=dr.requested_by,
+                        disclosed_by=input.disclosed_by or dr.requested_by,
                         disclosed_by_org_id=dr.disclosing_org_id,
                         stereochemistry=processed.stereochemistry,
                         disclosure_date=dr.disclosure_date,

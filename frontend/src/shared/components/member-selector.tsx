@@ -1,12 +1,13 @@
 "use client";
 
 import { SearchCombobox } from "@/shared/components/search-combobox";
-import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
+import { type WorkspaceMember, useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { useState } from "react";
 
 interface MemberSelectorProps {
   selectedId: string | null;
-  onSelect: (userId: string | null) => void;
+  /** The picked member comes along too (e.g. for their org), when one is picked. */
+  onSelect: (userId: string | null, member?: WorkspaceMember) => void;
   /** Placeholder text for the search input */
   placeholder?: string;
 }
@@ -45,7 +46,7 @@ export function MemberSelector({
         </span>
       )}
       onSelect={(m) => {
-        onSelect(m.user_id);
+        onSelect(m.user_id, m);
         setQuery("");
         setOpen(false);
       }}

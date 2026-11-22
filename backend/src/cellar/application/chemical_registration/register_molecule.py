@@ -527,6 +527,7 @@ class RegisterMolecule:
                     disclosed_smiles=input.smiles,  # type: ignore[arg-type]
                     requested_by=input.registered_by,
                     requested_by_org_id=input.registered_by_org_id,
+                    disclosed_by=input.disclosed_by,
                     disclosing_org_id=_discloser_org(input),
                     scientist_name=input.scientist_name,
                     auto_approve=input.auto_approve,

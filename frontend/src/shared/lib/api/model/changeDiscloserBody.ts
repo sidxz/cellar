@@ -5,7 +5,10 @@
  * OpenAPI spec version: 1.8.0-62-g1686c9e5
  */
 
+/**
+ * Send what changes; an omitted field keeps its value.
+ */
 export interface ChangeDiscloserBody {
-  disclosed_by: string;
+  disclosed_by?: string | null;
   disclosed_by_org_id?: string | null;
 }

@@ -68,10 +68,13 @@ export function DiscloserPick({
             <p className="text-sm text-muted-foreground">Person</p>
             <MemberSelector
               selectedId={value.userId}
-              onSelect={(userId) =>
+              onSelect={(userId, member) =>
                 onChange({
                   userId,
-                  orgId: members?.find((m) => m.user_id === userId)?.org_id ?? value.orgId,
+                  orgId:
+                    member?.org_id ??
+                    members?.find((m) => m.user_id === userId)?.org_id ??
+                    value.orgId,
                 })
               }
             />

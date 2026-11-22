@@ -49,7 +49,8 @@ _STEPS: list[tuple[str, str]] = [
     ),
     (
         "molecules.disclosed_by",
-        f"""UPDATE molecules SET disclosed_by = registered_by, disclosed_at = created_at
+        f"""UPDATE molecules SET disclosed_by = registered_by,
+                                 disclosed_at = COALESCE(disclosed_at, created_at)
             WHERE structure_status = 'disclosed' AND disclosed_by IS NULL
               AND registered_by IS NOT NULL AND {_SCOPE}""",  # noqa: S608
     ),

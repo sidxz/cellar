@@ -31,14 +31,39 @@ vi.mock("@/features/audit/hooks/use-audit", () => ({
   useAuditByEntity: () => ({ data: h.audit }),
 }));
 vi.mock("@/shared/components/member-selector", () => ({
-  MemberSelector: ({ onSelect }: { onSelect: (id: string | null) => void }) => (
-    <button type="button" onClick={() => onSelect("u-jane")}>
-      pick J. Ortiz
-    </button>
+  MemberSelector: ({
+    onSelect,
+  }: {
+    onSelect: (id: string | null, member?: { user_id: string; org_id: string }) => void;
+  }) => (
+    <>
+      <button type="button" onClick={() => onSelect("u-jane")}>
+        pick J. Ortiz
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect("u-far", { user_id: "u-far", org_id: "org-far" })}
+      >
+        pick a member beyond the first page
+      </button>
+    </>
   ),
 }));
 vi.mock("@/shared/components/duar-org-select", () => ({
-  DuarOrgSelect: ({ value }: { value: string | null }) => <output aria-label="Org">{value}</output>,
+  DuarOrgSelect: ({
+    value,
+    onValueChange,
+  }: {
+    value: string | null;
+    onValueChange: (v: string | null) => void;
+  }) => (
+    <>
+      <output aria-label="Org">{value}</output>
+      <button type="button" onClick={() => onValueChange("org-partner")}>
+        pick Partner Lab
+      </button>
+    </>
+  ),
 }));
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
@@ -164,5 +189,22 @@ describe("DisclosureTab", () => {
     expect(list).toHaveTextContent("R. Lee");
     expect(list).toHaveTextContent("Texas A&M University");
     expect(list).toHaveTextContent("Partner Lab");
+  });
+
+  it("picking a member outside the first page still fills in their org", () => {
+    renderTab(molecule());
+    fireEvent.click(screen.getByRole("button", { name: /change/i }));
+    fireEvent.click(screen.getByRole("button", { name: "pick a member beyond the first page" }));
+    expect(screen.getByLabelText("Org")).toHaveTextContent("org-far");
+  });
+
+  it("an org-only change can be saved when no person is on file", async () => {
+    h.me = { user_id: "u-admin", is_admin: true, org_id: "org-tamu", workspace_role: "admin" };
+    renderTab(molecule({ disclosed_by: null, registered_by: null }));
+    fireEvent.click(screen.getByRole("button", { name: /change/i }));
+    fireEvent.click(screen.getByRole("button", { name: "pick Partner Lab" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(h.put).toHaveBeenCalled());
+    expect(h.put.mock.calls[0][0].data).toEqual({ disclosed_by_org_id: "org-partner" });
   });
 });

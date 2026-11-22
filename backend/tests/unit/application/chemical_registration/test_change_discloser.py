@@ -149,3 +149,49 @@ async def test_undisclosed_molecule_refused() -> None:
     uc, _, _ = _uc(mol)
     result = await uc(_cmd(auth, mol, auth.user_id), auth=auth)
     assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
+
+
+async def test_org_only_change_keeps_the_person() -> None:
+    auth = FakeAuth(role="editor")
+    mol = _molecule(auth.workspace_id, auth.user_id)
+    uc, _, _ = _uc(mol)
+    result = await uc(
+        ChangeDiscloserCommand(
+            workspace_id=auth.workspace_id, molecule_id=mol.id, disclosed_by_org_id=NEW_ORG
+        ),
+        auth=auth,
+    )
+    assert isinstance(result, Success)
+    assert (mol.disclosed_by, mol.disclosed_by_org_id) == (auth.user_id, NEW_ORG)
+
+
+async def test_a_discloser_who_left_needs_no_membership_for_an_org_fix() -> None:
+    admin = FakeAuth(role="admin", members=[])
+    mol = _molecule(admin.workspace_id, uuid.uuid4())
+    departed = mol.disclosed_by
+    uc, _, _ = _uc(mol)
+    result = await uc(
+        ChangeDiscloserCommand(
+            workspace_id=admin.workspace_id, molecule_id=mol.id,
+            disclosed_by=departed, disclosed_by_org_id=NEW_ORG,
+        ),
+        auth=admin,
+    )
+    assert isinstance(result, Success)
+    assert mol.disclosed_by_org_id == NEW_ORG
+
+
+async def test_org_fix_on_a_compound_with_no_discloser_on_file() -> None:
+    admin = FakeAuth(role="admin")
+    mol = _molecule(admin.workspace_id, None)
+    mol.disclosed_by = None  # a backfilled compound with no History record
+    uc, _, _ = _uc(mol)
+    result = await uc(
+        ChangeDiscloserCommand(
+            workspace_id=admin.workspace_id, molecule_id=mol.id, disclosed_by_org_id=NEW_ORG
+        ),
+        auth=admin,
+    )
+    assert isinstance(result, Success)
+    assert (mol.disclosed_by, mol.disclosed_by_org_id) == (None, NEW_ORG)
+

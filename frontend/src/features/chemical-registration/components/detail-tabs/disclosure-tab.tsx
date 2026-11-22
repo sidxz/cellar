@@ -123,18 +123,25 @@ function DiscloserEditor({ molecule, onDone }: { molecule: Molecule; onDone: () 
   const change = useChangeDiscloser(molecule.id);
   const [person, setPerson] = useState<string | null>(molecule.disclosed_by ?? null);
   const [org, setOrg] = useState<string | null>(molecule.disclosed_by_org_id ?? null);
-  const dirty =
-    person !== (molecule.disclosed_by ?? null) || org !== (molecule.disclosed_by_org_id ?? null);
+  const personChanged = person !== (molecule.disclosed_by ?? null);
+  const orgChanged = org !== (molecule.disclosed_by_org_id ?? null);
 
-  const pickPerson = (userId: string | null) => {
+  const pickPerson = (userId: string | null, member?: { org_id?: string | null }) => {
     setPerson(userId);
-    const memberOrg = members?.find((m) => m.user_id === userId)?.org_id;
+    const memberOrg = member?.org_id ?? members?.find((m) => m.user_id === userId)?.org_id;
     if (memberOrg) setOrg(memberOrg);
   };
+  // Only what changed is sent: an org correction keeps the person (even one who has left).
   const save = () => {
-    if (!person) return;
-    change.mutate({ disclosed_by: person, disclosed_by_org_id: org }, { onSuccess: onDone });
+    change.mutate(
+      {
+        ...(personChanged && person ? { disclosed_by: person } : {}),
+        ...(orgChanged ? { disclosed_by_org_id: org } : {}),
+      },
+      { onSuccess: onDone },
+    );
   };
+  const canSave = (personChanged && !!person) || orgChanged;
 
   return (
     <div className="space-y-3">
@@ -152,7 +159,7 @@ function DiscloserEditor({ molecule, onDone }: { molecule: Molecule; onDone: () 
         <Button variant="outline" size="sm" onClick={onDone} disabled={change.isPending}>
           Cancel
         </Button>
-        <Button size="sm" onClick={save} disabled={change.isPending || !person || !dirty}>
+        <Button size="sm" onClick={save} disabled={change.isPending || !canSave}>
           {change.isPending ? "Saving…" : "Save"}
         </Button>
       </div>

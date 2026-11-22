@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 import sqlalchemy as sa
@@ -160,3 +160,19 @@ async def test_workspace_filter(session_factory) -> None:
     await backfill(session_factory, org_id=DUAR, workspace_id=w["ws"], dry_run=False)
     async with session_factory() as s:
         assert (await _row(s, "molecules", other["audited"]))["registered_by_org_id"] is None
+
+
+async def test_keeps_a_recorded_disclosure_time(session_factory) -> None:
+    w = await _seed(session_factory)
+    recorded = datetime(2025, 2, 3, 4, 5, 6, tzinfo=UTC)
+    async with session_factory() as s, s.begin():
+        await s.execute(
+            sa.text("UPDATE molecules SET disclosed_at = :t WHERE id = :id"),
+            {"t": recorded, "id": w["audited"]},
+        )
+    await backfill(session_factory, org_id=DUAR, workspace_id=w["ws"], dry_run=False)
+    async with session_factory() as s:
+        mol = await _row(s, "molecules", w["audited"])
+    assert mol["disclosed_by"] == w["user"]
+    assert mol["disclosed_at"] == recorded
+
