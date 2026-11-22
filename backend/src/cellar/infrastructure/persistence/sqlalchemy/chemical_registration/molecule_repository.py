@@ -146,6 +146,9 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         model.invention_date = aggregate.invention_date
         model.disclosed_at = aggregate.disclosed_at
         model.disclosed_by = aggregate.disclosed_by
+        model.disclosed_by_org_id = aggregate.disclosed_by_org_id
+        model.registered_by = aggregate.registered_by
+        model.registered_by_org_id = aggregate.registered_by_org_id
         model.disclosure_date = aggregate.disclosure_date
         model.merged_into_id = aggregate.merged_into_id
         model.scientist_name = aggregate.scientist_name

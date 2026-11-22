@@ -16,6 +16,7 @@ from cellar.domain.chemical_registration.enums import (
     SynthesisStatus,
 )
 from cellar.domain.chemical_registration.events import (
+    MoleculeDiscloserChanged,
     MoleculeDisclosed,
     MoleculeLifecycleChanged,
     MoleculeMerged,
@@ -907,3 +908,82 @@ class TestIdentifiers:
         mol.add_identifier(ident)
         assert len(mol.identifiers) == 1
         assert mol.identifiers[0].identifier == "CAS-50-78-2"
+
+
+# ---------------------------------------------------------------------------
+# Who registered it and who disclosed it, each with their Duar org
+# ---------------------------------------------------------------------------
+
+
+class TestRegistrantAndDiscloser:
+    def test_registered_with_structure_discloser_defaults_to_registrant(
+        self, ws_id, org_id, user_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        duar_org = uuid.uuid4()
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors,
+            registered_by=user_id, registered_by_org_id=duar_org,
+        )
+        assert (mol.registered_by, mol.registered_by_org_id) == (user_id, duar_org)
+        assert (mol.disclosed_by, mol.disclosed_by_org_id) == (user_id, duar_org)
+        assert mol.disclosed_at is not None
+
+    def test_registered_with_structure_discloser_override_kept(
+        self, ws_id, org_id, user_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        jane, partner = uuid.uuid4(), uuid.uuid4()
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors,
+            registered_by=user_id, registered_by_org_id=uuid.uuid4(),
+            disclosed_by=jane, disclosed_by_org_id=partner,
+        )
+        assert (mol.disclosed_by, mol.disclosed_by_org_id) == (jane, partner)
+
+    def test_undisclosed_has_no_discloser(self, ws_id, org_id, user_id) -> None:
+        mol = _make_undisclosed(ws_id, org_id, registered_by=user_id, registered_by_org_id=uuid.uuid4())
+        assert mol.registered_by == user_id
+        assert (mol.disclosed_by, mol.disclosed_by_org_id, mol.disclosed_at) == (None, None, None)
+
+    def test_disclose_stamps_person_and_org(
+        self, ws_id, org_id, user_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        mol = _make_undisclosed(ws_id, org_id)
+        duar_org = uuid.uuid4()
+        mol.disclose(
+            structure=aspirin_structure, descriptors=aspirin_descriptors,
+            disclosed_by=user_id, disclosed_by_org_id=duar_org,
+        )
+        assert (mol.disclosed_by, mol.disclosed_by_org_id) == (user_id, duar_org)
+
+    def test_change_discloser_records_changed_fields_only(
+        self, ws_id, org_id, user_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        old_org, new_org = uuid.uuid4(), uuid.uuid4()
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors,
+            registered_by=user_id, registered_by_org_id=old_org,
+        )
+        mol.clear_events()
+        mol.change_discloser(disclosed_by=user_id, disclosed_by_org_id=new_org)
+        assert mol.disclosed_by_org_id == new_org
+        (event,) = mol.collect_events()
+        assert isinstance(event, MoleculeDiscloserChanged)
+        assert event.audit_changes() == [("disclosed_by_org_id", str(old_org), str(new_org))]
+
+    def test_change_discloser_noop_raises_no_event(
+        self, ws_id, org_id, user_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        org = uuid.uuid4()
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors,
+            registered_by=user_id, registered_by_org_id=org,
+        )
+        mol.clear_events()
+        mol.change_discloser(disclosed_by=user_id, disclosed_by_org_id=org)
+        assert mol.collect_events() == []
+
+    def test_change_discloser_on_undisclosed_refused(self, ws_id, org_id, user_id) -> None:
+        mol = _make_undisclosed(ws_id, org_id)
+        with pytest.raises(ValidationError):
+            mol.change_discloser(disclosed_by=user_id, disclosed_by_org_id=uuid.uuid4())
+

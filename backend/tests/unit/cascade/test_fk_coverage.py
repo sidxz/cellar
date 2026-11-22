@@ -482,6 +482,7 @@ _VIEW = "a saved view names what it shows by id; opening it lists what no longer
 
 LEFT_ALONE: dict[str, str] = {
     "attachments.uploaded_by": _USER,
+    "molecules.registered_by": _USER,
     "audit_operations.user_id": _USER,
     "batch_identifiers.registered_by": _USER,
     "batch_tags.assigned_by": _USER,
@@ -547,6 +548,8 @@ LEFT_ALONE: dict[str, str] = {
     "projects.created_by_org_id": _ORG,
     "protocols.owner_org_id": _ORG,
     "protocols.created_by_org_id": _ORG,
+    "molecules.registered_by_org_id": _ORG,
+    "molecules.disclosed_by_org_id": _ORG,
     "shipments.destination_org_id": _ORG,
     "synthesis_requests.assigned_org_id": _ORG,
     "audit_entries.entity_id": _AUDIT,

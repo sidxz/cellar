@@ -178,6 +178,11 @@ class MoleculeResponse(BaseModel):
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
     originating_org_id: uuid.UUID
+    # Who registered it and who disclosed it, each with their Duar org.
+    registered_by: uuid.UUID | None = None
+    registered_by_org_id: uuid.UUID | None = None
+    disclosed_by: uuid.UUID | None = None
+    disclosed_by_org_id: uuid.UUID | None = None
     scientist_name: str | None = None
     identifiers: list[IdentifierResponse]
     version: int
@@ -230,6 +235,10 @@ class MoleculeResponse(BaseModel):
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
             originating_org_id=mol.originating_org_id,
+            registered_by=mol.registered_by,
+            registered_by_org_id=mol.registered_by_org_id,
+            disclosed_by=mol.disclosed_by,
+            disclosed_by_org_id=mol.disclosed_by_org_id,
             scientist_name=mol.scientist_name,
             identifiers=identifiers,
             version=mol.version,

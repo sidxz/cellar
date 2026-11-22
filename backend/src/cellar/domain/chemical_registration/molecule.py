@@ -16,6 +16,7 @@ from cellar.domain.chemical_registration.enums import (
 )
 from cellar.domain.chemical_registration.events import (
     MoleculeDisclosed,
+    MoleculeDiscloserChanged,
     MoleculeLifecycleChanged,
     MoleculeMerged,
     MoleculeRegistered,
@@ -125,10 +126,13 @@ class Molecule(AggregateRoot):
         invention_date: date | None = None,
         disclosed_at: datetime | None = None,
         disclosed_by: uuid.UUID | None = None,
+        disclosed_by_org_id: uuid.UUID | None = None,
         disclosure_date: date | None = None,
         merged_into_id: uuid.UUID | None = None,
         custom_fields: dict[str, Any] | None = None,
         originating_org_id: uuid.UUID,
+        registered_by: uuid.UUID | None = None,
+        registered_by_org_id: uuid.UUID | None = None,
         scientist_name: str | None = None,
         identifiers: list[MoleculeIdentifier] | None = None,
         mixture_components: list[MixtureComponent] | None = None,
@@ -160,12 +164,17 @@ class Molecule(AggregateRoot):
         self.invention_date = invention_date
         self.disclosed_at = disclosed_at
         self.disclosed_by = disclosed_by
+        # Duar org the discloser disclosed it for (one discloser pair per molecule).
+        self.disclosed_by_org_id = disclosed_by_org_id
         # Declared (user-asserted) disclosure date, like invention_date;
         # disclosed_at stays the observed recorded-at stamp. Both are kept.
         self.disclosure_date = disclosure_date
         self.merged_into_id = merged_into_id
         self.custom_fields = dict(custom_fields) if custom_fields else None
         self.originating_org_id = originating_org_id
+        # Who registered it and their Duar org at the time; fixed once set.
+        self.registered_by = registered_by
+        self.registered_by_org_id = registered_by_org_id
         # The person half of provenance (originating_org_id is the org half).
         # Free text, not a user id: API/bulk registrants often act on behalf of
         # a scientist who is not a Cellar user. Mirrors DisclosureRequest.
@@ -270,7 +279,13 @@ class Molecule(AggregateRoot):
         custom_fields: dict[str, Any] | None = None,
         scientist_name: str | None = None,
         disclosure_date: date | None = None,
+        registered_by: uuid.UUID | None = None,
+        registered_by_org_id: uuid.UUID | None = None,
+        disclosed_by: uuid.UUID | None = None,
+        disclosed_by_org_id: uuid.UUID | None = None,
     ) -> Molecule:
+        """Registered with its structure, so disclosed now: the discloser defaults to the
+        registrant and their org; each can be overridden."""
         _reject_future_disclosure_date(disclosure_date)
         mol = cls(
             workspace_id=workspace_id,
@@ -290,6 +305,11 @@ class Molecule(AggregateRoot):
             custom_fields=custom_fields,
             scientist_name=scientist_name,
             disclosure_date=disclosure_date,
+            registered_by=registered_by,
+            registered_by_org_id=registered_by_org_id,
+            disclosed_by=disclosed_by or registered_by,
+            disclosed_by_org_id=disclosed_by_org_id or registered_by_org_id,
+            disclosed_at=datetime.now(UTC),
         )
         mol.register_event(
             MoleculeRegistered(
@@ -299,6 +319,7 @@ class Molecule(AggregateRoot):
                 molecule_type=molecule_type.value,
                 workspace_id=workspace_id,
                 originating_org_id=originating_org_id,
+                registered_by_org_id=registered_by_org_id,
             )
         )
         return mol
@@ -318,7 +339,10 @@ class Molecule(AggregateRoot):
         invention_date: date | None = None,
         custom_fields: dict[str, Any] | None = None,
         scientist_name: str | None = None,
+        registered_by: uuid.UUID | None = None,
+        registered_by_org_id: uuid.UUID | None = None,
     ) -> Molecule:
+        """No structure yet, so no discloser until it is disclosed."""
         mol = cls(
             workspace_id=workspace_id,
             registration_number=registration_number,
@@ -335,6 +359,8 @@ class Molecule(AggregateRoot):
             invention_date=invention_date,
             custom_fields=custom_fields,
             scientist_name=scientist_name,
+            registered_by=registered_by,
+            registered_by_org_id=registered_by_org_id,
         )
         mol.register_event(
             MoleculeRegistered(
@@ -344,6 +370,7 @@ class Molecule(AggregateRoot):
                 molecule_type=molecule_type.value,
                 workspace_id=workspace_id,
                 originating_org_id=originating_org_id,
+                registered_by_org_id=registered_by_org_id,
             )
         )
         return mol
@@ -358,6 +385,7 @@ class Molecule(AggregateRoot):
         structure: ChemicalStructure,
         descriptors: ComputedDescriptors,
         disclosed_by: uuid.UUID,
+        disclosed_by_org_id: uuid.UUID | None = None,
         molecular_formula: str | None = None,
         stereochemistry: Stereochemistry | None = None,
         disclosure_date: date | None = None,
@@ -374,6 +402,7 @@ class Molecule(AggregateRoot):
         self.structure_status = StructureStatus.DISCLOSED
         self.disclosed_at = datetime.now(UTC)
         self.disclosed_by = disclosed_by
+        self.disclosed_by_org_id = disclosed_by_org_id
         self.disclosure_date = disclosure_date
         self.stereochemistry = stereochemistry
         self.updated_at = datetime.now(UTC)
@@ -387,6 +416,35 @@ class Molecule(AggregateRoot):
                 aggregate_type="Molecule",
                 workspace_id=self.workspace_id,
                 inchi_key=structure.inchi_key,  # type: ignore[arg-type]
+            )
+        )
+
+    def change_discloser(
+        self, *, disclosed_by: uuid.UUID, disclosed_by_org_id: uuid.UUID | None
+    ) -> None:
+        """Correct who disclosed it and for which Duar org. History records each change."""
+        self._guard_tombstone()
+        if self.structure_status != StructureStatus.DISCLOSED:
+            raise ValidationError("Only a disclosed molecule has a discloser to change")
+        changes = tuple(
+            (field, str(old) if old else None, str(new) if new else None)
+            for field, old, new in (
+                ("disclosed_by", self.disclosed_by, disclosed_by),
+                ("disclosed_by_org_id", self.disclosed_by_org_id, disclosed_by_org_id),
+            )
+            if old != new
+        )
+        if not changes:
+            return
+        self.disclosed_by = disclosed_by
+        self.disclosed_by_org_id = disclosed_by_org_id
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            MoleculeDiscloserChanged(
+                aggregate_id=self.id,
+                aggregate_type="Molecule",
+                workspace_id=self.workspace_id,
+                changes=changes,
             )
         )
 

@@ -95,6 +95,10 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     invention_date: Mapped[date | None] = mapped_column(Date)
     disclosed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disclosed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Duar org ids (no FK — orgs live in Duar).
+    disclosed_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    registered_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    registered_by_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     disclosure_date: Mapped[date | None] = mapped_column(Date)
     merged_into_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     originating_org_id: Mapped[uuid.UUID] = mapped_column(
