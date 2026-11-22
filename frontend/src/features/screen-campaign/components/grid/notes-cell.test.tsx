@@ -1,6 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { CampaignResultResponse } from "../../types";
@@ -22,24 +20,24 @@ function makeResult(notes: string | null, stamped = notes !== null): CampaignRes
   };
 }
 
-function wrapper({ children }: { children: ReactNode }) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-}
-
 function renderCell(result: CampaignResultResponse, readOnly: boolean) {
-  return render(<NotesCell campaignId="c-1" result={result} readOnly={readOnly} />, { wrapper });
+  const onEdit = vi.fn();
+  const onHistory = vi.fn();
+  render(<NotesCell result={result} readOnly={readOnly} onEdit={onEdit} onHistory={onHistory} />);
+  return { onEdit, onHistory };
 }
 
 describe("NotesCell", () => {
-  it("shows who saved the note and when under it", () => {
+  it("shows the note in the body text, with who saved it and when under it", () => {
     renderCell(makeResult("Resynthesise before confirming"), false);
-    expect(screen.getByText(/^by Ada · /)).toBeInTheDocument();
+    expect(screen.getByText("Resynthesise before confirming")).toHaveClass("text-foreground");
+    expect(screen.getByText(/^Ada · /)).toBeInTheDocument();
   });
 
-  it("counts the versions of a note that has changed", () => {
-    renderCell({ ...makeResult("Third take"), notes_version_count: 3 }, false);
-    expect(screen.getByText(/^by Ada · .+ · 3 versions$/)).toBeInTheDocument();
+  it("counts the versions of a changed note, and the count opens its history", () => {
+    const { onHistory } = renderCell({ ...makeResult("Third take"), notes_version_count: 3 }, true);
+    fireEvent.click(screen.getByRole("button", { name: "· 3 versions" }));
+    expect(onHistory).toHaveBeenCalled();
   });
 
   it("says nothing about versions for a note saved once", () => {
@@ -47,60 +45,46 @@ describe("NotesCell", () => {
     expect(screen.queryByText(/versions/)).toBeNull();
   });
 
-  it("a row without a count shows none", () => {
-    renderCell(makeResult("First take"), false);
-    expect(screen.queryByText(/versions/)).toBeNull();
+  it("shows a dash in an empty cell", () => {
+    renderCell(makeResult(null), true);
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("tells an editor a removed note has history", () => {
-    renderCell({ ...makeResult(null, true), notes_version_count: 2 }, false);
-    expect(screen.getByText("Add note")).toBeInTheDocument();
-    expect(screen.getByText("Note removed · 2 versions")).toBeInTheDocument();
-  });
-
-  it("tells a viewer a removed note has history", () => {
+  it("says a removed note has history", () => {
     renderCell({ ...makeResult(null, true), notes_version_count: 2 }, true);
-    expect(screen.getByRole("button", { name: "Note history" })).toHaveTextContent(
-      "Note removed · 2 versions",
-    );
+    expect(screen.getByText("Note removed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "· 2 versions" })).toBeInTheDocument();
   });
 
   it("shows no stamp under a note that predates tracking", () => {
     renderCell(makeResult("Old note", false), false);
-    expect(screen.queryByText(/^by /)).toBeNull();
+    expect(screen.queryByText(/Ada/)).toBeNull();
   });
 
-  it("a read-only cell with a note opens its history, never an edit", () => {
-    renderCell(makeResult("Resynthesise before confirming"), true);
-    expect(screen.getByText("Resynthesise before confirming")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Note history" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit notes" })).toBeNull();
+  it("an editor clicks the note to edit it", () => {
+    const { onEdit } = renderCell(makeResult("Resynthesise"), false);
+    fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+    expect(onEdit).toHaveBeenCalled();
   });
 
-  it("a read-only cell whose note was removed says so, and opens its history", () => {
-    renderCell(
-      { ...makeResult(null), notes_edited_by: "u-1", notes_edited_at: "2026-11-21T14:03:00Z" },
-      true,
-    );
-    const button = screen.getByRole("button", { name: "Note history" });
-    expect(button).toHaveTextContent("Note removed");
+  it("an editor right-clicks an empty cell to add a note", () => {
+    const { onEdit } = renderCell(makeResult(null), false);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Add note" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add note…" }));
+    expect(onEdit).toHaveBeenCalled();
   });
 
-  it("a read-only empty row with no stamp renders nothing", () => {
-    const { container } = renderCell(makeResult(null), true);
-    expect(container.textContent).toBe("");
-    expect(screen.queryByRole("button")).toBeNull();
+  it("a viewer right-clicks for the history, never an edit", () => {
+    const { onHistory } = renderCell(makeResult("Resynthesise"), true);
+    fireEvent.contextMenu(screen.getByText("Resynthesise"));
+    expect(screen.queryByRole("menuitem", { name: /note…$/ })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Note history…" }));
+    expect(onHistory).toHaveBeenCalled();
   });
 
-  it("renders the notes inside an edit button for an editor", () => {
-    renderCell(makeResult("Resynthesise before confirming"), false);
-    const button = screen.getByRole("button", { name: "Edit notes" });
-    expect(button).toHaveTextContent("Resynthesise before confirming");
-  });
-
-  it("shows an Add note affordance for empty notes for an editor", () => {
-    renderCell(makeResult(null), false);
-    expect(screen.getByRole("button", { name: "Edit notes" })).toBeInTheDocument();
-    expect(screen.getByText("Add note")).toBeInTheDocument();
+  it("a viewer's empty cell offers no menu", () => {
+    renderCell(makeResult(null), true);
+    fireEvent.contextMenu(screen.getByText("—"));
+    expect(screen.queryByRole("menuitem")).toBeNull();
   });
 });

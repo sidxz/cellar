@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { QcMark, QcVerdictControl } from "./qc-verdict-control";
+import { QcMenu, QcSummary, QcVerdictControl } from "./qc-verdict-control";
 
 const { mutate, hook } = vi.hoisted(() => ({
   mutate: vi.fn(),
@@ -124,25 +124,76 @@ describe("QcVerdictControl", () => {
   });
 });
 
-describe("QcMark", () => {
-  it("marks verified and failed, with who and when in the title", () => {
+describe("QcSummary", () => {
+  it("stacks the verdict, who, when, and the note", () => {
     render(
-      <QcMark
+      <QcSummary
         measurement={m({
-          qc_verdict: "verified",
+          qc_verdict: "failed",
           qc_verdict_by: "u1",
           qc_verdict_at: "2026-11-20T10:00:00Z",
-          qc_verdict_note: "clean",
+          qc_verdict_note: "edge effect",
         })}
       />,
     );
-    const mark = screen.getByLabelText("QC verified");
-    expect(mark).toHaveTextContent("✓");
-    expect(mark.getAttribute("title")).toMatch(/^Verified by Ada · .+ · clean$/);
+    expect(screen.getByText("QC failed")).toBeInTheDocument();
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+    expect(
+      screen.getByText(new Date("2026-11-20T10:00:00Z").toLocaleDateString()),
+    ).toBeInTheDocument();
+    expect(screen.getByText("edge effect")).toBeInTheDocument();
   });
 
-  it("renders nothing for not tested", () => {
-    const { container } = render(<QcMark measurement={m()} />);
+  it("shows nothing for not tested", () => {
+    const { container } = render(<QcSummary measurement={m()} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("QcMenu", () => {
+  const onEditNote = vi.fn();
+  function renderMenu(measurement: CampaignMeasurementResponse, readOnly = false) {
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <QcMenu
+          campaignId="c1"
+          measurement={measurement}
+          resultId="r1"
+          readOnly={readOnly}
+          onEditNote={onEditNote}
+        >
+          <div>the cell</div>
+        </QcMenu>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("marks a cell verified from its right-click menu", () => {
+    renderMenu(m());
+    fireEvent.contextMenu(screen.getByText("the cell"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark QC verified" }));
+    expect(mutate.mock.calls[0]?.[0]).toEqual({
+      campaignId: "c1",
+      data: {
+        verdict: "verified",
+        targets: [{ channel_ids: ["ch-1"], result_ids: ["r1"] }],
+        overwrite: true,
+      },
+    });
+  });
+
+  it("clears a verdict, and opens the note of one", () => {
+    renderMenu(m({ qc_verdict: "verified", qc_verdict_note: "ok" }));
+    fireEvent.contextMenu(screen.getByText("the cell"));
+    expect(screen.queryByRole("menuitem", { name: "Mark QC verified" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Clear QC" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit QC note…" }));
+    expect(onEditNote).toHaveBeenCalled();
+  });
+
+  it("offers a viewer no menu", () => {
+    renderMenu(m({ qc_verdict: "verified" }), true);
+    fireEvent.contextMenu(screen.getByText("the cell"));
+    expect(screen.queryByRole("menuitem")).toBeNull();
   });
 });

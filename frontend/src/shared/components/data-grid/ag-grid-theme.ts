@@ -24,3 +24,13 @@ export const cellarTheme = themeQuartz.withParams({
   wrapperBorder: { color: "var(--border)", style: "solid", width: 1 },
   spacing: 4,
 });
+
+/** The same theme with one full-height line between every two columns, header included. The
+ *  resize grip's own short bar is hidden: drawn over the line, it read as a broken border. */
+export const cellarThemeColumnBorders = cellarTheme.withParams({
+  columnBorder: { color: "var(--border)", style: "solid", width: 1 },
+  headerColumnBorder: { color: "var(--border)", style: "solid", width: 1 },
+  headerColumnResizeHandleColor: "transparent",
+  // Ticked rows tint, rather than flood, a wide table.
+  selectedRowBackgroundColor: "color-mix(in oklch, var(--accent) 40%, transparent)",
+});

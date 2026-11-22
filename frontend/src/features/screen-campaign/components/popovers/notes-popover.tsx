@@ -30,6 +30,8 @@ export interface NotesPopoverProps {
   result: CampaignResultResponse;
   onClose: () => void;
   readOnly?: boolean;
+  /** Opens with the history showing. */
+  initialHistory?: boolean;
 }
 
 /** The server's rule: trimmed, and blank means no note. */
@@ -70,7 +72,13 @@ function NoteHistory({ campaignId, resultId }: { campaignId: string; resultId: s
   );
 }
 
-export function NotesPopover({ campaignId, result, onClose, readOnly = false }: NotesPopoverProps) {
+export function NotesPopover({
+  campaignId,
+  result,
+  onClose,
+  readOnly = false,
+  initialHistory = false,
+}: NotesPopoverProps) {
   const nameOf = useMemberNames();
   const [notes, setNotes] = useState(result.notes ?? "");
   // The note this edit is based on, exactly as the server holds it (the server
@@ -78,7 +86,7 @@ export function NotesPopover({ campaignId, result, onClose, readOnly = false }: 
   // the colleague's note.
   const [base, setBase] = useState<string | null>(result.notes ?? null);
   const [stale, setStale] = useState<ResultNoteResponse | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(initialHistory);
 
   const qc = useQueryClient();
   const mutation = useSetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch({

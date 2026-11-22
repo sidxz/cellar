@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CampaignResponse, CampaignResultResponse, StageOutcome } from "../types";
-import { emptyFilters } from "./campaign-filter-bar";
 import { StageBulkMenu } from "./stage-bulk-menu";
 
 const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
@@ -31,8 +30,7 @@ function makeResult(id: string, outcome: StageOutcome): CampaignResultResponse {
   } as unknown as CampaignResultResponse;
 }
 
-// One row per outcome the manual stage can hold, so a chip filter genuinely
-// narrows the target set rather than trivially matching everything.
+// One row per outcome the manual stage can hold.
 const campaign = {
   id: "c1",
   stages: [{ id: STAGE, name: "Take Forward", kind: "manual" }],
@@ -49,11 +47,12 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
-function renderMenu(opts: { stageOutcomes?: StageOutcome[]; readOnly?: boolean } = {}) {
+function renderMenu(opts: { ticked?: string[]; hidden?: number; readOnly?: boolean } = {}) {
   return render(
     <StageBulkMenu
       campaign={campaign}
-      filters={{ ...emptyFilters(), stageOutcomes: new Set(opts.stageOutcomes ?? []) }}
+      resultIds={opts.ticked ?? ["r-pending-1", "r-pending-2"]}
+      hiddenCount={opts.hidden ?? 0}
       selectedStageId={STAGE}
       readOnly={opts.readOnly ?? false}
     />,
@@ -67,8 +66,9 @@ function act(label: string, reason?: string) {
   if (reason !== undefined) {
     fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: reason } });
   }
+  // The stage here is hand-picked, so there are no criteria to override.
   const buttons = screen.getAllByRole("button", {
-    name: new RegExp(`^${label} \\d+ visible rows?$`),
+    name: new RegExp(`^Mark \\d+ ${label === "Mark hit…" ? "hit" : "miss"}$`),
   });
   fireEvent.click(buttons[buttons.length - 1]);
 }
@@ -82,7 +82,8 @@ describe("StageBulkMenu", () => {
     const { container } = render(
       <StageBulkMenu
         campaign={campaign}
-        filters={emptyFilters()}
+        resultIds={["r-hit"]}
+        hiddenCount={0}
         selectedStageId={null}
         readOnly={false}
       />,
@@ -94,16 +95,14 @@ describe("StageBulkMenu", () => {
     expect(readOnly.container).toBeEmptyDOMElement();
   });
 
-  it("targets every row when no chip is on", () => {
-    renderMenu();
-    expect(screen.getByText("Bulk (4 visible rows):")).toBeInTheDocument();
+  it("is off until rows are ticked", () => {
+    renderMenu({ ticked: [] });
+    expect(screen.getByRole("button", { name: "Mark hit…" })).toBeDisabled();
   });
 
-  it("targets only the rows the active chip filter leaves visible", () => {
-    renderMenu({ stageOutcomes: ["pending"] });
-    expect(screen.getByText("Bulk (2 visible rows):")).toBeInTheDocument();
-
-    act("Promote", "Re-tested, keeping for dose-response");
+  it("acts on exactly the ticked rows", () => {
+    renderMenu();
+    act("Mark hit…", "Re-tested, keeping for dose-response");
 
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate).toHaveBeenCalledWith({
@@ -117,9 +116,15 @@ describe("StageBulkMenu", () => {
     });
   });
 
-  it("sends outcome miss for a demote", () => {
-    renderMenu({ stageOutcomes: ["pending"] });
-    act("Demote", "Off-target in counter-screen");
+  it("says when the filters hide some ticked rows", () => {
+    renderMenu({ hidden: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Mark hit…" }));
+    expect(screen.getByText(/2 selected rows, 1 hidden by filters/)).toBeInTheDocument();
+  });
+
+  it("sends outcome miss for Mark miss", () => {
+    renderMenu();
+    act("Mark miss…", "Off-target in counter-screen");
 
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -128,24 +133,54 @@ describe("StageBulkMenu", () => {
     );
   });
 
-  it("refuses promote/demote until a reason is typed", () => {
-    renderMenu({ stageOutcomes: ["pending"] });
-    act("Promote", "   ");
+  it("refuses to mark hit or miss until a reason is typed", () => {
+    renderMenu();
+    act("Mark hit…", "   ");
     expect(mutate).not.toHaveBeenCalled();
   });
 
   it("clears overrides with outcome null and no reason", () => {
-    renderMenu({ stageOutcomes: ["hit"] });
+    renderMenu({ ticked: ["r-hit"] });
     fireEvent.click(screen.getByRole("button", { name: "Clear overrides" }));
     // No reason field on the clear path — nothing is being asserted about
     // the rows, the override is simply dropped.
     expect(screen.queryByLabelText(/Reason/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Clear overrides for 1 visible row$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear 1 override" }));
 
     expect(mutate).toHaveBeenCalledWith({
       campaignId: "c1",
       stageId: STAGE,
       data: { result_ids: ["r-hit"], outcome: null, reason: null },
     });
+  });
+});
+
+describe("StageBulkMenu on a criteria stage", () => {
+  const criteria = {
+    ...campaign,
+    stages: [{ id: STAGE, name: "Confirmed Active", kind: "criteria" }],
+  } as unknown as CampaignResponse;
+
+  it("says it overrides the selection criteria", () => {
+    render(
+      <StageBulkMenu
+        campaign={criteria}
+        resultIds={["r-pending-1", "r-pending-2"]}
+        hiddenCount={0}
+        selectedStageId={STAGE}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mark hit…" }));
+    expect(
+      screen.getByText("Override the selection criteria for 2 selected rows?"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/whatever its selection criteria say/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "Re-tested" } });
+    fireEvent.click(screen.getByRole("button", { name: "Override and mark 2 hit" }));
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ outcome: "hit" }) }),
+    );
   });
 });

@@ -8,8 +8,11 @@ import type {
 } from "../types";
 import {
   type CampaignFilters,
+  type MeasurementFilter,
+  type SearchableMolecule,
   emptyFilters,
   filtersActive,
+  measurementPasses,
   rowPassesFilters,
 } from "./campaign-filter-bar";
 
@@ -205,5 +208,105 @@ describe("chip counts", () => {
       not_in_stage: 1,
       overridden: 1,
     });
+  });
+});
+
+describe("rowPassesFilters — search", () => {
+  const row = { id: "r", molecule_id: "mol-1", measurements: [], stage_outcomes: [] };
+  const molecules = new Map<string, SearchableMolecule>([
+    [
+      "mol-1",
+      {
+        registration_number: "CC-027709",
+        name: "Quinmide",
+        identifiers: [
+          { identifier: "SACC-0027901", identifier_type: "supplier" },
+          { identifier: "41134477", identifier_type: "cdd_molecule_id" },
+        ],
+      } as unknown as SearchableMolecule,
+    ],
+  ]);
+  const search = (text: string) => ({ ...emptyFilters(), search: text });
+
+  it("finds a compound by ID, name or any identifier, ignoring case", () => {
+    for (const text of ["cc-0277", "QUINMIDE", "sacc-002", "41134477"]) {
+      expect(rowPassesFilters(row, search(text), null, molecules)).toBe(true);
+    }
+    expect(rowPassesFilters(row, search("CC-0999"), null, molecules)).toBe(false);
+  });
+
+  it("matches nothing while the compounds are unknown, so no bulk gesture reaches a hidden row", () => {
+    expect(rowPassesFilters(row, search("CC"), null)).toBe(false);
+    expect(rowPassesFilters(row, search("CC"), null, new Map())).toBe(false);
+  });
+
+  it("counts as an active filter", () => {
+    expect(filtersActive(search("CC"), null)).toBe(true);
+  });
+});
+
+describe("measurementPasses", () => {
+  const f = (over: Partial<MeasurementFilter>): MeasurementFilter => ({
+    channelId: "ch-1",
+    minimum: null,
+    maximum: null,
+    unit: "µM",
+    qc: "any",
+    ...over,
+  });
+
+  it("holds a range inclusively, in the filter's unit (uM and µM alike)", () => {
+    expect(measurementPasses(makeMeasurement({ value: 5 }), f({ maximum: 5 }))).toBe(true);
+    expect(measurementPasses(makeMeasurement({ value: 5 }), f({ minimum: 5 }))).toBe(true);
+    expect(measurementPasses(makeMeasurement({ value: 5.1 }), f({ maximum: 5 }))).toBe(false);
+    expect(measurementPasses(makeMeasurement({ value: 1, unit: "nM" }), f({ maximum: 5 }))).toBe(
+      false,
+    );
+  });
+
+  it("lets an unknown unit (-) through, as the server does", () => {
+    expect(measurementPasses(makeMeasurement({ value: 3, unit: "-" }), f({ maximum: 5 }))).toBe(
+      true,
+    );
+  });
+
+  it("never puts a limit, ND or excluded value in a range", () => {
+    for (const value_qualifier of ["<", ">", "nd", "excluded"]) {
+      expect(
+        measurementPasses(makeMeasurement({ value: 1, value_qualifier }), f({ maximum: 5 })),
+      ).toBe(false);
+    }
+  });
+
+  it("matches a QC state; not tested only where there is a result to check", () => {
+    const verified = makeMeasurement({ qc_verdict: "verified" });
+    expect(measurementPasses(verified, f({ qc: "verified" }))).toBe(true);
+    expect(measurementPasses(verified, f({ qc: "failed" }))).toBe(false);
+    expect(measurementPasses(makeMeasurement(), f({ qc: "not_tested" }))).toBe(true);
+    expect(
+      measurementPasses(makeMeasurement({ holds_result: false }), f({ qc: "not_tested" })),
+    ).toBe(false);
+  });
+
+  it("fails a row with no value for the readout", () => {
+    expect(measurementPasses(undefined, f({ qc: "any" }))).toBe(false);
+  });
+
+  it("needs every condition on the row to hold", () => {
+    const row = {
+      id: "r",
+      molecule_id: "mol-1",
+      measurements: [
+        makeMeasurement({ value: 2 }),
+        makeMeasurement({ channel_id: "ch-2", value: 9 }),
+      ],
+      stage_outcomes: [],
+    };
+    const both = (max2: number) => ({
+      ...emptyFilters(),
+      measurements: [f({ maximum: 5 }), f({ channelId: "ch-2", maximum: max2 })],
+    });
+    expect(rowPassesFilters(row, both(10), null)).toBe(true);
+    expect(rowPassesFilters(row, both(8), null)).toBe(false);
   });
 });

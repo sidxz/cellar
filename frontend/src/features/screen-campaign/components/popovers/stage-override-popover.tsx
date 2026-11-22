@@ -4,8 +4,8 @@
  * StageOverridePopover — force one result's outcome for one hit stage.
  *
  * Shows the stage's current outcome for this result plus the checks that
- * didn't pass, then lets the chemist promote it to a hit or demote it to a
- * miss with a required reason (21 CFR-style: an override always carries its
+ * didn't pass, then lets the chemist mark it hit or miss by hand with a
+ * required reason (21 CFR-style: an override always carries its
  * rationale). Saving is *explicit* — typing a reason changes nothing until a
  * button is pressed — and an existing override can be cleared, handing the
  * row back to the evaluator.
@@ -73,7 +73,7 @@ export function StageOverridePopover({
       mutation: {
         onSuccess: (_data, vars) => {
           void invalidate();
-          showSuccess(vars.data.outcome === "hit" ? "Promoted to hit" : "Demoted to miss");
+          showSuccess(vars.data.outcome === "hit" ? "Marked hit" : "Marked miss");
           onClose();
         },
         onError,
@@ -93,9 +93,6 @@ export function StageOverridePopover({
     });
 
   const busy = setMutation.isPending || clearMutation.isPending;
-  // A manual stage has no criteria to promote *past*, so the buttons drop
-  // the "to hit"/"to miss" tail and read as the gesture itself.
-  const isManual = stage.kind === "manual";
   const current = (outcome?.outcome ?? "not_in_stage") as StageOutcome;
   const overridden = outcome?.overridden ?? false;
   const canMarkMiss = current !== "miss" || overridden;
@@ -151,11 +148,9 @@ export function StageOverridePopover({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder={
-            canMarkHit && canMarkMiss
-              ? "Reason for changing this compound’s stage outcome"
-              : canMarkHit
-                ? "Reason for marking this compound as a hit"
-                : "Reason for marking this compound as a miss"
+            stage.kind === "manual"
+              ? "Reason for this compound's outcome"
+              : "Reason for overriding the selection criteria"
           }
           rows={2}
           className="text-sm"
@@ -182,12 +177,12 @@ export function StageOverridePopover({
             disabled={busy || !reasonOk}
             onClick={() => force("miss")}
           >
-            {isManual ? "Demote" : "Demote to miss"}
+            Mark miss
           </Button>
         )}
         {canMarkHit && (
           <Button size="sm" disabled={busy || !reasonOk} onClick={() => force("hit")}>
-            {isManual ? "Promote" : "Promote to hit"}
+            Mark hit
           </Button>
         )}
       </div>

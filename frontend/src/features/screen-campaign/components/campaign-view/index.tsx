@@ -132,18 +132,21 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         </Card>
       </section>
 
-      <CampaignFilterBar
-        campaign={campaign}
-        filters={filters}
-        onChange={setFilters}
-        selectedStageId={effectiveStageId}
-        resultCount={campaign.results?.length ?? 0}
-      />
       <ResultsGridV2
         campaign={campaign}
         filters={filters}
+        onFiltersChange={setFilters}
         selectedStageId={effectiveStageId}
         readOnly
+        header={
+          <CampaignFilterBar
+            campaign={campaign}
+            filters={filters}
+            onChange={setFilters}
+            selectedStageId={effectiveStageId}
+            resultCount={campaign.results?.length ?? 0}
+          />
+        }
       />
 
       <SupersedeDialog open={supersedeOpen} onOpenChange={setSupersedeOpen} campaign={campaign} />
