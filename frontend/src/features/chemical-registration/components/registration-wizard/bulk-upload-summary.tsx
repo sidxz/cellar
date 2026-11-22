@@ -1,13 +1,18 @@
 "use client";
 
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
+import { useOrgName } from "@/shared/hooks/use-orgs";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { ProjectNames } from "./project-names";
 
 export function BulkUploadSummary() {
   const input = useRegistrationWizard((state) => state.bulkInput);
-  const { data: organizations } = useOrganizations();
-  const organization = organizations?.find((item) => item.id === input.originatingOrgId);
+  const { data: me } = useCurrentUser();
+  const memberName = useMemberNames();
+  const orgName = useOrgName();
+  const { userId, orgId } = input.discloser;
+  const person = userId && userId !== me?.user_id ? memberName(userId) : "You";
   return (
     <aside className="space-y-4" aria-label="Registration summary">
       <section className="rounded-lg border bg-muted/20 p-5">
@@ -18,8 +23,10 @@ export function BulkUploadSummary() {
             <dd className="mt-1 break-all font-medium">{input.file?.name ?? "Choose a file"}</dd>
           </div>
           <div>
-            <dt className="text-foreground/70">Originating organization</dt>
-            <dd className="mt-1 font-medium">{organization?.name ?? "Choose an organization"}</dd>
+            <dt className="text-foreground/70">Disclosed by</dt>
+            <dd className="mt-1 font-medium">
+              {person} · {orgName(orgId ?? me?.org_id) || "your org"}
+            </dd>
           </div>
           <div>
             <dt className="text-foreground/70">Projects</dt>

@@ -27,13 +27,43 @@ describe("useStartBulkRegistration", () => {
     await act(() =>
       result.current.mutateAsync({
         file: new File(["name,smiles\n"], "rows.csv"),
-        originating_org_id: "org-1",
         file_format: "csv",
         project_ids: ["p-1", "p-2"],
       }),
     );
     const form = customInstance.mock.calls[0][0].data as FormData;
     expect(form.getAll("project_ids")).toEqual(["p-1", "p-2"]);
+  });
+});
+
+describe("useStartBulkRegistration — who disclosed the structures", () => {
+  it("a changed discloser is sent as disclosed_by and disclosed_by_org_id", async () => {
+    customInstance.mockClear();
+    const { result } = renderHook(() => useStartBulkRegistration(), { wrapper });
+    await act(() =>
+      result.current.mutateAsync({
+        file: new File(["name,smiles\n"], "rows.csv"),
+        file_format: "csv",
+        disclosed_by: "u-jane",
+        disclosed_by_org_id: "org-partner",
+      }),
+    );
+    const form = customInstance.mock.calls[0][0].data as FormData;
+    expect([form.get("disclosed_by"), form.get("disclosed_by_org_id")]).toEqual([
+      "u-jane",
+      "org-partner",
+    ]);
+    expect(form.has("originating_org_id")).toBe(false);
+  });
+
+  it("defaults send neither field", async () => {
+    customInstance.mockClear();
+    const { result } = renderHook(() => useStartBulkRegistration(), { wrapper });
+    await act(() =>
+      result.current.mutateAsync({ file: new File(["x"], "rows.csv"), file_format: "csv" }),
+    );
+    const form = customInstance.mock.calls[0][0].data as FormData;
+    expect(form.has("disclosed_by") || form.has("disclosed_by_org_id")).toBe(false);
   });
 });
 
@@ -64,7 +94,6 @@ describe("useStartBulkRegistration column mapping", () => {
     await act(() =>
       result.current.mutateAsync({
         file: new File(["SMILES\n"], "rows.csv"),
-        originating_org_id: "org-1",
         file_format: "csv",
         column_mapping: mapping,
       }),

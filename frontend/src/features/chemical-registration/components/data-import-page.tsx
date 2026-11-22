@@ -1,20 +1,12 @@
 "use client";
 
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
 import {
   Table,
   TableBody,
@@ -24,6 +16,9 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
+import { useOrgName } from "@/shared/hooks/use-orgs";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { formatDateTime } from "@/shared/lib/format-date";
 import { isTerminalImportStatus } from "@/shared/lib/job-status";
 import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
@@ -67,6 +62,7 @@ import {
   PlateImportReport,
   ReportStat,
 } from "./cdd-import-report";
+import { type DiscloserChoice, DiscloserPick } from "./discloser-pick";
 import { PreviewTable } from "./preview-table";
 import { NotFoundIdentifiers, SelectedMoleculesImport } from "./selected-molecules-import";
 
@@ -81,13 +77,12 @@ export function DataImportPage() {
   const qc = useQueryClient();
   const { enabled: cddEnabled, loading: cddLoading, source } = useCddEnabled();
   const isAdmin = useAuthzHasRole("admin");
-  const [orgId, setOrgId] = useState("");
+  const [discloser, setDiscloser] = useState<DiscloserChoice>({ userId: null, orgId: null });
   const [importMode, setImportMode] = useState<ImportMode>("full_vault");
   const [maxMolecules, setMaxMolecules] = useState("");
   const [identifiers, setIdentifiers] = useState("");
   const [lastCheck, setLastCheck] = useState<{
     text: string;
-    orgId: string;
     result: CddMoleculeIdentifierCheck;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +94,9 @@ export function DataImportPage() {
   const [view, setView] = useState("new-import");
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const previewMutation = useCddImportPreview();
-  const { data: orgs, isLoading: orgsLoading } = useOrganizations();
+  const { data: me } = useCurrentUser();
+  const memberName = useMemberNames();
+  const orgName = useOrgName();
   const historyQuery = useImportHistory();
   const { data: history, refetch: refetchHistory } = historyQuery;
   const startMutation = useStartCddMoleculeImport();
@@ -110,12 +107,11 @@ export function DataImportPage() {
   const activeImport = history?.find((imp) => !isTerminalImportStatus(imp.status));
   const lastFinished = history?.find((imp) => isTerminalImportStatus(imp.status));
   const isSpecific = importMode === "filtered";
-  const checked =
-    lastCheck?.text === identifiers && lastCheck.orgId === orgId ? lastCheck.result : null;
+  const checked = lastCheck?.text === identifiers ? lastCheck.result : null;
   const currentPreviewKey = JSON.stringify([
     importMode,
     isSpecific ? identifiers : null,
-    orgId,
+    discloser,
     maxMolecules,
   ]);
   const previewCurrent = previewKey === currentPreviewKey;
@@ -124,7 +120,9 @@ export function DataImportPage() {
     maxMolecules !== "" &&
     (!Number.isSafeInteger(Number(maxMolecules)) || Number(maxMolecules) < 1);
   const scope = IMPORT_SCOPES.find((item) => item.value === importMode) ?? IMPORT_SCOPES[0];
-  const organizationName = orgs?.find((org) => org.id === orgId)?.name;
+  const discloserLabel = `${
+    discloser.userId && discloser.userId !== me?.user_id ? memberName(discloser.userId) : "You"
+  } · ${orgName(discloser.orgId ?? me?.org_id) || "your org"}`;
 
   useEffect(() => {
     if (
@@ -164,13 +162,13 @@ export function DataImportPage() {
   };
 
   const handleStart = async () => {
-    if (!orgId || invalidLimit || (isSpecific && !checked?.found.length)) return;
+    if (invalidLimit || (isSpecific && !checked?.found.length)) return;
     setError(null);
     setResult(null);
     setNotFound(isSpecific ? (checked?.not_found ?? []) : []);
     try {
       const accepted = await startMutation.mutateAsync({
-        originatingOrgId: orgId,
+        discloser,
         importMode,
         ...(isSpecific
           ? { filterCriteria: { names: checked?.found ?? [] } }
@@ -212,13 +210,11 @@ export function DataImportPage() {
   const sourceName = source?.name ?? "CDD Vault";
   const vaultId = source?.config.vault_id ? String(source.config.vault_id) : undefined;
   const mappingHref = source ? `/admin/data-sources/${source.id}` : "/admin/data-sources";
-  const prerequisite = !orgId
-    ? "Choose an originating organization to start the import."
-    : invalidLimit
-      ? "Enter a whole number of at least 1 for the molecule limit."
-      : isSpecific && !checked?.found.length
-        ? "Check the names in CDD Vault before starting the import."
-        : null;
+  const prerequisite = invalidLimit
+    ? "Enter a whole number of at least 1 for the molecule limit."
+    : isSpecific && !checked?.found.length
+      ? "Check the names in CDD Vault before starting the import."
+      : null;
 
   if (cddLoading)
     return (
@@ -334,44 +330,11 @@ export function DataImportPage() {
                         Configure import
                       </h2>
                       <p className="mt-1 text-sm text-foreground/70">
-                        Choose the source organization and the molecules to import.
+                        Choose who disclosed the structures and the molecules to import.
                       </p>
                     </div>
                     <div className="space-y-5 p-5">
-                      <div className="grid gap-2">
-                        <Label htmlFor="originating-organization">
-                          Originating organization{" "}
-                          <span className="text-foreground/70">(required)</span>
-                        </Label>
-                        <Select value={orgId} onValueChange={setOrgId} disabled={orgsLoading}>
-                          <SelectTrigger
-                            id="originating-organization"
-                            className="w-full"
-                            aria-describedby="organization-help"
-                          >
-                            <SelectValue
-                              placeholder={
-                                orgsLoading ? "Loading organizations…" : "Choose an organization"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {orgs?.map((org) => (
-                              <SelectItem key={org.id} value={org.id}>
-                                {org.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p id="organization-help" className="text-sm text-foreground/70">
-                          The organization these compounds originated from.
-                        </p>
-                        {!orgsLoading && orgs?.length === 0 && (
-                          <p className="text-sm text-destructive">
-                            No organizations are available. Ask an administrator to add one.
-                          </p>
-                        )}
-                      </div>
+                      <DiscloserPick value={discloser} onChange={setDiscloser} />
                       <fieldset className="space-y-3">
                         <legend className="mb-1 text-sm font-medium">Import scope</legend>
                         <RadioGroup
@@ -419,9 +382,7 @@ export function DataImportPage() {
                           text={identifiers}
                           onTextChange={setIdentifiers}
                           checked={checked}
-                          onChecked={(text, answer) =>
-                            setLastCheck({ text, orgId, result: answer })
-                          }
+                          onChecked={(text, answer) => setLastCheck({ text, result: answer })}
                         />
                       ) : (
                         <details className="rounded-lg border p-4">
@@ -512,9 +473,7 @@ export function DataImportPage() {
                             <span className="mt-1 block text-foreground/70">Vault {vaultId}</span>
                           )}
                         </SummaryDetail>
-                        <SummaryDetail label="Originating organization">
-                          {organizationName ?? "Choose an organization"}
-                        </SummaryDetail>
+                        <SummaryDetail label="Disclosed by">{discloserLabel}</SummaryDetail>
                         <SummaryDetail label="Scope">
                           {scope.label}
                           {isSpecific && checked && (
@@ -694,7 +653,9 @@ export function DataImportPage() {
             run={reportRun}
             onClose={() => setReportRun(null)}
             organizationName={
-              orgs?.find((org) => org.id === reportSummary?.originating_org_id)?.name
+              reportSummary?.disclosed_by_org_id
+                ? orgName(reportSummary.disclosed_by_org_id)
+                : undefined
             }
             recovery={
               <div className="space-y-3">

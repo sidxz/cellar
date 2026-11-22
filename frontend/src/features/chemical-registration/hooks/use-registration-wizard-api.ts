@@ -139,7 +139,8 @@ export function useStartBulkRegistration() {
   return useMutation({
     mutationFn: async ({
       file,
-      originating_org_id,
+      disclosed_by,
+      disclosed_by_org_id,
       file_format = "csv",
       create_batch_on_duplicate,
       project_ids = [],
@@ -148,9 +149,8 @@ export function useStartBulkRegistration() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("file_format", file_format);
-      if (originating_org_id) {
-        formData.append("originating_org_id", originating_org_id);
-      }
+      if (disclosed_by) formData.append("disclosed_by", disclosed_by);
+      if (disclosed_by_org_id) formData.append("disclosed_by_org_id", disclosed_by_org_id);
       if (typeof create_batch_on_duplicate === "boolean") {
         formData.append("create_batch_on_duplicate", String(create_batch_on_duplicate));
       }

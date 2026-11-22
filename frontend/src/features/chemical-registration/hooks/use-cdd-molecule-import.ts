@@ -26,12 +26,13 @@ export type CddMoleculeIdentifierCheck = CddMoleculeIdentifierCheckResponse;
 export function useStartCddMoleculeImport() {
   return useMutation({
     mutationFn: ({
-      originatingOrgId,
+      discloser,
       importMode,
       filterCriteria,
       maxMolecules,
     }: {
-      originatingOrgId: string;
+      /** Who disclosed the structures and for which Duar org; nulls = you / your org. */
+      discloser?: { userId: string | null; orgId: string | null };
       /** "filtered" imports only the molecules `filterCriteria` names. */
       importMode?: "full_vault" | "sync" | "filtered";
       filterCriteria?: CddMoleculeImportFilter;
@@ -41,7 +42,8 @@ export function useStartCddMoleculeImport() {
         url: `${API_V1}/cdd-import/molecules`,
         method: "POST",
         data: {
-          originating_org_id: originatingOrgId,
+          ...(discloser?.userId ? { disclosed_by: discloser.userId } : {}),
+          ...(discloser?.orgId ? { disclosed_by_org_id: discloser.orgId } : {}),
           import_mode: importMode ?? "full_vault",
           filter_criteria: filterCriteria ?? null,
           max_molecules: maxMolecules ?? null,

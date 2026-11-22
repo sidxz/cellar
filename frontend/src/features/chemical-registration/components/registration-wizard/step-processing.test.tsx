@@ -46,6 +46,48 @@ describe("StepProcessing (single confirm)", () => {
   });
 });
 
+describe("StepProcessing (who disclosed it)", () => {
+  beforeEach(() => {
+    registerMutate.mockReset();
+    registerMutate.mockResolvedValue({ molecule: { id: "m-1" }, needs_merge_confirmation: false });
+  });
+
+  it("registering sends no originating org, and no discloser by default", async () => {
+    const s = useRegistrationWizard.getState();
+    useRegistrationWizard.setState({
+      mode: "single",
+      singleInput: { ...s.singleInput, name: "Cmpd", smiles: "CCO" },
+    });
+    render(<StepProcessing />);
+    fireEvent.click(screen.getByRole("button", { name: /confirm & register/i }));
+    await waitFor(() => expect(registerMutate).toHaveBeenCalledTimes(1));
+    const body = registerMutate.mock.calls[0][0];
+    expect(body).not.toHaveProperty("originating_org_id");
+    expect(body).not.toHaveProperty("disclosed_by");
+    expect(body).not.toHaveProperty("disclosed_by_org_id");
+  });
+
+  it("a changed discloser is sent as disclosed_by and disclosed_by_org_id", async () => {
+    const s = useRegistrationWizard.getState();
+    useRegistrationWizard.setState({
+      mode: "single",
+      singleInput: {
+        ...s.singleInput,
+        name: "Cmpd",
+        smiles: "CCO",
+        discloser: { userId: "u-jane", orgId: "org-partner" },
+      },
+    });
+    render(<StepProcessing />);
+    fireEvent.click(screen.getByRole("button", { name: /confirm & register/i }));
+    await waitFor(() => expect(registerMutate).toHaveBeenCalledTimes(1));
+    expect(registerMutate.mock.calls[0][0]).toMatchObject({
+      disclosed_by: "u-jane",
+      disclosed_by_org_id: "org-partner",
+    });
+  });
+});
+
 describe("Bulk registration recovery", () => {
   it("polls an existing registration without submitting its file again", () => {
     useRegistrationWizard.getState().reset();
